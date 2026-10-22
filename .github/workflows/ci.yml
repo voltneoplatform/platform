@@ -1,0 +1,84 @@
+# Runs on every push and pull request (Platform MVP Spec V1, milestone M0).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: voltneo
+          POSTGRES_PASSWORD: voltneo
+          POSTGRES_DB: voltneo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voltneo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://voltneo:voltneo@localhost:5432/voltneo_test
+      # A separate database used only to prove the migrations match the schema.
+      DATABASE_URL: postgresql://voltneo:voltneo@localhost:5432/voltneo_migrations
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm exec prettier --check .
+
+      - name: Build shared package
+        run: pnpm --filter @voltneo/shared run build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @voltneo/api run db:generate
+
+      - name: Typecheck
+        run: pnpm -r run typecheck
+
+      - name: Check migrations apply and match the schema
+        working-directory: apps/api
+        run: |
+          PGPASSWORD=voltneo psql -h localhost -U voltneo -d voltneo_test -c "CREATE DATABASE voltneo_migrations"
+          pnpm exec prisma migrate deploy
+          pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      - name: Unit tests
+        run: pnpm -r run test
+
+      - name: End-to-end tests (API against PostgreSQL)
+        run: pnpm --filter @voltneo/api run test:e2e
+
+      - name: Build API and admin panel
+        run: |
+          pnpm --filter @voltneo/api run build
+          pnpm --filter @voltneo/admin run build

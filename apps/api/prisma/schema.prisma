@@ -1,0 +1,133 @@
+// Volt Neo platform database (Platform MVP Spec V1, section 5).
+// M0 holds staff, login and the audit log. Later milestones add the other tables.
+// Money is always stored in paise as integers.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum StaffRole {
+  SUPER_ADMIN
+  PLAN_MANAGER
+  OPERATIONS_MANAGER
+  FINANCE
+  SUPPORT
+  FIELD_AGENT
+  TECHNICIAN
+  RECOVERY
+}
+
+enum StaffStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+enum OtpChannel {
+  EMAIL
+  SMS
+}
+
+enum SessionClient {
+  WEB
+  APP
+}
+
+enum ActorType {
+  STAFF
+  DRIVER
+  SYSTEM
+}
+
+/// staff_users: head-office and field staff. At least one of email or phone is required.
+model StaffUser {
+  id            String      @id @default(uuid()) @db.Uuid
+  name          String
+  email         String?     @unique
+  phone         String?     @unique
+  role          StaffRole
+  status        StaffStatus @default(ACTIVE)
+  lastLoginAt   DateTime?   @map("last_login_at") @db.Timestamptz(3)
+  deactivatedAt DateTime?   @map("deactivated_at") @db.Timestamptz(3)
+  createdById   String?     @map("created_by_id") @db.Uuid
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy     StaffUser?     @relation("StaffCreatedBy", fields: [createdById], references: [id])
+  createdStaff  StaffUser[]    @relation("StaffCreatedBy")
+  otpChallenges OtpChallenge[]
+  sessions      StaffSession[]
+
+  @@map("staff_users")
+}
+
+/// One-time passwords for staff login. Only a hash of the code is stored.
+model OtpChallenge {
+  id          String     @id @default(uuid()) @db.Uuid
+  staffId     String     @map("staff_id") @db.Uuid
+  channel     OtpChannel
+  destination String
+  codeHash    String     @map("code_hash")
+  attempts    Int        @default(0)
+  expiresAt   DateTime   @map("expires_at") @db.Timestamptz(3)
+  consumedAt  DateTime?  @map("consumed_at") @db.Timestamptz(3)
+  requestIp   String?    @map("request_ip")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  staff StaffUser @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId, createdAt])
+  @@map("staff_otp_challenges")
+}
+
+/// Refresh-token sessions. Tokens rotate on every refresh; reusing an old token
+/// revokes the whole family. Sessions end after inactivity or an absolute limit.
+model StaffSession {
+  id               String        @id @default(uuid()) @db.Uuid
+  staffId          String        @map("staff_id") @db.Uuid
+  familyId         String        @map("family_id") @db.Uuid
+  refreshTokenHash String        @unique @map("refresh_token_hash")
+  client           SessionClient
+  userAgent        String?       @map("user_agent")
+  ip               String?
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt       DateTime      @default(now()) @map("last_used_at") @db.Timestamptz(3)
+  expiresAt        DateTime      @map("expires_at") @db.Timestamptz(3)
+  rotatedAt        DateTime?     @map("rotated_at") @db.Timestamptz(3)
+  revokedAt        DateTime?     @map("revoked_at") @db.Timestamptz(3)
+  revokedReason    String?       @map("revoked_reason")
+
+  staff StaffUser @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([familyId])
+  @@map("staff_sessions")
+}
+
+/// audit_log: append-only record of every change to money, plans, agreement
+/// state, battery custody and staff access (spec section 3, rule 17).
+/// A database trigger blocks UPDATE and DELETE.
+model AuditLog {
+  id        BigInt    @id @default(autoincrement())
+  actorType ActorType @map("actor_type")
+  actorId   String?   @map("actor_id") @db.Uuid
+  action    String
+  tableName String    @map("table_name")
+  recordId  String?   @map("record_id")
+  before    Json?
+  after     Json?
+  ip        String?
+  requestId String?   @map("request_id")
+  at        DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([tableName, recordId])
+  @@index([actorId, at])
+  @@index([at])
+  @@map("audit_log")
+}
