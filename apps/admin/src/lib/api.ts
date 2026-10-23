@@ -54,7 +54,10 @@ export class ApiClient {
   private async raw(path: string, init: RequestInit = {}, auth = true): Promise<Response> {
     const headers = new Headers(init.headers);
     headers.set('X-Client', 'web');
-    if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
+    // FormData sets its own multipart content type, with the boundary.
+    if (typeof init.body === 'string' && !headers.has('content-type')) {
+      headers.set('content-type', 'application/json');
+    }
     if (auth && this.accessToken) headers.set('authorization', `Bearer ${this.accessToken}`);
     return this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
@@ -112,6 +115,14 @@ export class ApiClient {
 
   post<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
+  }
+
+  put<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  upload<T>(path: string, form: FormData): Promise<T> {
+    return this.request<T>(path, { method: 'POST', body: form });
   }
 
   patch<T>(path: string, body: unknown): Promise<T> {

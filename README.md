@@ -9,8 +9,8 @@ Foundation V2.1** (Decision Log D1–D52) and the **Platform MVP Spec V1**.
 | Milestone               | Delivers                                                                               | State    |
 | ----------------------- | -------------------------------------------------------------------------------------- | -------- |
 | **M0 Foundation**       | Monorepo, database, staff login with roles, tests on every change                      | **Done** |
-| M1 Set-up data          | Battery types, inventory, plans with versions and cost floor, drivers with KYC         | Next     |
-| M2 Agreements and money | Agreements, schedules, installation, payments, ledger, receipts, Schedule 1 and 5 PDFs |          |
+| **M1 Set-up data**      | Battery types, inventory, plans with versions and cost floor, drivers with KYC         | **Done** |
+| M2 Agreements and money | Agreements, schedules, installation, payments, ledger, receipts, Schedule 1 and 5 PDFs | Next     |
 | M3 Collections          | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              |          |
 | M4 Operations           | Service tickets, dashboard, early exit, ownership transfer                             |          |
 | M5 Field App            | Android app for agents, technicians and recovery staff                                 |          |
@@ -51,10 +51,30 @@ docs/
   with who, when, request ID and before/after values. A database trigger blocks
   UPDATE, DELETE and TRUNCATE.
 - **Admin panel**: sign-in, home, staff and roles, audit log.
-- **Maker-checker rules** (who may approve which action, never one's own) are
-  defined and tested now; the approval workflow arrives with M3.
-- **CI**: formatting, typecheck, migration check, unit tests, end-to-end tests
-  against PostgreSQL, and production builds on every push and pull request.
+- **Maker-checker rules** (who may approve which action, never one's own).
+- **CI**: formatting, lint, typecheck, migration check, unit tests, end-to-end
+  tests against PostgreSQL, and production builds on every push and pull request.
+
+## What M1 includes
+
+- **Approvals (maker-checker)**: one person asks, a different person with the
+  right role approves or rejects; the action runs only on approval. Used now for
+  retiring a battery and for publishing a plan below its cost floor.
+- **Battery types** with specifications and an append-only cost history:
+  purchase cost plus per-battery allowances that make up the cost floor.
+- **Inventory**: register batteries one at a time or a whole delivery at once
+  (all or nothing, every problem listed), custody history, repair moves, and
+  retirement through approval. Duplicate serials and GPS IDs are refused.
+- **Neo Own plans**: fixed codes (NO-P01…), names in Bengali, Hindi and English
+  with length and claim checks, versions, a price grid per battery type, the
+  cost-floor check with exception approval, and published versions frozen in
+  the database. Renames apply to new sign-ups only.
+- **Drivers and KYC**: driver, vehicle (with owner and consent form for
+  renter-drivers) and nominee; duplicate phone, vehicle and ID flags; ID numbers
+  encrypted (Aadhaar: last 4 digits only) and masked; documents in private
+  storage behind short-lived links; every view logged; a readiness checklist
+  for signing an agreement in M2.
+- **Admin panel**: Drivers, Plans, Inventory, Battery types and Approvals screens.
 
 ## Run it locally
 
@@ -64,6 +84,7 @@ Needs Node.js 22.12 or later, pnpm 10 and Docker (or a local PostgreSQL 16).
 pnpm install
 docker compose up -d                      # PostgreSQL (and Redis for later milestones)
 cp apps/api/.env.example apps/api/.env    # then set the bootstrap admin email
+                                          # and, outside your laptop, a fresh KYC_ENCRYPTION_KEY
 pnpm --filter @voltneo/shared build
 pnpm --filter @voltneo/api db:generate
 pnpm --filter @voltneo/api db:deploy      # apply migrations
@@ -82,6 +103,7 @@ connected.
 pnpm test        # unit tests in every package
 pnpm test:e2e    # API end-to-end tests; resets the voltneo_test database
 pnpm typecheck
+pnpm lint
 pnpm format:check
 ```
 
@@ -100,6 +122,10 @@ tests exactly what will be deployed, including the database-level rules.
   with a test version, so providers can be swapped without touching business logic.
 - Driver-facing text is written in Bengali, Hindi and English; staff screens are
   English for the MVP.
+- KYC ID numbers are encrypted with `KYC_ENCRYPTION_KEY`. Losing the key makes
+  them unreadable; keep it in the host's secret manager, never in the code.
+- Uploaded files are checked by their content, renamed to random keys and never
+  served directly.
 - Commits end with the attribution lines in `docs/decisions.md`.
 
 ## Not legal or compliance advice

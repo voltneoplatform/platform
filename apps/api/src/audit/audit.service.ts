@@ -18,7 +18,15 @@ export interface AuditEntry {
 }
 
 /** Fields that must never be copied into the audit log. */
-const REDACTED_KEYS = new Set(['codeHash', 'refreshTokenHash', 'password', 'token']);
+const REDACTED_KEYS = new Set([
+  'codeHash',
+  'refreshTokenHash',
+  'password',
+  'token',
+  'numberEncrypted',
+  'numberIndex',
+  'number',
+]);
 
 function toJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
   if (value === undefined || value === null) return Prisma.DbNull;
