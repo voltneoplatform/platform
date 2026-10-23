@@ -31,7 +31,7 @@ export interface Texts {
   firstDueDate: string;
   lastDueDate: string;
   lateFee: string;
-  lateFeeValue: (fee: string, grace: number, cap: number) => string;
+  lateFeeValue: (fee: string, grace: number, cap: number, max: string) => string;
   gst: string;
   gstValue: string;
   nominee: string;
@@ -54,7 +54,7 @@ export interface Texts {
   k5Yours: string;
   k5YoursValue: (lastDue: string) => string;
   k5Late: string;
-  k5LateValue: (grace: number, fee: string, cap: number) => string;
+  k5LateValue: (grace: number, fee: string, cap: number, max: string) => string;
   k5NoPay: string;
   k5NoPayValue: (days: number) => string;
   k5Early: string;
@@ -114,8 +114,8 @@ const EN: Texts = {
   firstDueDate: 'First Due Date',
   lastDueDate: 'Last Due Date',
   lateFee: 'Late Fee',
-  lateFeeValue: (fee, grace, cap) =>
-    `${fee} per day after the ${grace}-day Grace Period, for at most ${cap} days`,
+  lateFeeValue: (fee, grace, cap, max) =>
+    `${fee} per day after the ${grace}-day Grace Period, for at most ${cap} days each time you are late (at most ${max}), however many instalments are overdue`,
   gst: 'GST',
   gstValue: 'To be confirmed before launch',
   nominee: 'Nominee',
@@ -137,8 +137,8 @@ const EN: Texts = {
   k5Yours: 'The battery becomes yours',
   k5YoursValue: (last) => `After the last instalment, due on ${last}`,
   k5Late: 'If you pay late',
-  k5LateValue: (g, fee, cap) =>
-    `${g} days' grace. Day ${g}: final notice. Day ${g + 1}: battery disabled. Late fee ${fee} per day, for at most ${cap} days.`,
+  k5LateValue: (g, fee, cap, max) =>
+    `${g} days' grace. Day ${g}: final notice. Day ${g + 1}: battery disabled. Late fee ${fee} per day, for at most ${cap} days each time you are late (at most ${max}).`,
   k5NoPay: 'If you still do not pay',
   k5NoPayValue: (d) =>
     `The battery is collected ${d} days after it is disabled. The Down Payment is not returned. The account is closed.`,
@@ -194,8 +194,8 @@ const BN: Texts = {
   firstDueDate: 'প্রথম কিস্তির তারিখ',
   lastDueDate: 'শেষ কিস্তির তারিখ',
   lateFee: 'বিলম্ব ফি',
-  lateFeeValue: (fee, grace, cap) =>
-    `${grace} দিনের ছাড়ের পরে প্রতিদিন ${fee}, সর্বোচ্চ ${cap} দিন`,
+  lateFeeValue: (fee, grace, cap, max) =>
+    `${grace} দিনের ছাড়ের পরে প্রতিদিন ${fee}, প্রতিবার দেরিতে সর্বোচ্চ ${cap} দিন (সর্বোচ্চ ${max}); একাধিক কিস্তি বাকি থাকলেও দিনে ${fee}-এর বেশি নয়`,
   gst: 'জিএসটি',
   gstValue: 'চালু হওয়ার আগে নিশ্চিত করা হবে',
   nominee: 'নমিনি',
@@ -217,8 +217,8 @@ const BN: Texts = {
   k5Yours: 'ব্যাটারি আপনার হবে',
   k5YoursValue: (last) => `শেষ কিস্তি দেওয়ার পরে (শেষ কিস্তির তারিখ ${last})`,
   k5Late: 'দেরিতে দিলে',
-  k5LateValue: (g, fee, cap) =>
-    `${g} দিন ছাড়। দিন ${g}: শেষ নোটিস। দিন ${g + 1}: ব্যাটারি বন্ধ করা হবে। প্রতিদিন ${fee} বিলম্ব ফি, সর্বোচ্চ ${cap} দিন।`,
+  k5LateValue: (g, fee, cap, max) =>
+    `${g} দিন ছাড়। দিন ${g}: শেষ নোটিস। দিন ${g + 1}: ব্যাটারি বন্ধ করা হবে। প্রতিদিন ${fee} বিলম্ব ফি, প্রতিবার দেরিতে সর্বোচ্চ ${cap} দিন (সর্বোচ্চ ${max})।`,
   k5NoPay: 'তারপরও না দিলে',
   k5NoPayValue: (d) =>
     `ব্যাটারি বন্ধ হওয়ার ${d} দিন পরে ব্যাটারি নিয়ে নেওয়া হবে। ডাউন পেমেন্ট ফেরত হবে না। অ্যাকাউন্ট বন্ধ হবে।`,
@@ -274,8 +274,8 @@ const HI: Texts = {
   firstDueDate: 'पहली किस्त की तारीख',
   lastDueDate: 'आख़िरी किस्त की तारीख',
   lateFee: 'विलंब शुल्क',
-  lateFeeValue: (fee, grace, cap) =>
-    `${grace} दिन की छूट के बाद ${fee} प्रति दिन, अधिकतम ${cap} दिन`,
+  lateFeeValue: (fee, grace, cap, max) =>
+    `${grace} दिन की छूट के बाद ${fee} प्रति दिन, हर बार देरी होने पर अधिकतम ${cap} दिन (अधिकतम ${max}); कई किस्तें बाकी हों तब भी दिन में ${fee} से ज़्यादा नहीं`,
   gst: 'जीएसटी',
   gstValue: 'शुरू होने से पहले तय किया जाएगा',
   nominee: 'नॉमिनी',
@@ -297,8 +297,8 @@ const HI: Texts = {
   k5Yours: 'बैटरी आपकी होगी',
   k5YoursValue: (last) => `आख़िरी किस्त के बाद (आख़िरी किस्त की तारीख ${last})`,
   k5Late: 'देर से देने पर',
-  k5LateValue: (g, fee, cap) =>
-    `${g} दिन की छूट। दिन ${g}: अंतिम नोटिस। दिन ${g + 1}: बैटरी बंद। ${fee} प्रति दिन विलंब शुल्क, अधिकतम ${cap} दिन।`,
+  k5LateValue: (g, fee, cap, max) =>
+    `${g} दिन की छूट। दिन ${g}: अंतिम नोटिस। दिन ${g + 1}: बैटरी बंद। ${fee} प्रति दिन विलंब शुल्क, हर बार देरी होने पर अधिकतम ${cap} दिन (अधिकतम ${max})।`,
   k5NoPay: 'फिर भी न देने पर',
   k5NoPayValue: (d) =>
     `बैटरी बंद होने के ${d} दिन बाद बैटरी वापस ले ली जाएगी। डाउन पेमेंट वापस नहीं होगा। खाता बंद होगा।`,

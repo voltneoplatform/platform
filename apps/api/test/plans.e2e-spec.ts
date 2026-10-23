@@ -58,7 +58,7 @@ describe('Plans with versions and the cost floor (module 4)', () => {
         status: 'DRAFT',
         graceDays: 5,
         lateFeePerDayPaise: r(100),
-        lateFeeCapDays: 60,
+        lateFeeCapDays: 30,
       });
     });
 

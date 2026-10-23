@@ -260,7 +260,7 @@ export default function AgreementPage() {
             <dt>Late fee</dt>
             <dd>
               <Money paise={a.terms.lateFeePerDayPaise} /> a day after {a.terms.graceDays} days, at
-              most {a.terms.lateFeeCapDays} days
+              most {a.terms.lateFeeCapDays} days per late spell
             </dd>
             <dt>Language</dt>
             <dd>{DRIVER_LANGUAGE_LABELS[a.language]}</dd>
