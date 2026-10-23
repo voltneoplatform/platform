@@ -381,3 +381,156 @@ pre.json {
   color: var(--text-muted);
   max-width: 360px;
 }
+
+/* M1 additions */
+.num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.badge.warn {
+  background: var(--warning-bg);
+  color: var(--text);
+}
+.badge.info {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+dialog.wide {
+  width: min(760px, calc(100vw - 32px));
+}
+.rupee-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  padding-left: 10px;
+}
+.rupee-input input {
+  border: 0;
+  padding-left: 6px;
+}
+.rupee-input:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.rupee-input input:focus {
+  outline: none;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 16px;
+}
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 18px;
+  margin: 0;
+  font-size: 14px;
+}
+.kv dt {
+  color: var(--text-muted);
+}
+.kv dd {
+  margin: 0;
+}
+.section {
+  margin-top: 20px;
+}
+.section > h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.back {
+  display: inline-block;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.checklist li {
+  padding: 6px 0;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.checklist .tick {
+  width: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+.checklist .done {
+  color: var(--success);
+}
+.checklist .todo {
+  color: var(--danger);
+}
+.checklist .na {
+  color: var(--text-muted);
+}
+.below {
+  color: var(--danger);
+  font-weight: 600;
+}
+.above {
+  color: var(--success);
+}
+td.right,
+th.right {
+  text-align: right;
+}
+textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 11px;
+  min-height: 80px;
+}
+.checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 400;
+}
+.checkbox input {
+  width: auto;
+}
+.stat-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.badge {
+  font-family: var(--font);
+  vertical-align: middle;
+}
+.kv {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+.kv dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+input[type='file'] {
+  max-width: 100%;
+}
+@media (max-width: 760px) {
+  .kv {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .kv dt {
+    margin-top: 8px;
+    font-size: 13px;
+  }
+}

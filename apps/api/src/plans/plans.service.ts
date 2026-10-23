@@ -568,7 +568,7 @@ export class PlansService implements OnModuleInit {
           targetId: id,
           summary: `Publish ${plan.code} "${plan.nameEn}" version ${v.version} below the cost floor`,
           reason: dto.exceptionReason,
-          payload: check as unknown as Prisma.InputJsonValue,
+          payload: { ...check, planId: v.planId } as unknown as Prisma.InputJsonValue,
         },
         actor,
         meta,

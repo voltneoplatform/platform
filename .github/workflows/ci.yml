@@ -57,6 +57,9 @@ jobs:
       - name: Check formatting
         run: pnpm exec prettier --check .
 
+      - name: Lint
+        run: pnpm exec eslint .
+
       - name: Build shared package
         run: pnpm --filter @voltneo/shared run build
 

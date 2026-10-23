@@ -11,7 +11,7 @@
     "build": "pnpm -r run build",
     "dev:api": "pnpm --filter @voltneo/api run start:dev",
     "dev:admin": "pnpm --filter @voltneo/admin run dev",
-    "lint": "pnpm -r run lint",
+    "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "test:e2e": "pnpm --filter @voltneo/api run test:e2e",
@@ -21,7 +21,12 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
     "prettier": "^3.6.2",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0"
   }
 }

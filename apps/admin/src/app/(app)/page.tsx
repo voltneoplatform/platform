@@ -1,12 +1,61 @@
 'use client';
 
 import Link from 'next/link';
-import { ROLE_LABELS } from '@voltneo/shared';
+import { ROLE_LABELS, type Permission } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
+import type { ApprovalRow } from '@/lib/types';
+import { useLoad } from '@/components/ui';
+
+const CARDS: { href: string; title: string; text: string; permission: Permission }[] = [
+  {
+    href: '/drivers',
+    title: 'Drivers',
+    text: 'Register drivers, check KYC documents, record the vehicle and nominee.',
+    permission: 'drivers.read',
+  },
+  {
+    href: '/plans',
+    title: 'Plans',
+    text: 'Neo Own plans priced per battery type, with versions and the cost-floor check.',
+    permission: 'plans.read',
+  },
+  {
+    href: '/inventory',
+    title: 'Inventory',
+    text: 'Every battery by serial and GPS ID, where it is and who holds it.',
+    permission: 'batteries.read',
+  },
+  {
+    href: '/battery-types',
+    title: 'Battery types',
+    text: 'Specifications, purchase costs and cost floors.',
+    permission: 'battery_types.read',
+  },
+  {
+    href: '/staff',
+    title: 'Staff and roles',
+    text: 'Who works where and in which role.',
+    permission: 'staff.read',
+  },
+  {
+    href: '/audit',
+    title: 'Audit log',
+    text: 'Every change, who made it and when. Entries cannot be edited.',
+    permission: 'audit.read',
+  },
+];
 
 export default function HomePage() {
-  const { staff, can, permissions } = useSession();
+  const { staff, can, permissions, api } = useSession();
+  const approvals = useLoad(
+    () =>
+      can('approvals.request')
+        ? api.get<ApprovalRow[]>('/v1/approval-requests?status=PENDING')
+        : Promise.resolve([] as ApprovalRow[]),
+    [api],
+  );
   if (!staff) return null;
+  const waitingForMe = approvals.data?.filter((a) => a.canDecide).length ?? 0;
   return (
     <>
       <div className="page-head">
@@ -16,30 +65,22 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="grid">
-        {can('staff.read') && (
-          <Link href="/staff" className="card" style={{ color: 'inherit' }}>
-            <h2>Staff and roles</h2>
-            <p className="muted">
-              {can('staff.manage')
-                ? 'Add staff, change roles and deactivate accounts.'
-                : 'See who works where and in which role.'}
-            </p>
-          </Link>
-        )}
-        {can('audit.read') && (
-          <Link href="/audit" className="card" style={{ color: 'inherit' }}>
-            <h2>Audit log</h2>
-            <p className="muted">Every change, who made it and when. Entries cannot be edited.</p>
-          </Link>
-        )}
-        <div className="card">
-          <h2>Platform status</h2>
-          <p className="muted">
-            Milestone M0 is live: secure staff sign-in and role checks. Battery types, plans and
-            drivers arrive in M1.
-          </p>
+      {waitingForMe > 0 && (
+        <div className="alert info">
+          <strong>
+            {waitingForMe} request{waitingForMe === 1 ? '' : 's'} waiting for your approval.
+          </strong>{' '}
+          <Link href="/approvals">Review now</Link>
         </div>
+      )}
+
+      <div className="grid">
+        {CARDS.filter((c) => can(c.permission)).map((c) => (
+          <Link key={c.href} href={c.href} className="card" style={{ color: 'inherit' }}>
+            <h2>{c.title}</h2>
+            <p className="muted">{c.text}</p>
+          </Link>
+        ))}
       </div>
 
       <details style={{ marginTop: 24 }}>
