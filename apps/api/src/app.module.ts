@@ -6,6 +6,12 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { StaffModule } from './staff/staff.module';
+import { FilesModule } from './files/files.module';
+import { ApprovalsModule } from './approvals/approvals.module';
+import { BatteryTypesModule } from './battery-types/battery-types.module';
+import { BatteriesModule } from './batteries/batteries.module';
+import { PlansModule } from './plans/plans.module';
+import { DriversModule } from './drivers/drivers.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -20,6 +26,12 @@ import { HealthController } from './health/health.controller';
     AuditModule,
     AuthModule,
     StaffModule,
+    FilesModule,
+    ApprovalsModule,
+    BatteryTypesModule,
+    BatteriesModule,
+    PlansModule,
+    DriversModule,
   ],
   controllers: [HealthController],
   providers: [

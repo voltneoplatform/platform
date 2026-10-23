@@ -19,6 +19,12 @@ export interface AppConfig {
   otpResendCooldownSeconds: number;
   otpDelivery: OtpDelivery;
   adminOrigin: string;
+  /** 32-byte key for KYC numbers; encryption and fingerprint keys are derived from it. */
+  kycEncryptionKey: Buffer;
+  /** Private folder for uploaded documents (local storage adapter). */
+  fileStorageDir: string;
+  /** Minutes a link to a private file stays valid. */
+  fileLinkTtlSeconds: number;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -55,6 +61,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
 
+  const kycEncryptionKey = Buffer.from(required(env, 'KYC_ENCRYPTION_KEY'), 'base64');
+  if (kycEncryptionKey.length !== 32) {
+    throw new Error(
+      'KYC_ENCRYPTION_KEY must be 32 bytes, base64-encoded (openssl rand -base64 32)',
+    );
+  }
+  if (nodeEnv === 'production' && kycEncryptionKey.toString('utf8').startsWith('dev-only')) {
+    throw new Error('KYC_ENCRYPTION_KEY still has the development example value');
+  }
+
   const otpDelivery = (env.OTP_DELIVERY ?? 'log') as OtpDelivery;
   if (!['log', 'memory'].includes(otpDelivery)) {
     throw new Error('OTP_DELIVERY must be "log" or "memory" until real providers are added');
@@ -84,5 +100,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     otpResendCooldownSeconds: int(env, 'OTP_RESEND_COOLDOWN_SECONDS', 30, 0),
     otpDelivery,
     adminOrigin: env.ADMIN_ORIGIN ?? 'http://localhost:3000',
+    kycEncryptionKey,
+    fileStorageDir: env.FILE_STORAGE_DIR || './storage',
+    fileLinkTtlSeconds: int(env, 'FILE_LINK_TTL_SECONDS', 300, 30),
   };
 }

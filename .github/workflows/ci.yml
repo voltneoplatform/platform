@@ -16,7 +16,8 @@ permissions:
 jobs:
   test:
     name: Typecheck, test and build
-    runs-on: ubuntu-latest
+    # Pinned so a runner image change never alters builds silently.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     services:

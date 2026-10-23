@@ -10,3 +10,4 @@ coverage/
 apps/api/src/generated/
 .DS_Store
 *.log
+storage/

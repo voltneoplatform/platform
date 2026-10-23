@@ -27,12 +27,15 @@ export async function createTestApp(): Promise<TestContext> {
   };
 }
 
-/** Clears staff data between test files. The audit log trigger is paused only for this cleanup. */
+/** Clears all data between tests. The audit log's truncate guard is paused only for this cleanup. */
 export async function resetData(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe('ALTER TABLE "audit_log" DISABLE TRIGGER USER');
   try {
     await prisma.$executeRawUnsafe(
-      'TRUNCATE "audit_log", "staff_sessions", "staff_otp_challenges", "staff_users" RESTART IDENTITY CASCADE',
+      `TRUNCATE "audit_log", "staff_sessions", "staff_otp_challenges", "staff_users",
+        "approval_requests", "battery_custody", "batteries", "plan_version_prices", "plan_versions",
+        "plans", "battery_type_costs", "battery_types", "kyc_documents", "vehicles", "drivers"
+        RESTART IDENTITY CASCADE`,
     );
   } finally {
     await prisma.$executeRawUnsafe('ALTER TABLE "audit_log" ENABLE TRIGGER USER');
