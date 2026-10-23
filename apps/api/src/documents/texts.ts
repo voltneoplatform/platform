@@ -90,6 +90,21 @@ export interface Texts {
     balance: string;
   }) => string;
   page: (n: number, of: number) => string;
+  // Collections messages (SMS)
+  reminderSms: (p: {
+    amount: string;
+    agreement: string;
+    dueDate: string;
+    today: boolean;
+  }) => string;
+  finalNoticeSms: (p: {
+    amount: string;
+    agreement: string;
+    disableFrom: string;
+    fee: string;
+  }) => string;
+  immobilisedSms: (p: { amount: string; agreement: string }) => string;
+  restoredSms: (p: { agreement: string }) => string;
 }
 
 const EN: Texts = {
@@ -170,6 +185,14 @@ const EN: Texts = {
   receiptSms: (p) =>
     `Volt Neo: Received ${p.amount} for agreement ${p.agreement} on ${p.date}. Receipt ${p.receipt}. Still to pay: ${p.balance}.`,
   page: (n, of) => `Page ${n} of ${of}`,
+  reminderSms: (p) =>
+    `Volt Neo: Your instalment of ${p.amount} for agreement ${p.agreement} is due ${p.today ? `today (${p.dueDate})` : `on ${p.dueDate}`}. Pay by UPI or to a Volt Neo agent and keep the system receipt.`,
+  finalNoticeSms: (p) =>
+    `Volt Neo: FINAL NOTICE. ${p.amount} is overdue on agreement ${p.agreement}. If it is not paid today, your battery may be disabled from ${p.disableFrom}, and a late fee of ${p.fee} a day applies from then. Pay now to avoid this.`,
+  immobilisedSms: (p) =>
+    `Volt Neo: Your battery has been disabled because ${p.amount} is due on agreement ${p.agreement}. Pay ${p.amount} to have it switched back on. There is no reconnection fee.`,
+  restoredSms: (p) =>
+    `Volt Neo: Thank you. Your battery on agreement ${p.agreement} has been switched back on.`,
 };
 
 const BN: Texts = {
@@ -250,6 +273,13 @@ const BN: Texts = {
   receiptSms: (p) =>
     `Volt Neo: চুক্তি ${p.agreement}-এর জন্য ${p.date} তারিখে ${p.amount} পাওয়া গেছে। রসিদ ${p.receipt}। বাকি: ${p.balance}।`,
   page: (n, of) => `পৃষ্ঠা ${n} / ${of}`,
+  reminderSms: (p) =>
+    `Volt Neo: চুক্তি ${p.agreement}-এর ${p.amount} কিস্তি ${p.today ? `আজ (${p.dueDate})` : `${p.dueDate} তারিখে`} দেয়। UPI-তে বা Volt Neo এজেন্টকে দিন এবং সিস্টেমের রসিদ রাখুন।`,
+  finalNoticeSms: (p) =>
+    `Volt Neo: শেষ নোটিস। চুক্তি ${p.agreement}-এ ${p.amount} বাকি। আজ না দিলে ${p.disableFrom} থেকে আপনার ব্যাটারি বন্ধ করা হতে পারে, এবং সেদিন থেকে প্রতিদিন ${p.fee} বিলম্ব ফি লাগবে। এড়াতে এখনই দিন।`,
+  immobilisedSms: (p) =>
+    `Volt Neo: চুক্তি ${p.agreement}-এ ${p.amount} বাকি থাকায় আপনার ব্যাটারি বন্ধ করা হয়েছে। ${p.amount} দিলে আবার চালু করা হবে। আবার চালু করার জন্য কোনো ফি নেই।`,
+  restoredSms: (p) => `Volt Neo: ধন্যবাদ। চুক্তি ${p.agreement}-এর ব্যাটারি আবার চালু করা হয়েছে।`,
 };
 
 const HI: Texts = {
@@ -330,6 +360,13 @@ const HI: Texts = {
   receiptSms: (p) =>
     `Volt Neo: अनुबंध ${p.agreement} के लिए ${p.date} को ${p.amount} प्राप्त हुए। रसीद ${p.receipt}। बाकी: ${p.balance}।`,
   page: (n, of) => `पृष्ठ ${n} / ${of}`,
+  reminderSms: (p) =>
+    `Volt Neo: अनुबंध ${p.agreement} की ${p.amount} की किस्त ${p.today ? `आज (${p.dueDate})` : `${p.dueDate} को`} देय है। UPI से या Volt Neo एजेंट को भुगतान करें और सिस्टम की रसीद रखें।`,
+  finalNoticeSms: (p) =>
+    `Volt Neo: अंतिम नोटिस। अनुबंध ${p.agreement} पर ${p.amount} बाकी है। आज भुगतान न होने पर ${p.disableFrom} से आपकी बैटरी बंद की जा सकती है, और उस दिन से ${p.fee} प्रति दिन विलंब शुल्क लगेगा। इससे बचने के लिए अभी भुगतान करें।`,
+  immobilisedSms: (p) =>
+    `Volt Neo: अनुबंध ${p.agreement} पर ${p.amount} बाकी होने के कारण आपकी बैटरी बंद कर दी गई है। ${p.amount} का भुगतान करने पर इसे फिर से चालू किया जाएगा। दोबारा चालू करने का कोई शुल्क नहीं है।`,
+  restoredSms: (p) => `Volt Neo: धन्यवाद। अनुबंध ${p.agreement} की बैटरी फिर से चालू कर दी गई है।`,
 };
 
 export const TEXTS: Record<Lang, Texts> = { BN, HI, EN };

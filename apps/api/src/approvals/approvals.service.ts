@@ -129,6 +129,39 @@ export class ApprovalsService {
     });
   }
 
+  /**
+   * Cancels pending requests that no longer apply (for example an
+   * immobilisation request once the driver has paid). Recorded as a system action.
+   */
+  async cancelBySystem(
+    tx: Tx,
+    where: { type: ApprovalType; targetTable: string; targetId: string },
+    note: string,
+  ): Promise<number> {
+    const pending = await tx.approvalRequest.findMany({ where: { ...where, status: 'PENDING' } });
+    for (const request of pending) {
+      await tx.approvalRequest.update({
+        where: { id: request.id },
+        data: { status: 'CANCELLED', decidedAt: new Date(), decisionNote: note },
+      });
+      await this.audit.record(
+        {
+          actorType: 'SYSTEM',
+          actorId: null,
+          action: 'approval.cancelled',
+          tableName: 'approval_requests',
+          recordId: request.id,
+          before: { status: 'PENDING' },
+          after: { status: 'CANCELLED', decisionNote: note, type: request.type },
+          ip: null,
+          requestId: null,
+        },
+        tx,
+      );
+    }
+    return pending.length;
+  }
+
   private async decide(
     id: string,
     approver: AuthenticatedStaff,

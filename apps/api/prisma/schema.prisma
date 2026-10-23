@@ -2,6 +2,7 @@
 // M0: staff, login and the audit log. M1: battery types, inventory, plans,
 // approvals, drivers, vehicles and KYC. M2: agreements, instalments,
 // installation, payments, the ledger, cash deposits and outbound messages.
+// M3: collections (immobilisation log, recoveries, notices, job runs).
 // Money is always stored in paise as integers.
 
 generator client {
@@ -575,21 +576,30 @@ model Agreement {
   completedAt         DateTime?       @map("completed_at") @db.Timestamptz(3)
   cancelledAt         DateTime?       @map("cancelled_at") @db.Timestamptz(3)
   cancelReason        String?         @map("cancel_reason")
+  lateSpellStartedOn  DateTime?       @map("late_spell_started_on") @db.Date
+  immobilisedAt       DateTime?       @map("immobilised_at") @db.Timestamptz(3)
+  restoreDueSince     DateTime?       @map("restore_due_since") @db.Timestamptz(3)
+  closedAt            DateTime?       @map("closed_at") @db.Timestamptz(3)
+  writtenOffAmount    Int?            @map("written_off_amount")
+  writtenOffLateFees  Int?            @map("written_off_late_fees")
   notes               String?
   createdById         String?         @map("created_by_id") @db.Uuid
   createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  driver        Driver           @relation(fields: [driverId], references: [id])
-  vehicle       Vehicle          @relation(fields: [vehicleId], references: [id])
-  planVersion   PlanVersion      @relation(fields: [planVersionId], references: [id])
-  batteryType   BatteryType      @relation(fields: [batteryTypeId], references: [id])
-  battery       Battery?         @relation(fields: [batteryId], references: [id])
-  instalments   Instalment[]
-  lateFees      LateFeeAccrual[]
-  events        AgreementEvent[]
-  installations Installation[]
-  payments      Payment[]
+  driver          Driver              @relation(fields: [driverId], references: [id])
+  vehicle         Vehicle             @relation(fields: [vehicleId], references: [id])
+  planVersion     PlanVersion         @relation(fields: [planVersionId], references: [id])
+  batteryType     BatteryType         @relation(fields: [batteryTypeId], references: [id])
+  battery         Battery?            @relation(fields: [batteryId], references: [id])
+  instalments     Instalment[]
+  lateFees        LateFeeAccrual[]
+  events          AgreementEvent[]
+  installations   Installation[]
+  payments        Payment[]
+  immobilisations ImmobilisationLog[]
+  recoveries      Recovery[]
+  notices         CollectionNotice[]
 
   @@index([driverId])
   @@index([state])
@@ -909,4 +919,120 @@ model WebhookEvent {
   @@unique([provider, eventId])
   @@index([status])
   @@map("webhook_events")
+}
+
+// ---------------------------------------------------------------------------
+// M3: collections
+// ---------------------------------------------------------------------------
+
+enum ImmobilisationAction {
+  DISABLE
+  RESTORE
+}
+
+/// immobilisation_log: every disable and restore done in the GPS supplier's
+/// portal, recorded by staff (D23). A disable needs an approved two-person
+/// request and a confirmation that the vehicle was stationary. Append-only.
+model ImmobilisationLog {
+  id                         String               @id @default(uuid()) @db.Uuid
+  agreementId                String               @map("agreement_id") @db.Uuid
+  action                     ImmobilisationAction
+  approvalRequestId          String?              @unique @map("approval_request_id") @db.Uuid
+  vehicleStationaryConfirmed Boolean              @map("vehicle_stationary_confirmed")
+  portalReference            String               @map("portal_reference")
+  performedAt                DateTime             @map("performed_at") @db.Timestamptz(3)
+  performedById              String               @map("performed_by_id") @db.Uuid
+  recordedById               String               @map("recorded_by_id") @db.Uuid
+  note                       String?
+  createdAt                  DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agreement Agreement @relation(fields: [agreementId], references: [id])
+
+  @@index([agreementId, performedAt])
+  @@map("immobilisation_log")
+}
+
+/// recoveries: a battery collected after default (D39). Unpaid instalments and
+/// late fees are written off and the agreement is closed (D45). Append-only.
+model Recovery {
+  id                 String          @id @default(uuid()) @db.Uuid
+  agreementId        String          @unique @map("agreement_id") @db.Uuid
+  batteryId          String          @map("battery_id") @db.Uuid
+  approvalRequestId  String          @unique @map("approval_request_id") @db.Uuid
+  recoveredAt        DateTime        @map("recovered_at") @db.Timestamptz(3)
+  recoveredById      String          @map("recovered_by_id") @db.Uuid
+  location           String
+  conditionNote      String          @map("condition_note")
+  writtenOffAmount   Int             @map("written_off_amount")
+  writtenOffLateFees Int             @map("written_off_late_fees")
+  recordedById       String          @map("recorded_by_id") @db.Uuid
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agreement Agreement       @relation(fields: [agreementId], references: [id])
+  photos    RecoveryPhoto[]
+
+  @@map("recoveries")
+}
+
+model RecoveryPhoto {
+  id         String   @id @default(uuid()) @db.Uuid
+  recoveryId String   @map("recovery_id") @db.Uuid
+  fileKey    String   @map("file_key")
+  fileName   String   @map("file_name")
+  fileType   String   @map("file_type")
+  fileSize   Int      @map("file_size")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  recovery Recovery @relation(fields: [recoveryId], references: [id])
+
+  @@index([recoveryId])
+  @@map("recovery_photos")
+}
+
+enum NoticeKind {
+  REMINDER_5
+  REMINDER_3
+  REMINDER_1
+  REMINDER_0
+  FINAL_NOTICE
+  IMMOBILISED
+  RESTORED
+}
+
+/// collection_notices: each reminder or notice sent, at most once per
+/// agreement, kind and reference date (the due date or the spell start).
+model CollectionNotice {
+  id           String     @id @default(uuid()) @db.Uuid
+  agreementId  String     @map("agreement_id") @db.Uuid
+  kind         NoticeKind
+  refDate      DateTime   @map("ref_date") @db.Date
+  instalmentId String?    @map("instalment_id") @db.Uuid
+  messageId    String?    @map("message_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agreement Agreement @relation(fields: [agreementId], references: [id])
+
+  @@unique([agreementId, kind, refDate])
+  @@map("collection_notices")
+}
+
+enum JobRunStatus {
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// job_runs: one row per scheduled job and business date, so a date is never
+/// processed twice and missed dates can be caught up.
+model JobRun {
+  id         String       @id @default(uuid()) @db.Uuid
+  job        String
+  runDate    DateTime     @map("run_date") @db.Date
+  status     JobRunStatus
+  summary    Json?
+  startedAt  DateTime     @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime?    @map("finished_at") @db.Timestamptz(3)
+
+  @@unique([job, runDate])
+  @@map("job_runs")
 }

@@ -15,6 +15,9 @@ import { DriversModule } from './drivers/drivers.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { AgreementsModule } from './agreements/agreements.module';
 import { PaymentsModule } from './payments/payments.module';
+import { ClockModule } from './common/clock';
+import { CollectionsModule } from './collections/collections.module';
+import { JobsModule } from './jobs/jobs.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -38,6 +41,9 @@ import { HealthController } from './health/health.controller';
     MessagingModule,
     AgreementsModule,
     PaymentsModule,
+    ClockModule,
+    CollectionsModule,
+    JobsModule,
   ],
   controllers: [HealthController],
   providers: [

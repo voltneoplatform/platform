@@ -28,6 +28,7 @@ import { AuditService } from '../audit/audit.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { DocumentsService } from '../documents/documents.service';
 import { TEXTS, docDate } from '../documents/texts';
+import { CollectionsService } from '../collections/collections.service';
 import type { AuthenticatedStaff, RequestMeta } from '../common/decorators';
 import { nextCounter } from '../common/counters';
 import { dateOnly, istDate, isUniqueViolation, serializable, type Tx } from '../common/util';
@@ -81,6 +82,7 @@ export class PaymentsService {
     private readonly audit: AuditService,
     private readonly messaging: MessagingService,
     private readonly documents: DocumentsService,
+    private readonly collections: CollectionsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -254,6 +256,9 @@ export class PaymentsService {
         },
       });
     }
+
+    // Overdue cleared: end the late spell, restore task, cancel open requests (M3).
+    await this.collections.afterPayment(tx, a.id, input.actor);
 
     const lang = a.driver.language as DriverLanguage;
     const messageId = await this.messaging.queue(tx, {

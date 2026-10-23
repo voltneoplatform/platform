@@ -7,3 +7,4 @@ export * from './drivers';
 export * from './agreements';
 export * from './payments';
 export * from './words';
+export * from './collections';
