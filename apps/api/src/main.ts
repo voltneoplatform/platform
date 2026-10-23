@@ -7,7 +7,8 @@ import { configureApp } from './bootstrap';
 import { APP_CONFIG, type AppConfig } from './config/app-config';
 
 async function main() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody keeps the exact bytes of each request so webhook signatures can be checked.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   configureApp(app);
   app.enableShutdownHooks();
   const config = app.get<AppConfig>(APP_CONFIG);

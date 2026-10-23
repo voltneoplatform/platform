@@ -8,7 +8,12 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { hasPermission, type Permission } from '@voltneo/shared';
-import { IS_PUBLIC, REQUIRED_PERMISSIONS, type RequestWithContext } from '../common/decorators';
+import {
+  ANY_PERMISSIONS,
+  IS_PUBLIC,
+  REQUIRED_PERMISSIONS,
+  type RequestWithContext,
+} from '../common/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AccessTokenClaims } from './auth.service';
 
@@ -77,6 +82,13 @@ export class AuthGuard implements CanActivate {
       // Use the role from the database, not the token, so role changes apply at once.
       const missing = required.filter((p) => !hasPermission(session.staff.role, p));
       if (missing.length) throw new ForbiddenException('Your role does not allow this action');
+    }
+    const anyOf = this.reflector.getAllAndOverride<Permission[] | undefined>(ANY_PERMISSIONS, [
+      ctx.getHandler(),
+      ctx.getClass(),
+    ]);
+    if (anyOf?.length && !anyOf.some((p) => hasPermission(session.staff.role, p))) {
+      throw new ForbiddenException('Your role does not allow this action');
     }
     return true;
   }

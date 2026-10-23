@@ -28,7 +28,7 @@ export function configureApp(app: INestApplication): void {
       new DocumentBuilder()
         .setTitle('Volt Neo API')
         .setDescription('Platform API for the Volt Neo admin panel, Field App and Driver App')
-        .setVersion('0.1.0 (M0)')
+        .setVersion('0.3.0 (M2)')
         .addBearerAuth()
         .build(),
     );

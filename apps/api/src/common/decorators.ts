@@ -4,6 +4,7 @@ import type { Request } from 'express';
 
 export const IS_PUBLIC = 'voltneo:isPublic';
 export const REQUIRED_PERMISSIONS = 'voltneo:permissions';
+export const ANY_PERMISSIONS = 'voltneo:anyPermissions';
 
 /** Route needs no login (health check, OTP request and verify, token refresh). */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -11,6 +12,10 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
 /** Staff must hold every listed permission (spec section 2). */
 export const RequirePermissions = (...permissions: Permission[]) =>
   SetMetadata(REQUIRED_PERMISSIONS, permissions);
+
+/** Staff must hold at least one of the listed permissions. */
+export const RequireAnyPermission = (...permissions: Permission[]) =>
+  SetMetadata(ANY_PERMISSIONS, permissions);
 
 export interface AuthenticatedStaff {
   id: string;
