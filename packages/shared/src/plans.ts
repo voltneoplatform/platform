@@ -8,11 +8,17 @@ import { assertPaise, type Paise } from './money';
  * Non-payment terms in force today (D33, D38). They are copied onto every plan
  * version when it is created, so a driver keeps the terms they signed even if
  * the policy changes later. M3 reads them from the version.
+ *
+ * CONFIRMED 23 Oct 2026 (D38 changed, was 60 days): the late fee is ₹100 a day
+ * however many instalments are overdue (no stacking), for at most 30 days in
+ * each late spell. A late spell starts when a due date passes unpaid and ends
+ * when nothing is overdue (every instalment that has fallen due and every late
+ * fee paid); the next missed due date starts a new spell.
  */
 export const NON_PAYMENT_POLICY = {
   graceDays: 5,
   lateFeePerDayPaise: 10_000,
-  lateFeeCapDays: 60,
+  lateFeeCapDays: 30,
 } as const;
 
 export const MAX_TERM_MONTHS = 120;

@@ -163,7 +163,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
           lastDueDate: addMonths(firstDue(), 17),
           graceDays: 5,
           lateFeePerDayPaise: r(100),
-          lateFeeCapDays: 60,
+          lateFeeCapDays: 30,
         },
         money: { paid: 0, outstanding: r(74000) },
         allowed: { edit: true, sign: true, cancel: true, install: false, pay: false },

@@ -24,7 +24,8 @@ function PolicyTerms({ v }: { v: PlanVersionRow }) {
   return (
     <p className="muted" style={{ fontSize: 13 }}>
       Non-payment terms signed with this version: {v.graceDays}-day grace, then{' '}
-      {formatRupees(v.lateFeePerDayPaise)} per day late fee for at most {v.lateFeeCapDays} days.
+      {formatRupees(v.lateFeePerDayPaise)} per day late fee for at most {v.lateFeeCapDays} days per
+      late spell.
     </p>
   );
 }

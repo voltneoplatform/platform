@@ -311,7 +311,8 @@ function NewAgreement() {
               First instalment {formatDate(firstDueDate)}, last{' '}
               {formatDate(addMonths(firstDueDate, version.termMonths - 1))}. Late fee{' '}
               <Money paise={version.lateFeePerDayPaise} /> a day after {version.graceDays}{' '}
-              days&apos; grace, for at most {version.lateFeeCapDays} days.
+              days&apos; grace, for at most {version.lateFeeCapDays} days each time the driver is
+              late.
             </p>
             <div className="field">
               <label htmlFor="notes">Notes (optional)</label>

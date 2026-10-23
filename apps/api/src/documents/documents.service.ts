@@ -151,7 +151,12 @@ export class DocumentsService {
       [t.lastDueDate, docDate(data.lastDueDate)],
       [
         t.lateFee,
-        t.lateFeeValue(rupees(data.lateFeePerDayPaise), data.graceDays, data.lateFeeCapDays),
+        t.lateFeeValue(
+          rupees(data.lateFeePerDayPaise),
+          data.graceDays,
+          data.lateFeeCapDays,
+          rupees(data.lateFeePerDayPaise * data.lateFeeCapDays),
+        ),
       ],
       [t.gst, t.gstValue],
       [t.nominee, nominee],
@@ -197,7 +202,15 @@ export class DocumentsService {
         ],
         [t.k5Total, rupees(data.totalPayable)],
         [t.k5Yours, t.k5YoursValue(docDate(data.lastDueDate))],
-        [t.k5Late, t.k5LateValue(data.graceDays, fee, data.lateFeeCapDays)],
+        [
+          t.k5Late,
+          t.k5LateValue(
+            data.graceDays,
+            fee,
+            data.lateFeeCapDays,
+            rupees(data.lateFeePerDayPaise * data.lateFeeCapDays),
+          ),
+        ],
         [t.k5NoPay, t.k5NoPayValue(RECOVERY_AFTER_DAYS)],
         [t.k5Early, t.k5EarlyValue],
         [t.k5Cannot, t.k5CannotValue],
