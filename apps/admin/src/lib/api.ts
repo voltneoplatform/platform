@@ -109,6 +109,25 @@ export class ApiClient {
     return this.parse<T>(res);
   }
 
+  /** Downloads a file (e.g. a generated PDF) with the same login handling. */
+  async blob(path: string): Promise<Blob> {
+    let res = await this.raw(path);
+    if (res.status === 401) {
+      const session = await this.refresh();
+      if (!session) {
+        this.opts.onSessionEnded?.();
+        throw new ApiError(401, 'Your session has ended. Please log in again.');
+      }
+      res = await this.raw(path);
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      const body: unknown = text ? JSON.parse(text) : undefined;
+      throw new ApiError(res.status, messageFrom(body, res.status), body);
+    }
+    return res.blob();
+  }
+
   get<T>(path: string): Promise<T> {
     return this.request<T>(path);
   }

@@ -60,6 +60,8 @@ import type {
 } from './dto';
 
 const MAX_PHOTOS = 6;
+/** Times typed into forms are to the minute, so ordering checks allow one minute. */
+const MINUTE = 60_000;
 
 const fullInclude = {
   driver: true,
@@ -673,7 +675,7 @@ export class AgreementsService implements OnModuleInit {
       const before = await tx.agreement.findUnique({ where: { id } });
       if (!before) throw new NotFoundException('Agreement not found');
       if (before.state !== 'DRAFT') throw new ConflictException('This agreement is already signed');
-      if (signedAt < before.createdAt) {
+      if (signedAt.getTime() < before.createdAt.getTime() - MINUTE) {
         throw new BadRequestException('The signing time is before the agreement was prepared');
       }
 
@@ -1004,7 +1006,7 @@ export class AgreementsService implements OnModuleInit {
             : 'This agreement is not waiting for installation',
         );
       }
-      if (before.signedAt && installedAt < before.signedAt) {
+      if (before.signedAt && installedAt.getTime() < before.signedAt.getTime() - MINUTE) {
         throw new BadRequestException('Installation cannot be before the agreement was signed');
       }
       const problem = installationDateProblem(istDate(installedAt), dateOnly(before.firstDueDate)!);

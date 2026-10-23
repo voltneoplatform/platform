@@ -237,7 +237,8 @@ button:focus-visible {
   letter-spacing: 0.4em;
   text-align: center;
 }
-button {
+button,
+a.button {
   font: inherit;
   cursor: pointer;
   border-radius: 6px;
@@ -246,11 +247,16 @@ button {
   background: var(--surface);
   color: var(--text);
 }
+a.button {
+  display: inline-block;
+  text-decoration: none;
+}
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-button.primary {
+button.primary,
+a.button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
@@ -533,4 +539,69 @@ input[type='file'] {
     margin-top: 8px;
     font-size: 13px;
   }
+}
+
+/* M2: agreements and payments */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat .value {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.timeline li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.timeline li:last-child {
+  border-bottom: 0;
+}
+.doc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 8px 10px;
+  align-items: center;
+}
+.doc-grid button {
+  padding: 6px 12px;
+}
+tr.paid td {
+  color: var(--text-muted);
+}
+.alert.warn {
+  background: var(--warning-bg);
+}
+.summary-box {
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+  margin: 0;
+}
+label.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 400;
+  margin: 8px 0;
+}
+.nowrap {
+  white-space: nowrap;
 }

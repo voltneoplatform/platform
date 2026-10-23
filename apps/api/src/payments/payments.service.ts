@@ -329,7 +329,7 @@ export class PaymentsService {
       result = await serializable(this.prisma, async (tx) => {
         const a = await tx.agreement.findUnique({ where: { id: dto.agreementId } });
         if (!a) throw new NotFoundException('Agreement not found');
-        if (a.signedAt && receivedAt < a.signedAt) {
+        if (a.signedAt && receivedAt.getTime() < a.signedAt.getTime() - 60_000) {
           throw new BadRequestException('The payment time is before the agreement was signed');
         }
         if (collectedById) {

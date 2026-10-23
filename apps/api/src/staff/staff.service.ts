@@ -66,6 +66,14 @@ export class StaffService {
     return rows.map(toStaffProfile);
   }
 
+  async directory(): Promise<{ id: string; name: string; role: StaffProfile['role'] }[]> {
+    return this.prisma.staffUser.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, name: true, role: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async get(id: string): Promise<StaffProfile> {
     const row = await this.prisma.staffUser.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Staff member not found');

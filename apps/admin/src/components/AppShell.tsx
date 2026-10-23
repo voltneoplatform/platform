@@ -8,6 +8,9 @@ import { useSession } from '@/lib/session';
 
 const NAV: { href: string; label: string; permission?: Permission }[] = [
   { href: '/', label: 'Home' },
+  { href: '/agreements', label: 'Agreements', permission: 'agreements.read' },
+  { href: '/payments', label: 'Payments', permission: 'payments.read' },
+  { href: '/cash', label: 'Cash', permission: 'cash_deposits.reconcile' },
   { href: '/drivers', label: 'Drivers', permission: 'drivers.read' },
   { href: '/plans', label: 'Plans', permission: 'plans.read' },
   { href: '/inventory', label: 'Inventory', permission: 'batteries.read' },
@@ -19,8 +22,6 @@ const NAV: { href: string; label: string; permission?: Permission }[] = [
 
 /** Modules from the MVP Spec that later milestones add. Shown so head office can see what is coming. */
 const COMING: { label: string; milestone: string }[] = [
-  { label: 'Agreements', milestone: 'M2' },
-  { label: 'Payments', milestone: 'M2' },
   { label: 'Collections', milestone: 'M3' },
   { label: 'Service tickets', milestone: 'M4' },
   { label: 'Dashboard', milestone: 'M4' },

@@ -90,7 +90,7 @@ export type LedgerAccount = (typeof LEDGER_ACCOUNTS)[number];
 export const LEDGER_ACCOUNT_LABELS: Record<LedgerAccount, string> = {
   GATEWAY_CLEARING: 'Payment gateway clearing',
   BANK: 'Bank',
-  CASH_WITH_AGENTS: 'Cash held by field agents',
+  CASH_WITH_AGENTS: 'Cash held by collecting staff',
   CASH_IN_TRANSIT: 'Cash deposited, awaiting bank check',
   DOWN_PAYMENTS_RECEIVED: 'Down payments received',
   INSTALMENTS_RECEIVED: 'Instalments received',

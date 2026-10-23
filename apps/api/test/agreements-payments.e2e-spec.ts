@@ -919,5 +919,12 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     const session = await login(ctx, admin.email!);
     await ctx.http.get('/v1/agreements').set(bearer(session.accessToken)).expect(200);
     await ctx.http.get('/v1/ledger/balances').set(bearer(session.accessToken)).expect(200);
+    const dir = await ctx.http.get('/v1/staff/directory').set(bearer(ops.token)).expect(200);
+    expect(dir.body[0]).toEqual({
+      id: expect.any(String),
+      name: expect.any(String),
+      role: expect.any(String),
+    });
+    expect(dir.body.some((s: { id: string }) => s.id === admin.id)).toBe(true);
   });
 });
