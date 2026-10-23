@@ -6,17 +6,19 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { MemoryOtpSender, OTP_SENDER } from '../src/auth/otp-sender';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { MESSAGE_SENDER, MemoryMessageSender } from '../src/messaging/message-sender';
 
 export interface TestContext {
   app: INestApplication;
   http: ReturnType<typeof request>;
   prisma: PrismaService;
   otp: MemoryOtpSender;
+  messages: MemoryMessageSender;
 }
 
 export async function createTestApp(): Promise<TestContext> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication({ logger: ['error'] });
+  const app = moduleRef.createNestApplication({ logger: ['error'], rawBody: true });
   configureApp(app);
   await app.init();
   return {
@@ -24,6 +26,7 @@ export async function createTestApp(): Promise<TestContext> {
     http: request(app.getHttpServer()),
     prisma: app.get(PrismaService),
     otp: app.get<MemoryOtpSender>(OTP_SENDER),
+    messages: app.get<MemoryMessageSender>(MESSAGE_SENDER),
   };
 }
 
@@ -34,7 +37,10 @@ export async function resetData(prisma: PrismaService): Promise<void> {
     await prisma.$executeRawUnsafe(
       `TRUNCATE "audit_log", "staff_sessions", "staff_otp_challenges", "staff_users",
         "approval_requests", "battery_custody", "batteries", "plan_version_prices", "plan_versions",
-        "plans", "battery_type_costs", "battery_types", "kyc_documents", "vehicles", "drivers"
+        "plans", "battery_type_costs", "battery_types", "kyc_documents", "vehicles", "drivers",
+        "counters", "webhook_events", "outbound_messages", "ledger_entries", "ledger_journals",
+        "cash_deposits", "payment_allocations", "payments", "installation_photos", "installations",
+        "agreement_events", "late_fee_accruals", "instalments", "agreements"
         RESTART IDENTITY CASCADE`,
     );
   } finally {

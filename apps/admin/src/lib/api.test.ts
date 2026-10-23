@@ -78,4 +78,24 @@ describe('ApiClient', () => {
     const api = new ApiClient({ fetch });
     await expect(api.post('/v1/staff', {})).rejects.toThrow('name must be longer. role is invalid');
   });
+
+  it('downloads files with the login token, refreshing once, and reports errors', async () => {
+    const fetch = vi.fn(async (url: string, init: RequestInit) => {
+      const auth = (init.headers as Headers).get('authorization');
+      if (url.endsWith('/auth/refresh')) return json(200, session('t2'));
+      if (url.includes('missing')) return json(404, { message: 'Agreement not found' });
+      return auth === 'Bearer t2'
+        ? new Response('%PDF-1.3', { status: 200, headers: { 'content-type': 'application/pdf' } })
+        : json(401, {});
+    });
+    const api = new ApiClient({ fetch: fetch as never });
+    api.setAccessToken('expired');
+    const blob = await api.blob('/v1/agreements/a/documents/schedule-1');
+    expect(blob.type).toBe('application/pdf');
+    expect(await blob.text()).toBe('%PDF-1.3');
+    await expect(api.blob('/v1/agreements/missing/documents/schedule-1')).rejects.toMatchObject({
+      status: 404,
+      message: 'Agreement not found',
+    });
+  });
 });

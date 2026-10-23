@@ -134,7 +134,7 @@ export class DriversService {
     };
   }
 
-  private readinessOf(d: DriverFull) {
+  readinessOf(d: DriverFull) {
     const vehicle = d.vehicles.find((v) => v.isCurrent) ?? null;
     return readiness({
       dateOfBirth: dateOnly(d.dateOfBirth),
@@ -175,7 +175,7 @@ export class DriversService {
     };
   }
 
-  private readonly fullInclude = {
+  readonly fullInclude = {
     kycDocuments: { orderBy: { createdAt: 'desc' } },
     vehicles: { orderBy: { createdAt: 'desc' } },
   } satisfies Prisma.DriverInclude;

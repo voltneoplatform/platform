@@ -1,6 +1,7 @@
 // Volt Neo platform database (Platform MVP Spec V1, section 5).
 // M0: staff, login and the audit log. M1: battery types, inventory, plans,
-// approvals, drivers, vehicles and KYC. Later milestones add the rest.
+// approvals, drivers, vehicles and KYC. M2: agreements, instalments,
+// installation, payments, the ledger, cash deposits and outbound messages.
 // Money is always stored in paise as integers.
 
 generator client {
@@ -169,6 +170,7 @@ model BatteryType {
   costs      BatteryTypeCost[]
   batteries  Battery[]
   planPrices PlanVersionPrice[]
+  agreements Agreement[]
 
   @@map("battery_types")
 }
@@ -235,6 +237,8 @@ model Battery {
   batteryType  BatteryType      @relation(fields: [batteryTypeId], references: [id])
   holderDriver Driver?          @relation(fields: [holderDriverId], references: [id])
   custody      BatteryCustody[]
+  agreements    Agreement[]
+  installations Installation[]
 
   @@index([batteryTypeId])
   @@index([status])
@@ -322,6 +326,7 @@ model PlanVersion {
 
   plan   Plan               @relation(fields: [planId], references: [id])
   prices PlanVersionPrice[]
+  agreements Agreement[]
 
   @@unique([planId, version])
   @@map("plan_versions")
@@ -422,6 +427,8 @@ model Driver {
   kycDocuments KycDocument[]
   vehicles     Vehicle[]
   batteries    Battery[]
+  agreements   Agreement[]
+  payments     Payment[]
 
   @@index([phone])
   @@map("drivers")
@@ -497,7 +504,409 @@ model Vehicle {
 
   driver Driver @relation(fields: [driverId], references: [id])
 
+  agreements    Agreement[]
+  installations Installation[]
+
   @@index([driverId])
   @@index([registration])
   @@map("vehicles")
+}
+
+// ---------------------------------------------------------------------------
+// M2: agreements, installation, payments and the ledger
+// ---------------------------------------------------------------------------
+
+/// counters: gap-free number series (agreement numbers, receipts per financial year).
+model Counter {
+  name  String @id
+  value Int
+
+  @@map("counters")
+}
+
+enum AgreementState {
+  DRAFT
+  AWAITING_DOWN_PAYMENT
+  AWAITING_INSTALLATION
+  ACTIVE
+  IN_GRACE
+  IMMOBILISED
+  RECOVERED
+  CLOSED
+  PAID_OFF
+  EARLY_EXIT
+  TRANSFERRED
+  CANCELLED
+}
+
+/// agreements: one Neo Own agreement per driver and battery (spec module 6).
+/// Plan figures are copied in from the plan version's price grid and frozen at
+/// signing, so a later plan change never alters a signed contract (D15, D27).
+model Agreement {
+  id                  String          @id @default(uuid()) @db.Uuid
+  number              String          @unique
+  driverId            String          @map("driver_id") @db.Uuid
+  vehicleId           String          @map("vehicle_id") @db.Uuid
+  planVersionId       String          @map("plan_version_id") @db.Uuid
+  batteryTypeId       String          @map("battery_type_id") @db.Uuid
+  batteryId           String?         @map("battery_id") @db.Uuid
+  state               AgreementState  @default(DRAFT)
+  dueDay              Int             @map("due_day")
+  firstDueDate        DateTime        @map("first_due_date") @db.Date
+  downPayment         Int             @map("down_payment")
+  instalment          Int
+  termMonths          Int             @map("term_months")
+  totalPayable        Int             @map("total_payable")
+  graceDays           Int             @map("grace_days")
+  lateFeePerDayPaise  Int             @map("late_fee_per_day_paise")
+  lateFeeCapDays      Int             @map("late_fee_cap_days")
+  language            DriverLanguage
+  documentVersion     String          @map("document_version")
+  scheduleRevision    Int             @default(1) @map("schedule_revision")
+  signedAt            DateTime?       @map("signed_at") @db.Timestamptz(3)
+  signatureMethod     String?         @map("signature_method")
+  signedFileKey       String?         @map("signed_file_key")
+  signedFileName      String?         @map("signed_file_name")
+  signedFileType      String?         @map("signed_file_type")
+  explainedInLanguage DriverLanguage? @map("explained_in_language")
+  explainedById       String?         @map("explained_by_id") @db.Uuid
+  signRecordedById    String?         @map("sign_recorded_by_id") @db.Uuid
+  activatedAt         DateTime?       @map("activated_at") @db.Timestamptz(3)
+  completedAt         DateTime?       @map("completed_at") @db.Timestamptz(3)
+  cancelledAt         DateTime?       @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason        String?         @map("cancel_reason")
+  notes               String?
+  createdById         String?         @map("created_by_id") @db.Uuid
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  driver        Driver           @relation(fields: [driverId], references: [id])
+  vehicle       Vehicle          @relation(fields: [vehicleId], references: [id])
+  planVersion   PlanVersion      @relation(fields: [planVersionId], references: [id])
+  batteryType   BatteryType      @relation(fields: [batteryTypeId], references: [id])
+  battery       Battery?         @relation(fields: [batteryId], references: [id])
+  instalments   Instalment[]
+  lateFees      LateFeeAccrual[]
+  events        AgreementEvent[]
+  installations Installation[]
+  payments      Payment[]
+
+  @@index([driverId])
+  @@index([state])
+  @@index([batteryId])
+  @@map("agreements")
+}
+
+enum InstalmentStatus {
+  UNPAID
+  PART_PAID
+  PAID
+}
+
+/// instalments: the payment table. Sequence 0 is the down payment (no due date);
+/// 1..N are the monthly instalments.
+model Instalment {
+  id          String           @id @default(uuid()) @db.Uuid
+  agreementId String           @map("agreement_id") @db.Uuid
+  sequence    Int
+  dueDate     DateTime?        @map("due_date") @db.Date
+  amount      Int
+  amountPaid  Int              @default(0) @map("amount_paid")
+  status      InstalmentStatus @default(UNPAID)
+  paidAt      DateTime?        @map("paid_at") @db.Timestamptz(3)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agreement   Agreement           @relation(fields: [agreementId], references: [id])
+  allocations PaymentAllocation[]
+  lateFees    LateFeeAccrual[]
+
+  @@unique([agreementId, sequence])
+  @@index([dueDate, status])
+  @@map("instalments")
+}
+
+/// late_fee_accruals: one row per agreement per day a late fee applies (D33, D38).
+/// Rows are added by the collections job in M3; payments already pay them first.
+model LateFeeAccrual {
+  id           String   @id @default(uuid()) @db.Uuid
+  agreementId  String   @map("agreement_id") @db.Uuid
+  instalmentId String?  @map("instalment_id") @db.Uuid
+  accrualDate  DateTime @map("accrual_date") @db.Date
+  amount       Int
+  amountPaid   Int      @default(0) @map("amount_paid")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agreement   Agreement           @relation(fields: [agreementId], references: [id])
+  instalment  Instalment?         @relation(fields: [instalmentId], references: [id])
+  allocations PaymentAllocation[]
+
+  @@unique([agreementId, accrualDate])
+  @@map("late_fee_accruals")
+}
+
+/// agreement_events: every state change, with who and why. Append-only.
+model AgreementEvent {
+  id          String          @id @default(uuid()) @db.Uuid
+  agreementId String          @map("agreement_id") @db.Uuid
+  event       String
+  fromState   AgreementState? @map("from_state")
+  toState     AgreementState  @map("to_state")
+  reason      String?
+  actorType   ActorType       @map("actor_type")
+  actorId     String?         @map("actor_id") @db.Uuid
+  at          DateTime        @default(now()) @db.Timestamptz(3)
+
+  agreement Agreement @relation(fields: [agreementId], references: [id])
+
+  @@index([agreementId, at])
+  @@map("agreement_events")
+}
+
+/// installations: the technician's record (Schedule 3, clause C2).
+model Installation {
+  id              String   @id @default(uuid()) @db.Uuid
+  agreementId     String   @map("agreement_id") @db.Uuid
+  batteryId       String   @map("battery_id") @db.Uuid
+  vehicleId       String   @map("vehicle_id") @db.Uuid
+  technicianId    String   @map("technician_id") @db.Uuid
+  installedAt     DateTime @map("installed_at") @db.Timestamptz(3)
+  location        String
+  voltageReading  Decimal  @map("voltage_reading") @db.Decimal(6, 2)
+  readingsNote    String?  @map("readings_note")
+  conditionNote   String   @map("condition_note")
+  driverConfirmed Boolean  @map("driver_confirmed")
+  recordedById    String   @map("recorded_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agreement Agreement           @relation(fields: [agreementId], references: [id])
+  battery   Battery             @relation(fields: [batteryId], references: [id])
+  vehicle   Vehicle             @relation(fields: [vehicleId], references: [id])
+  photos    InstallationPhoto[]
+
+  @@index([agreementId])
+  @@map("installations")
+}
+
+model InstallationPhoto {
+  id             String   @id @default(uuid()) @db.Uuid
+  installationId String   @map("installation_id") @db.Uuid
+  fileKey        String   @map("file_key")
+  fileName       String   @map("file_name")
+  fileType       String   @map("file_type")
+  fileSize       Int      @map("file_size")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  installation Installation @relation(fields: [installationId], references: [id])
+
+  @@index([installationId])
+  @@map("installation_photos")
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  CASH
+}
+
+enum PaymentSource {
+  MANUAL
+  GATEWAY
+}
+
+/// payments: money received, each with a unique receipt number (clause B6).
+/// Append-only: a correction will be a new, approved entry (PAYMENT_EDIT).
+model Payment {
+  id              String        @id @default(uuid()) @db.Uuid
+  receiptNumber   String        @unique @map("receipt_number")
+  agreementId     String        @map("agreement_id") @db.Uuid
+  driverId        String        @map("driver_id") @db.Uuid
+  amount          Int
+  excess          Int           @default(0)
+  /// Total still to pay on the agreement (down payment and instalments) after this payment.
+  balanceAfter    Int           @map("balance_after")
+  method          PaymentMethod
+  source          PaymentSource
+  provider        String?
+  providerRef     String?       @map("provider_ref")
+  reference       String?
+  collectedById   String?       @map("collected_by_id") @db.Uuid
+  recordedById    String?       @map("recorded_by_id") @db.Uuid
+  clientRequestId String?       @unique @map("client_request_id")
+  note            String?
+  receivedAt      DateTime      @map("received_at") @db.Timestamptz(3)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agreement   Agreement           @relation(fields: [agreementId], references: [id])
+  driver      Driver              @relation(fields: [driverId], references: [id])
+  allocations PaymentAllocation[]
+  journals    LedgerJournal[]
+  messages    OutboundMessage[]
+
+  @@unique([provider, providerRef])
+  @@index([agreementId, receivedAt])
+  @@index([collectedById])
+  @@index([receivedAt])
+  @@map("payments")
+}
+
+enum AllocationKind {
+  LATE_FEE
+  DOWN_PAYMENT
+  INSTALMENT
+  EXCESS
+}
+
+/// payment_allocations: what each payment paid for (clause B10). Append-only.
+model PaymentAllocation {
+  id           String         @id @default(uuid()) @db.Uuid
+  paymentId    String         @map("payment_id") @db.Uuid
+  kind         AllocationKind
+  instalmentId String?        @map("instalment_id") @db.Uuid
+  lateFeeId    String?        @map("late_fee_id") @db.Uuid
+  amount       Int
+
+  payment    Payment         @relation(fields: [paymentId], references: [id])
+  instalment Instalment?     @relation(fields: [instalmentId], references: [id])
+  lateFee    LateFeeAccrual? @relation(fields: [lateFeeId], references: [id])
+
+  @@index([paymentId])
+  @@index([instalmentId])
+  @@map("payment_allocations")
+}
+
+enum LedgerAccount {
+  GATEWAY_CLEARING
+  BANK
+  CASH_WITH_AGENTS
+  CASH_IN_TRANSIT
+  DOWN_PAYMENTS_RECEIVED
+  INSTALMENTS_RECEIVED
+  LATE_FEES_RECEIVED
+  DRIVER_CREDIT
+}
+
+/// ledger_journals and ledger_entries: double-entry record of money movements.
+/// A database check refuses any journal whose debits and credits differ.
+model LedgerJournal {
+  id            String   @id @default(uuid()) @db.Uuid
+  kind          String
+  memo          String
+  paymentId     String?  @map("payment_id") @db.Uuid
+  cashDepositId String?  @map("cash_deposit_id") @db.Uuid
+  createdById   String?  @map("created_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payment     Payment?      @relation(fields: [paymentId], references: [id])
+  cashDeposit CashDeposit?  @relation(fields: [cashDepositId], references: [id])
+  entries     LedgerEntry[]
+
+  @@index([paymentId])
+  @@index([cashDepositId])
+  @@map("ledger_journals")
+}
+
+model LedgerEntry {
+  id          BigInt        @id @default(autoincrement())
+  journalId   String        @map("journal_id") @db.Uuid
+  account     LedgerAccount
+  agreementId String?       @map("agreement_id") @db.Uuid
+  staffId     String?       @map("staff_id") @db.Uuid
+  debit       Int           @default(0)
+  credit      Int           @default(0)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  journal LedgerJournal @relation(fields: [journalId], references: [id])
+
+  @@index([journalId])
+  @@index([account, staffId])
+  @@index([agreementId])
+  @@map("ledger_entries")
+}
+
+enum CashDepositStatus {
+  PENDING
+  RECONCILED
+}
+
+/// cash_deposits: cash an agent paid into the bank, checked by finance.
+model CashDeposit {
+  id             String            @id @default(uuid()) @db.Uuid
+  agentId        String            @map("agent_id") @db.Uuid
+  amount         Int
+  bankReference  String            @map("bank_reference")
+  depositedAt    DateTime          @map("deposited_at") @db.Timestamptz(3)
+  status         CashDepositStatus @default(PENDING)
+  recordedById   String            @map("recorded_by_id") @db.Uuid
+  reconciledById String?           @map("reconciled_by_id") @db.Uuid
+  reconciledAt   DateTime?         @map("reconciled_at") @db.Timestamptz(3)
+  note           String?
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  journals LedgerJournal[]
+
+  @@index([agentId])
+  @@index([status])
+  @@map("cash_deposits")
+}
+
+enum MessageChannel {
+  SMS
+  WHATSAPP
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// outbound_messages: every SMS or WhatsApp message sent to a driver.
+model OutboundMessage {
+  id          String         @id @default(uuid()) @db.Uuid
+  driverId    String?        @map("driver_id") @db.Uuid
+  toPhone     String         @map("to_phone")
+  channel     MessageChannel
+  template    String
+  language    DriverLanguage
+  body        String
+  status      MessageStatus  @default(PENDING)
+  provider    String?
+  providerRef String?        @map("provider_ref")
+  error       String?
+  paymentId   String?        @map("payment_id") @db.Uuid
+  agreementId String?        @map("agreement_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  sentAt      DateTime?      @map("sent_at") @db.Timestamptz(3)
+
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([driverId, createdAt])
+  @@index([paymentId])
+  @@index([status])
+  @@map("outbound_messages")
+}
+
+enum WebhookEventStatus {
+  PROCESSED
+  NEEDS_REVIEW
+}
+
+/// webhook_events: every signature-checked event from a payment provider,
+/// stored once (provider + event ID), so retries are harmless.
+model WebhookEvent {
+  id         String             @id @default(uuid()) @db.Uuid
+  provider   String
+  eventId    String             @map("event_id")
+  payload    Json
+  status     WebhookEventStatus
+  note       String?
+  paymentId  String?            @map("payment_id") @db.Uuid
+  receivedAt DateTime           @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+  @@index([status])
+  @@map("webhook_events")
 }

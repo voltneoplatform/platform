@@ -4,6 +4,8 @@
  */
 
 export type OtpDelivery = 'log' | 'memory';
+/** How SMS and WhatsApp messages to drivers are delivered (no provider chosen yet). */
+export type MessageDelivery = 'log' | 'memory';
 
 export interface AppConfig {
   nodeEnv: 'development' | 'test' | 'production';
@@ -25,6 +27,12 @@ export interface AppConfig {
   fileStorageDir: string;
   /** Minutes a link to a private file stays valid. */
   fileLinkTtlSeconds: number;
+  messageDelivery: MessageDelivery;
+  /**
+   * Webhook secrets by payment provider. Only the built-in "test" provider
+   * exists until the founder opens a payment gateway account.
+   */
+  paymentWebhookSecrets: Record<string, string>;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -78,6 +86,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (otpDelivery === 'memory' && nodeEnv !== 'test') {
     throw new Error('OTP_DELIVERY "memory" is for automated tests only');
   }
+  const messageDelivery = (env.MESSAGE_DELIVERY ?? 'log') as MessageDelivery;
+  if (!['log', 'memory'].includes(messageDelivery)) {
+    throw new Error('MESSAGE_DELIVERY must be "log" or "memory" until a provider is added');
+  }
+  if (messageDelivery === 'memory' && nodeEnv !== 'test') {
+    throw new Error('MESSAGE_DELIVERY "memory" is for automated tests only');
+  }
+
+  const paymentWebhookSecrets: Record<string, string> = {};
+  const testSecret = env.PAYMENT_TEST_WEBHOOK_SECRET;
+  if (testSecret) {
+    if (testSecret.length < 32) {
+      throw new Error('PAYMENT_TEST_WEBHOOK_SECRET must be at least 32 characters');
+    }
+    paymentWebhookSecrets.test = testSecret;
+  }
+
   if (nodeEnv === 'production') {
     // "log" prints codes to the server log. Production must wait for a real
     // SMS/email provider adapter (founder decision, needed before M2 goes live).
@@ -103,5 +128,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     kycEncryptionKey,
     fileStorageDir: env.FILE_STORAGE_DIR || './storage',
     fileLinkTtlSeconds: int(env, 'FILE_LINK_TTL_SECONDS', 300, 30),
+    messageDelivery,
+    paymentWebhookSecrets,
   };
 }

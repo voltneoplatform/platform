@@ -22,6 +22,16 @@ export class StaffController {
     return this.staff.list(q);
   }
 
+  /**
+   * Names and roles of active staff, for pickers such as "explained by",
+   * "technician" or "collecting agent". No contact details.
+   */
+  @Get('directory')
+  @RequirePermissions('admin_panel.access')
+  directory() {
+    return this.staff.directory();
+  }
+
   @Get(':id')
   @RequirePermissions('staff.read')
   get(@Param('id', ParseUUIDPipe) id: string) {

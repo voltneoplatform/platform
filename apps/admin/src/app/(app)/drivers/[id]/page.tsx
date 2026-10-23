@@ -14,7 +14,8 @@ import {
   type VehicleType,
 } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
-import type { DriverDetail, KycDoc } from '@/lib/types';
+import type { AgreementListRow, DriverDetail, KycDoc, Paged } from '@/lib/types';
+import { AgreementStateBadge } from '@/components/AgreementBits';
 import {
   DriverFields,
   VehicleFields,
@@ -27,6 +28,7 @@ import {
   DuplicateWarning,
   ErrorBox,
   Modal,
+  Money,
   StatusBadge,
   duplicatesOf,
   formatDate,
@@ -197,6 +199,7 @@ export default function DriverPage() {
               ))}
           </ul>
         </div>
+        {can('agreements.read') && <DriverAgreements driverId={d.id} ready={d.readiness.ready} />}
         <div className="card">
           <h2>Details</h2>
           <dl className="kv">
@@ -674,5 +677,49 @@ export default function DriverPage() {
         </form>
       </Modal>
     </>
+  );
+}
+
+function DriverAgreements({ driverId, ready }: { driverId: string; ready: boolean }) {
+  const { api, can } = useSession();
+  const list = useLoad(
+    () => api.get<Paged<AgreementListRow>>(`/v1/agreements?driverId=${driverId}`),
+    [api, driverId],
+  );
+  const open = list.data?.items.filter(
+    (a) => !['CLOSED', 'TRANSFERRED', 'CANCELLED'].includes(a.state),
+  );
+  return (
+    <div className="card">
+      <h2>Agreements</h2>
+      <ErrorBox error={list.error} />
+      {list.data?.items.length === 0 && <p className="muted">None yet.</p>}
+      <ul className="timeline">
+        {list.data?.items.map((a) => (
+          <li key={a.id}>
+            <Link href={`/agreements/${a.id}`} className="mono">
+              {a.number}
+            </Link>{' '}
+            <AgreementStateBadge state={a.state} />
+            <div className="muted" style={{ fontSize: 13 }}>
+              {a.planName} · still to pay <Money paise={a.outstanding} />
+            </div>
+          </li>
+        ))}
+      </ul>
+      {can('agreements.manage') && open?.length === 0 && (
+        <p style={{ marginTop: 10 }}>
+          <Link href={`/agreements/new?driverId=${driverId}`} className="button">
+            Start an agreement
+          </Link>
+          {!ready && (
+            <span className="muted" style={{ fontSize: 13 }}>
+              {' '}
+              (a draft is possible; signing needs the checklist complete)
+            </span>
+          )}
+        </p>
+      )}
+    </div>
   );
 }

@@ -77,9 +77,7 @@ export default function DriversPage() {
       <div className="page-head">
         <div>
           <h1>Drivers</h1>
-          <p className="muted">
-            Registration, KYC documents, vehicle and nominee. Agreements arrive in M2.
-          </p>
+          <p className="muted">Registration, KYC documents, vehicle and nominee.</p>
         </div>
         {can('drivers.manage') && (
           <button

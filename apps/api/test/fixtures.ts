@@ -89,3 +89,79 @@ export function uploadKyc(
   for (const [k, v] of Object.entries(fields)) req.field(k, v);
   return req.attach('file', file, filename);
 }
+
+/** A driver whose readiness checklist is complete (identity, address, photo verified). */
+export async function readyDriver(
+  ctx: TestContext,
+  opsToken: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const d = await makeDriver(ctx, opsToken, overrides);
+  await uploadKyc(ctx, opsToken, d.id, {
+    type: 'VOTER_ID',
+    number: `ABC${String(1000000 + n++).slice(-7)}`,
+    usedForAddress: 'true',
+  }).expect(201);
+  const profile = (await uploadKyc(ctx, opsToken, d.id, { type: 'DRIVER_PHOTO' }).expect(201))
+    .body as { documents: { id: string }[] };
+  let last: { readiness: { ready: boolean } } | null = null;
+  for (const doc of profile.documents) {
+    last = (
+      await ctx.http.post(`/v1/kyc-documents/${doc.id}/verify`).set(bearer(opsToken)).expect(200)
+    ).body;
+  }
+  if (!last?.readiness.ready) throw new Error('fixture driver is not ready');
+  return d;
+}
+
+/** A published plan with one price row: by default ₹20,000 + 18 × ₹3,000 = ₹74,000. */
+export async function publishedPlan(
+  ctx: TestContext,
+  pmToken: string,
+  batteryTypeId: string,
+  opts: { down?: number; monthly?: number; term?: number } = {},
+) {
+  const plan = await makePlan(ctx, pmToken);
+  const versionId = plan.versions[0]!.id;
+  await ctx.http
+    .patch(`/v1/plan-versions/${versionId}`)
+    .set(bearer(pmToken))
+    .send({
+      termMonths: opts.term ?? 18,
+      prices: [
+        {
+          batteryTypeId,
+          downPayment: r(opts.down ?? 20000),
+          instalment: r(opts.monthly ?? 3000),
+        },
+      ],
+    })
+    .expect(200);
+  await ctx.http
+    .post(`/v1/plan-versions/${versionId}/publish`)
+    .set(bearer(pmToken))
+    .send({})
+    .expect(200);
+  return { plan, versionId };
+}
+
+export async function makeBattery(
+  ctx: TestContext,
+  token: string,
+  batteryTypeId: string,
+  opts: { gps?: boolean } = {},
+) {
+  n += 1;
+  const res = await ctx.http
+    .post('/v1/batteries')
+    .set(bearer(token))
+    .send({
+      serial: `NEO-T-${n}`,
+      gpsDeviceId: opts.gps === false ? null : `GPS-T-${n}`,
+      batteryTypeId,
+      purchaseDate: '2026-10-01',
+      location: 'Head office store',
+    })
+    .expect(201);
+  return res.body as { id: string; serial: string };
+}

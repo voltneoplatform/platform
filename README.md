@@ -6,15 +6,15 @@ Foundation V2.1** (Decision Log D1–D52) and the **Platform MVP Spec V1**.
 
 ## Status
 
-| Milestone               | Delivers                                                                               | State    |
-| ----------------------- | -------------------------------------------------------------------------------------- | -------- |
-| **M0 Foundation**       | Monorepo, database, staff login with roles, tests on every change                      | **Done** |
-| **M1 Set-up data**      | Battery types, inventory, plans with versions and cost floor, drivers with KYC         | **Done** |
-| M2 Agreements and money | Agreements, schedules, installation, payments, ledger, receipts, Schedule 1 and 5 PDFs | Next     |
-| M3 Collections          | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              |          |
-| M4 Operations           | Service tickets, dashboard, early exit, ownership transfer                             |          |
-| M5 Field App            | Android app for agents, technicians and recovery staff                                 |          |
-| M6 Driver App           | Android app for drivers in Bengali, Hindi and English                                  |          |
+| Milestone                   | Delivers                                                                               | State    |
+| --------------------------- | -------------------------------------------------------------------------------------- | -------- |
+| **M0 Foundation**           | Monorepo, database, staff login with roles, tests on every change                      | **Done** |
+| **M1 Set-up data**          | Battery types, inventory, plans with versions and cost floor, drivers with KYC         | **Done** |
+| **M2 Agreements and money** | Agreements, schedules, installation, payments, ledger, receipts, Schedule 1 and 5 PDFs | **Done** |
+| M3 Collections              | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              | Next     |
+| M4 Operations               | Service tickets, dashboard, early exit, ownership transfer                             |          |
+| M5 Field App                | Android app for agents, technicians and recovery staff                                 |          |
+| M6 Driver App               | Android app for drivers in Bengali, Hindi and English                                  |          |
 
 ## Layout
 
@@ -76,6 +76,39 @@ docs/
   for signing an agreement in M2.
 - **Admin panel**: Drivers, Plans, Inventory, Battery types and Approvals screens.
 
+## What M2 includes
+
+- **Agreements**: drafts built from a published plan version's price grid for
+  the chosen battery type, the 2nd or 17th as due day, and a first due date at
+  least 7 days ahead; signing (paper, scan uploaded) needs the readiness
+  checklist complete and fixes the payment table; terms are frozen in the
+  database after signing. States move draft → awaiting down payment → awaiting
+  installation → active → paid off or early exit.
+- **Schedule 1 (plan) and Schedule 5 (key facts) as PDFs** in Bengali, Hindi
+  and English, with amounts in figures and words and a fingerprint in the
+  footer to match a paper copy. Every PDF carries a draft-wording banner until
+  the lawyer and native-speaker reviews are done.
+- **Installation** (Schedule 3 record): in-stock battery of the right type with
+  a GPS device, technician, voltage reading, condition, 1-6 photos, driver
+  confirmation; the battery moves to the driver in the custody log.
+- **Payments**: late fees first, then the oldest unpaid instalment; part
+  payments; UPI and card need a reference that cannot be entered twice; cash
+  names the staff member holding it; repeated requests with the same ID count
+  once; a gap-free receipt number per financial year; an SMS receipt in the
+  driver's language (logged, not delivered, until a provider is chosen); receipt
+  PDFs.
+- **Ledger**: double-entry journals for every payment, cash deposit and bank
+  check; the database refuses any journal that does not balance; money records
+  are append-only.
+- **Cash**: cash held per person, bank deposits, and a check against the bank
+  statement by a second person.
+- **Payment webhook** at `/v1/webhooks/payments/:provider`, signature-checked
+  and idempotent, with a built-in `test` provider until a gateway is chosen.
+- **Moving the first due date** before installation, as a variation approved by
+  a second head-office person.
+- **Admin panel**: Agreements (list, new, detail with every action), Payments
+  and Cash screens; agreements on the driver page.
+
 ## Run it locally
 
 Needs Node.js 22.12 or later, pnpm 10 and Docker (or a local PostgreSQL 16).
@@ -93,7 +126,8 @@ pnpm dev:api                              # http://localhost:4000/v1, docs at /d
 pnpm dev:admin                            # http://localhost:3000
 ```
 
-In development, login codes are printed in the API log (`OTP_DELIVERY=log`).
+In development, login codes and driver messages (receipts) are printed in the
+API log (`OTP_DELIVERY=log`, `MESSAGE_DELIVERY=log`).
 The API refuses to start in production until a real SMS or email provider is
 connected.
 

@@ -4,3 +4,6 @@ export * from './auth';
 export * from './batteries';
 export * from './plans';
 export * from './drivers';
+export * from './agreements';
+export * from './payments';
+export * from './words';

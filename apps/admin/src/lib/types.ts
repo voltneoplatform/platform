@@ -1,3 +1,5 @@
+import type { Role } from '@voltneo/shared';
+
 /** Shapes returned by the API, as the admin panel uses them. */
 
 export interface CostRow {
@@ -218,4 +220,227 @@ export interface DriverListRow {
   itemsTotal: number;
   pendingDocuments: number;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// M2: agreements and payments
+// ---------------------------------------------------------------------------
+
+export type Lang = 'BN' | 'HI' | 'EN';
+
+export interface StaffDirectoryRow {
+  id: string;
+  name: string;
+  role: Role;
+}
+
+export interface AgreementOption {
+  planVersionId: string;
+  planId: string;
+  planCode: string;
+  version: number;
+  names: Record<Lang, string>;
+  termMonths: number;
+  graceDays: number;
+  lateFeePerDayPaise: number;
+  lateFeeCapDays: number;
+  prices: {
+    batteryTypeId: string;
+    batteryTypeName: string;
+    compatibleVehicles: string[];
+    downPayment: number;
+    instalment: number;
+    totalPayable: number;
+  }[];
+}
+
+export interface AgreementListRow {
+  id: string;
+  number: string;
+  state: string;
+  driver: { id: string; name: string; phone: string };
+  plan: string;
+  planName: string;
+  batteryType: string;
+  batterySerial: string | null;
+  totalPayable: number;
+  paid: number;
+  outstanding: number;
+  dueDay: number;
+  firstDueDate: string;
+  createdAt: string;
+}
+
+export interface ScheduleRow {
+  id: string | null;
+  sequence: number;
+  dueDate: string | null;
+  amount: number;
+  amountPaid: number;
+  status: 'UNPAID' | 'PART_PAID' | 'PAID';
+  paidAt: string | null;
+}
+
+export interface AgreementDetail {
+  id: string;
+  number: string;
+  state: string;
+  driver: { id: string; name: string; phone: string; language: Lang };
+  vehicle: {
+    id: string;
+    registration: string | null;
+    chassisNumber: string | null;
+    type: string;
+    ownedByDriver: boolean;
+    isCurrent: boolean;
+  };
+  plan: {
+    id: string;
+    code: string;
+    planVersionId: string;
+    version: number;
+    versionStatus: string;
+    names: Record<Lang, string>;
+  };
+  batteryType: { id: string; name: string; voltage: string; capacityAh: string };
+  battery: { id: string; serial: string; gpsDeviceId: string | null } | null;
+  terms: {
+    downPayment: number;
+    instalment: number;
+    termMonths: number;
+    totalPayable: number;
+    dueDay: number;
+    firstDueDate: string;
+    lastDueDate: string;
+    graceDays: number;
+    lateFeePerDayPaise: number;
+    lateFeeCapDays: number;
+  };
+  language: Lang;
+  documentVersion: string;
+  scheduleRevision: number;
+  signed: {
+    signedAt: string;
+    method: string;
+    fileName: string;
+    explainedInLanguage: Lang;
+    explainedByName: string | null;
+    recordedByName: string | null;
+  } | null;
+  activatedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdByName: string | null;
+  money: {
+    paid: number;
+    outstanding: number;
+    lateFeesDue: number;
+    nextDue: { sequence: number; dueDate: string | null; amountLeft: number } | null;
+    instalmentsPaid: number;
+  };
+  schedule: ScheduleRow[];
+  lateFees: { id: string; date: string; amount: number; amountPaid: number }[];
+  events: {
+    id: string;
+    event: string;
+    fromState: string | null;
+    toState: string;
+    reason: string | null;
+    actorType: string;
+    actorName: string | null;
+    at: string;
+  }[];
+  installation: {
+    id: string;
+    installedAt: string;
+    location: string;
+    voltageReading: string;
+    readingsNote: string | null;
+    conditionNote: string;
+    driverConfirmed: boolean;
+    technicianName: string | null;
+    recordedByName: string | null;
+    photos: { id: string; fileName: string }[];
+  } | null;
+  readiness: DriverDetail['readiness'] | null;
+  pendingVariation: { id: string; summary: string; requestedById: string } | null;
+  allowed: {
+    edit: boolean;
+    sign: boolean;
+    cancel: boolean;
+    reschedule: boolean;
+    install: boolean;
+    pay: boolean;
+  };
+}
+
+export interface PaymentRow {
+  id: string;
+  receiptNumber: string;
+  agreement: { id: string; number: string; state: string };
+  driver: { id: string; name: string; phone: string };
+  amount: number;
+  excess: number;
+  balanceAfter: number;
+  method: 'UPI' | 'CARD' | 'CASH';
+  source: 'MANUAL' | 'GATEWAY';
+  provider: string | null;
+  providerRef: string | null;
+  reference: string | null;
+  collectedById: string | null;
+  collectedByName: string | null;
+  recordedByName: string | null;
+  note: string | null;
+  receivedAt: string;
+  createdAt: string;
+  allocations: {
+    kind: 'LATE_FEE' | 'DOWN_PAYMENT' | 'INSTALMENT' | 'EXCESS';
+    amount: number;
+    sequence: number | null;
+    dueDate: string | null;
+    lateFeeDate: string | null;
+  }[];
+  messages: {
+    id: string;
+    channel: string;
+    status: string;
+    error: string | null;
+    sentAt: string | null;
+  }[];
+  repeated?: boolean;
+}
+
+export interface CashHolding {
+  agentId: string;
+  agentName: string;
+  role: string;
+  collected: number;
+  paidIn: number;
+  held: number;
+  awaitingCheck: number;
+}
+
+export interface CashDepositRow {
+  id: string;
+  agentId: string;
+  agentName: string | null;
+  amount: number;
+  bankReference: string;
+  depositedAt: string;
+  status: 'PENDING' | 'RECONCILED';
+  recordedById: string;
+  recordedByName: string | null;
+  reconciledByName: string | null;
+  reconciledAt: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface LedgerBalances {
+  accounts: { account: string; debit: number; credit: number; net: number }[];
+  totals: { debit: number; credit: number };
+  balanced: boolean;
 }

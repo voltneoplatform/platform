@@ -12,6 +12,9 @@ import { BatteryTypesModule } from './battery-types/battery-types.module';
 import { BatteriesModule } from './batteries/batteries.module';
 import { PlansModule } from './plans/plans.module';
 import { DriversModule } from './drivers/drivers.module';
+import { MessagingModule } from './messaging/messaging.module';
+import { AgreementsModule } from './agreements/agreements.module';
+import { PaymentsModule } from './payments/payments.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -32,6 +35,9 @@ import { HealthController } from './health/health.controller';
     BatteriesModule,
     PlansModule,
     DriversModule,
+    MessagingModule,
+    AgreementsModule,
+    PaymentsModule,
   ],
   controllers: [HealthController],
   providers: [
