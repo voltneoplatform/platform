@@ -1,5 +1,6 @@
 // Volt Neo platform database (Platform MVP Spec V1, section 5).
-// M0 holds staff, login and the audit log. Later milestones add the other tables.
+// M0: staff, login and the audit log. M1: battery types, inventory, plans,
+// approvals, drivers, vehicles and KYC. Later milestones add the rest.
 // Money is always stored in paise as integers.
 
 generator client {
@@ -130,4 +131,373 @@ model AuditLog {
   @@index([actorId, at])
   @@index([at])
   @@map("audit_log")
+}
+
+// ---------------------------------------------------------------------------
+// M1: set-up data. Columns ending in _by_id hold a staff_users.id; staff are
+// never deleted (only deactivated), so they carry no foreign key.
+// ---------------------------------------------------------------------------
+
+enum VehicleType {
+  TOTO
+  E_RICKSHAW
+  E_THREE_WHEELER
+}
+
+enum BatteryTypeStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+/// battery_types: the 4-5 types bought from the supplier (D8, D28, D29).
+model BatteryType {
+  id                 String            @id @default(uuid()) @db.Uuid
+  name               String            @unique
+  voltage            Decimal           @db.Decimal(6, 1)
+  capacityAh         Decimal           @map("capacity_ah") @db.Decimal(7, 1)
+  chemistry          String
+  supplier           String
+  warrantyMonths     Int               @map("warranty_months")
+  warrantyNotes      String?           @map("warranty_notes")
+  compatibleVehicles VehicleType[]     @map("compatible_vehicles")
+  notes              String?
+  status             BatteryTypeStatus @default(ACTIVE)
+  createdById        String?           @map("created_by_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  costs      BatteryTypeCost[]
+  batteries  Battery[]
+  planPrices PlanVersionPrice[]
+
+  @@map("battery_types")
+}
+
+/// Purchase cost and cost-floor allowances, in paise. Rows are never changed:
+/// a new row is added for every change, and the newest row is current.
+model BatteryTypeCost {
+  id               String   @id @default(uuid()) @db.Uuid
+  batteryTypeId    String   @map("battery_type_id") @db.Uuid
+  purchaseCost     Int      @map("purchase_cost")
+  gpsCost          Int      @default(0) @map("gps_cost")
+  serviceCost      Int      @default(0) @map("service_cost")
+  financingCost    Int      @default(0) @map("financing_cost")
+  collectionCost   Int      @default(0) @map("collection_cost")
+  expectedLossCost Int      @default(0) @map("expected_loss_cost")
+  costFloor        Int      @map("cost_floor")
+  note             String?
+  enteredById      String?  @map("entered_by_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  batteryType BatteryType @relation(fields: [batteryTypeId], references: [id])
+
+  @@index([batteryTypeId, createdAt])
+  @@map("battery_type_costs")
+}
+
+enum BatteryStatus {
+  IN_STOCK
+  INSTALLED
+  UNDER_REPAIR
+  RECOVERED
+  TRANSFERRED
+  RETIRED
+}
+
+enum CustodyHolder {
+  STOCK
+  TECHNICIAN
+  DRIVER
+  RECOVERED
+  RETIRED
+}
+
+/// batteries: every physical battery, by serial number and GPS device ID.
+model Battery {
+  id             String        @id @default(uuid()) @db.Uuid
+  serial         String        @unique
+  batteryTypeId  String        @map("battery_type_id") @db.Uuid
+  gpsDeviceId    String?       @unique @map("gps_device_id")
+  status         BatteryStatus @default(IN_STOCK)
+  holder         CustodyHolder @default(STOCK)
+  location       String?
+  holderStaffId  String?       @map("holder_staff_id") @db.Uuid
+  holderDriverId String?       @map("holder_driver_id") @db.Uuid
+  purchaseDate   DateTime      @map("purchase_date") @db.Date
+  purchaseCost   Int           @map("purchase_cost")
+  supplierRef    String?       @map("supplier_ref")
+  notes          String?
+  retiredAt      DateTime?     @map("retired_at") @db.Timestamptz(3)
+  createdById    String?       @map("created_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  batteryType  BatteryType      @relation(fields: [batteryTypeId], references: [id])
+  holderDriver Driver?          @relation(fields: [holderDriverId], references: [id])
+  custody      BatteryCustody[]
+
+  @@index([batteryTypeId])
+  @@index([status])
+  @@map("batteries")
+}
+
+/// battery_custody: every change of status, holder or location, oldest first.
+model BatteryCustody {
+  id         String         @id @default(uuid()) @db.Uuid
+  batteryId  String         @map("battery_id") @db.Uuid
+  event      String
+  fromStatus BatteryStatus? @map("from_status")
+  toStatus   BatteryStatus  @map("to_status")
+  fromHolder CustodyHolder? @map("from_holder")
+  toHolder   CustodyHolder  @map("to_holder")
+  toLocation String?        @map("to_location")
+  toStaffId  String?        @map("to_staff_id") @db.Uuid
+  toDriverId String?        @map("to_driver_id") @db.Uuid
+  note       String?
+  byId       String?        @map("by_id") @db.Uuid
+  at         DateTime       @default(now()) @db.Timestamptz(3)
+
+  battery Battery @relation(fields: [batteryId], references: [id])
+
+  @@index([batteryId, at])
+  @@map("battery_custody")
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+/// plans: Neo Own plan types (D25-D27). The code never changes; names can.
+model Plan {
+  id          String     @id @default(uuid()) @db.Uuid
+  seq         Int        @unique
+  code        String     @unique
+  nameBn      String     @map("name_bn")
+  nameHi      String     @map("name_hi")
+  nameEn      String     @map("name_en")
+  status      PlanStatus @default(DRAFT)
+  createdById String?    @map("created_by_id") @db.Uuid
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  versions PlanVersion[]
+
+  @@map("plans")
+}
+
+enum PlanVersionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  SUPERSEDED
+}
+
+/// plan_versions: the terms a driver signs. A published version never changes
+/// (spec rule 1); names are copied in when it is published.
+model PlanVersion {
+  id                    String            @id @default(uuid()) @db.Uuid
+  planId                String            @map("plan_id") @db.Uuid
+  version               Int
+  status                PlanVersionStatus @default(DRAFT)
+  termMonths            Int?              @map("term_months")
+  graceDays             Int               @map("grace_days")
+  lateFeePerDayPaise    Int               @map("late_fee_per_day_paise")
+  lateFeeCapDays        Int               @map("late_fee_cap_days")
+  nameBn                String?           @map("name_bn")
+  nameHi                String?           @map("name_hi")
+  nameEn                String?           @map("name_en")
+  notes                 String?
+  costFloorPassed       Boolean?          @map("cost_floor_passed")
+  costFloorCheck        Json?             @map("cost_floor_check")
+  costFloorException    Boolean           @default(false) @map("cost_floor_exception")
+  approvalRequestId     String?           @map("approval_request_id") @db.Uuid
+  exceptionApprovedById String?           @map("exception_approved_by_id") @db.Uuid
+  publishedById         String?           @map("published_by_id") @db.Uuid
+  publishedAt           DateTime?         @map("published_at") @db.Timestamptz(3)
+  createdById           String?           @map("created_by_id") @db.Uuid
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  plan   Plan               @relation(fields: [planId], references: [id])
+  prices PlanVersionPrice[]
+
+  @@unique([planId, version])
+  @@map("plan_versions")
+}
+
+/// The price grid: one row per eligible battery type, in paise.
+model PlanVersionPrice {
+  id            String @id @default(uuid()) @db.Uuid
+  planVersionId String @map("plan_version_id") @db.Uuid
+  batteryTypeId String @map("battery_type_id") @db.Uuid
+  downPayment   Int    @map("down_payment")
+  instalment    Int
+  totalPayable  Int    @map("total_payable")
+  costFloor     Int?   @map("cost_floor")
+
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  batteryType BatteryType @relation(fields: [batteryTypeId], references: [id])
+
+  @@unique([planVersionId, batteryTypeId])
+  @@index([batteryTypeId])
+  @@map("plan_version_prices")
+}
+
+enum ApprovalType {
+  IMMOBILISE
+  RESTORE
+  RECOVER
+  VARIATION
+  REFUND
+  WRITE_OFF
+  PAYMENT_EDIT
+  BATTERY_RETIRE
+  COST_FLOOR_EXCEPTION
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// approval_requests: maker-checker (D19, D26). One person requests, a
+/// different eligible person approves or rejects.
+model ApprovalRequest {
+  id            String         @id @default(uuid()) @db.Uuid
+  type          ApprovalType
+  targetTable   String         @map("target_table")
+  targetId      String         @map("target_id")
+  summary       String
+  reason        String
+  payload       Json?
+  status        ApprovalStatus @default(PENDING)
+  requestedById String         @map("requested_by_id") @db.Uuid
+  requestedAt   DateTime       @default(now()) @map("requested_at") @db.Timestamptz(3)
+  decidedById   String?        @map("decided_by_id") @db.Uuid
+  decidedAt     DateTime?      @map("decided_at") @db.Timestamptz(3)
+  decisionNote  String?        @map("decision_note")
+
+  @@index([status, type])
+  @@index([targetTable, targetId])
+  @@map("approval_requests")
+}
+
+enum DriverLanguage {
+  BN
+  HI
+  EN
+}
+
+enum DriverStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// drivers: the customer. Phone numbers may repeat (shared phones) but are flagged.
+model Driver {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String
+  phone           String
+  altPhone        String?        @map("alt_phone")
+  language        DriverLanguage
+  dateOfBirth     DateTime?      @map("date_of_birth") @db.Date
+  addressLine     String         @map("address_line")
+  area            String?
+  district        String
+  state           String         @default("West Bengal")
+  pinCode         String         @map("pin_code")
+  status          DriverStatus   @default(ACTIVE)
+  nomineeName     String?        @map("nominee_name")
+  nomineeRelation String?        @map("nominee_relation")
+  nomineePhone    String?        @map("nominee_phone")
+  notes           String?
+  createdById     String?        @map("created_by_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  kycDocuments KycDocument[]
+  vehicles     Vehicle[]
+  batteries    Battery[]
+
+  @@index([phone])
+  @@map("drivers")
+}
+
+enum KycDocType {
+  AADHAAR
+  VOTER_ID
+  DRIVING_LICENCE
+  PAN
+  PASSPORT
+  RATION_CARD
+  OTHER_ID
+  DRIVER_PHOTO
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+/// kyc_documents: ID numbers are encrypted (Aadhaar: last 4 digits only) and
+/// files are stored privately. number_index is a keyed fingerprint used only
+/// to find the same document on two drivers.
+model KycDocument {
+  id              String     @id @default(uuid()) @db.Uuid
+  driverId        String     @map("driver_id") @db.Uuid
+  type            KycDocType
+  numberEncrypted String?    @map("number_encrypted")
+  numberLast4     String?    @map("number_last4")
+  numberIndex     String?    @map("number_index")
+  usedForAddress  Boolean    @default(false) @map("used_for_address")
+  fileKey         String     @map("file_key")
+  fileName        String     @map("file_name")
+  fileType        String     @map("file_type")
+  fileSize        Int        @map("file_size")
+  status          KycStatus  @default(PENDING)
+  verifiedById    String?    @map("verified_by_id") @db.Uuid
+  verifiedAt      DateTime?  @map("verified_at") @db.Timestamptz(3)
+  rejectionReason String?    @map("rejection_reason")
+  uploadedById    String?    @map("uploaded_by_id") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@index([driverId])
+  @@index([numberIndex])
+  @@map("kyc_documents")
+}
+
+/// vehicles: the driver's vehicle. For renter-drivers the owner's details and
+/// signed consent are recorded (D21). Only one vehicle per driver is current.
+model Vehicle {
+  id                     String      @id @default(uuid()) @db.Uuid
+  driverId               String      @map("driver_id") @db.Uuid
+  isCurrent              Boolean     @default(true) @map("is_current")
+  registration           String?
+  chassisNumber          String?     @map("chassis_number")
+  type                   VehicleType
+  makeModel              String?     @map("make_model")
+  ownedByDriver          Boolean     @map("owned_by_driver")
+  ownerName              String?     @map("owner_name")
+  ownerPhone             String?     @map("owner_phone")
+  ownerConsentFileKey    String?     @map("owner_consent_file_key")
+  ownerConsentFileName   String?     @map("owner_consent_file_name")
+  ownerConsentFileType   String?     @map("owner_consent_file_type")
+  ownerConsentUploadedAt DateTime?   @map("owner_consent_uploaded_at") @db.Timestamptz(3)
+  createdById            String?     @map("created_by_id") @db.Uuid
+  createdAt              DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@index([driverId])
+  @@index([registration])
+  @@map("vehicles")
 }

@@ -52,6 +52,8 @@ export const PERMISSIONS = [
   // Modules 2-4: battery types, inventory, plans
   'battery_types.read',
   'battery_types.manage',
+  /** See purchase costs, cost-floor allowances and cost-floor results. */
+  'costs.read',
   'batteries.read',
   'batteries.manage',
   'plans.read',
@@ -59,7 +61,10 @@ export const PERMISSIONS = [
   // Module 5: drivers and KYC
   'drivers.read',
   'drivers.manage',
+  /** See full ID numbers and open KYC document files; every use is logged. */
   'kyc.view_full',
+  /** Mark KYC documents verified or rejected. */
+  'kyc.verify',
   // Modules 6-7: agreements and installation
   'agreements.read',
   'agreements.manage',
@@ -108,6 +113,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   PLAN_MANAGER: [
     ...HEAD_OFFICE_READ,
     'battery_types.manage',
+    'costs.read',
     'batteries.manage',
     'plans.manage',
     'drivers.manage',
@@ -122,7 +128,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     ...HEAD_OFFICE_READ,
     'staff.read',
     'collections.assign',
+    'batteries.manage',
     'drivers.manage',
+    'kyc.view_full',
+    'kyc.verify',
     'agreements.manage',
     'installations.record',
     'recovery.record',
@@ -135,6 +144,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Cannot change plans (spec section 2).
   FINANCE: [
     ...HEAD_OFFICE_READ,
+    'costs.read',
     'payments.record',
     'payments.collect_cash',
     'cash_deposits.reconcile',

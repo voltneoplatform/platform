@@ -41,11 +41,11 @@ jobs:
       NEXT_TELEMETRY_DISABLED: '1'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -70,6 +70,9 @@ jobs:
         run: |
           PGPASSWORD=voltneo psql -h localhost -U voltneo -d voltneo_test -c "CREATE DATABASE voltneo_migrations"
           pnpm exec prisma migrate deploy
+          # Print the exact SQL that would close any gap, so a hand-written
+          # migration can be corrected from the log.
+          pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script
           pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
 
       - name: Unit tests
