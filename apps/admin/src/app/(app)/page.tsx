@@ -5,6 +5,7 @@ import { ROLE_LABELS, type Permission } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
 import type { ApprovalRow } from '@/lib/types';
 import { useLoad } from '@/components/ui';
+import { Dashboard } from '@/components/Dashboard';
 
 const CARDS: { href: string; title: string; text: string; permission: Permission }[] = [
   {
@@ -30,6 +31,12 @@ const CARDS: { href: string; title: string; text: string; permission: Permission
     title: 'Battery types',
     text: 'Specifications, purchase costs and cost floors.',
     permission: 'battery_types.read',
+  },
+  {
+    href: '/tickets',
+    title: 'Service tickets',
+    text: 'Faults reported by drivers, the 48-hour deadline, visits and replacements.',
+    permission: 'tickets.read',
   },
   {
     href: '/staff',
@@ -73,6 +80,8 @@ export default function HomePage() {
           <Link href="/approvals">Review now</Link>
         </div>
       )}
+
+      {can('reports.read') && <Dashboard />}
 
       <div className="grid">
         {CARDS.filter((c) => can(c.permission)).map((c) => (

@@ -281,7 +281,11 @@ describe('Plans with versions and the cost floor (module 4)', () => {
         .send({})
         .expect(422);
       expect(res.body.code).toBe('BELOW_COST_FLOOR');
-      const short = res.body.check.rows.find((x: { passes: boolean }) => !x.passes);
+      // Both types are short here; rows have no fixed order, so pick type A by name.
+      const short = res.body.check.rows.find(
+        (x: { passes: boolean; batteryTypeName: string }) =>
+          !x.passes && x.batteryTypeName === 'Neo 48',
+      );
       expect(short).toMatchObject({
         batteryTypeName: 'Neo 48',
         totalPayable: r(58000),

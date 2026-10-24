@@ -600,6 +600,9 @@ model Agreement {
   immobilisations ImmobilisationLog[]
   recoveries      Recovery[]
   notices         CollectionNotice[]
+  tickets         ServiceTicket[]
+  replacements    BatteryReplacement[]
+  transfer        OwnershipTransfer?
 
   @@index([driverId])
   @@index([state])
@@ -1035,4 +1038,159 @@ model JobRun {
 
   @@unique([job, runDate])
   @@map("job_runs")
+}
+
+// ---------------------------------------------------------------------------
+// M4: operations
+// ---------------------------------------------------------------------------
+
+enum TicketCategory {
+  NOT_WORKING
+  LOW_CAPACITY
+  CHARGING
+  PHYSICAL_DAMAGE
+  GPS_MODULE
+  OTHER
+}
+
+enum TicketChannel {
+  PHONE
+  WHATSAPP
+  FIELD_AGENT
+  WALK_IN
+  APP
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  RESOLVED
+  CANCELLED
+}
+
+enum TicketOutcome {
+  REPAIRED
+  REPLACED
+  NO_FAULT_FOUND
+  NOT_COVERED
+}
+
+/// service_tickets: a fault the driver reported, with the 48-hour response
+/// deadline (D48) and how it was resolved (spec module 10).
+model ServiceTicket {
+  id            String         @id @default(uuid()) @db.Uuid
+  number        String         @unique
+  agreementId   String         @map("agreement_id") @db.Uuid
+  driverId      String         @map("driver_id") @db.Uuid
+  batteryId     String         @map("battery_id") @db.Uuid
+  category      TicketCategory
+  channel       TicketChannel
+  description   String
+  reportedAt    DateTime       @map("reported_at") @db.Timestamptz(3)
+  dueBy         DateTime       @map("due_by") @db.Timestamptz(3)
+  status        TicketStatus   @default(OPEN)
+  technicianId  String?        @map("technician_id") @db.Uuid
+  assignedAt    DateTime?      @map("assigned_at") @db.Timestamptz(3)
+  respondedAt   DateTime?      @map("responded_at") @db.Timestamptz(3)
+  outcome       TicketOutcome?
+  resolution    String?
+  resolvedAt    DateTime?      @map("resolved_at") @db.Timestamptz(3)
+  resolvedById  String?        @map("resolved_by_id") @db.Uuid
+  cancelledAt   DateTime?      @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason  String?        @map("cancel_reason")
+  createdById   String?        @map("created_by_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agreement    Agreement            @relation(fields: [agreementId], references: [id])
+  visits       TicketVisit[]
+  replacements BatteryReplacement[]
+
+  @@index([agreementId])
+  @@index([status, dueBy])
+  @@index([technicianId, status])
+  @@map("service_tickets")
+}
+
+/// ticket_visits: each technician visit or call on a ticket, with readings, so
+/// every battery builds a service history (no BMS telemetry, B9). Append-only.
+model TicketVisit {
+  id             String   @id @default(uuid()) @db.Uuid
+  ticketId       String   @map("ticket_id") @db.Uuid
+  batteryId      String   @map("battery_id") @db.Uuid
+  technicianId   String   @map("technician_id") @db.Uuid
+  visitedAt      DateTime @map("visited_at") @db.Timestamptz(3)
+  voltageReading Decimal? @map("voltage_reading") @db.Decimal(6, 2)
+  readingsNote   String?  @map("readings_note")
+  finding        String
+  recordedById   String   @map("recorded_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  ticket ServiceTicket @relation(fields: [ticketId], references: [id])
+  photos TicketPhoto[]
+
+  @@index([ticketId])
+  @@index([batteryId, visitedAt])
+  @@map("ticket_visits")
+}
+
+model TicketPhoto {
+  id        String   @id @default(uuid()) @db.Uuid
+  visitId   String   @map("visit_id") @db.Uuid
+  fileKey   String   @map("file_key")
+  fileName  String   @map("file_name")
+  fileType  String   @map("file_type")
+  fileSize  Int      @map("file_size")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  visit TicketVisit @relation(fields: [visitId], references: [id])
+
+  @@index([visitId])
+  @@map("ticket_photos")
+}
+
+/// battery_replacements: a faulty battery swapped for another of the same type
+/// on the same agreement and payment schedule (clause C8). Append-only.
+model BatteryReplacement {
+  id             String   @id @default(uuid()) @db.Uuid
+  agreementId    String   @map("agreement_id") @db.Uuid
+  ticketId       String   @map("ticket_id") @db.Uuid
+  oldBatteryId   String   @map("old_battery_id") @db.Uuid
+  newBatteryId   String   @map("new_battery_id") @db.Uuid
+  technicianId   String   @map("technician_id") @db.Uuid
+  replacedAt     DateTime @map("replaced_at") @db.Timestamptz(3)
+  voltageReading Decimal  @map("voltage_reading") @db.Decimal(6, 2)
+  oldBatteryNote String   @map("old_battery_note")
+  recordedById   String   @map("recorded_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agreement Agreement     @relation(fields: [agreementId], references: [id])
+  ticket    ServiceTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([agreementId])
+  @@index([ticketId])
+  @@map("battery_replacements")
+}
+
+/// ownership_transfers: the battery passes to the driver once everything is
+/// paid (clause E9, D32): GPS switched off in the supplier's portal, Schedule 8
+/// certificate issued, service ends. One per agreement. Append-only.
+model OwnershipTransfer {
+  id                 String   @id @default(uuid()) @db.Uuid
+  agreementId        String   @unique @map("agreement_id") @db.Uuid
+  batteryId          String   @map("battery_id") @db.Uuid
+  driverId           String   @map("driver_id") @db.Uuid
+  certificateNumber  String   @unique @map("certificate_number")
+  paidInFullOn       DateTime @map("paid_in_full_on") @db.Date
+  gpsOffAt           DateTime @map("gps_off_at") @db.Timestamptz(3)
+  gpsPortalReference String   @map("gps_portal_reference")
+  gpsOffById         String   @map("gps_off_by_id") @db.Uuid
+  transferredAt      DateTime @map("transferred_at") @db.Timestamptz(3)
+  recordedById       String   @map("recorded_by_id") @db.Uuid
+  note               String?
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agreement Agreement @relation(fields: [agreementId], references: [id])
+
+  @@map("ownership_transfers")
 }

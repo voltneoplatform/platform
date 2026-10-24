@@ -109,17 +109,26 @@ export function PaymentForm({
   maxHint,
   staff,
   onDone,
+  fixed,
 }: {
   agreementId: string;
   maxHint: number;
   staff: StaffDirectoryRow[];
   onDone: (p: PaymentRow) => void;
+  /** A payment of one exact amount sent to its own endpoint (finishing early). */
+  fixed?: {
+    amount: number;
+    path: string;
+    extra: Record<string, unknown>;
+    intro: React.ReactNode;
+    action: string;
+  };
 }) {
   const { api, can, staff: me } = useSession();
   const canRecord = can('payments.record');
   const canCash = can('payments.collect_cash');
   const [method, setMethod] = useState<PaymentMethod>(canRecord ? 'UPI' : 'CASH');
-  const [amount, setAmount] = useState<number | null>(null);
+  const [amount, setAmount] = useState<number | null>(fixed?.amount ?? null);
   const [reference, setReference] = useState('');
   const [receivedAt, setReceivedAt] = useState(nowLocal());
   const [collectedById, setCollectedById] = useState(me?.id ?? '');
@@ -140,17 +149,21 @@ export function PaymentForm({
     setBusy(true);
     setError(null);
     try {
-      const p = await api.post<PaymentRow>('/v1/payments', {
-        agreementId,
-        amountPaise: amount,
-        method,
-        reference: method === 'CASH' ? undefined : reference,
-        receivedAt: localToIso(receivedAt),
-        collectedById: method === 'CASH' ? collectedById || undefined : undefined,
-        note: note || undefined,
-        clientRequestId: requestId,
-      });
-      onDone(p);
+      const res = await api.post<PaymentRow | { payment: PaymentRow }>(
+        fixed?.path ?? '/v1/payments',
+        {
+          ...fixed?.extra,
+          agreementId,
+          amountPaise: amount,
+          method,
+          reference: method === 'CASH' ? undefined : reference,
+          receivedAt: localToIso(receivedAt),
+          collectedById: method === 'CASH' ? collectedById || undefined : undefined,
+          note: note || undefined,
+          clientRequestId: requestId,
+        },
+      );
+      onDone('payment' in res ? res.payment : res);
     } catch (err) {
       setError(err);
       setBusy(false);
@@ -159,20 +172,28 @@ export function PaymentForm({
 
   return (
     <form onSubmit={submit}>
-      <p className="muted">
-        Payments go to late fees first, then the oldest unpaid instalment (clause B10). Up to{' '}
-        {formatRupees(maxHint)} can be received now. The driver gets an SMS receipt.
-      </p>
+      {fixed ? (
+        fixed.intro
+      ) : (
+        <p className="muted">
+          Payments go to late fees first, then the oldest unpaid instalment (clause B10). Up to{' '}
+          {formatRupees(maxHint)} can be received now. The driver gets an SMS receipt.
+        </p>
+      )}
       <div className="form-grid">
         <div className="field">
           <label htmlFor="pay-amount">Amount</label>
-          <RupeeInput
-            id="pay-amount"
-            value={amount}
-            onChange={setAmount}
-            required
-            allowZero={false}
-          />
+          {fixed ? (
+            <input id="pay-amount" readOnly value={formatRupees(fixed.amount)} />
+          ) : (
+            <RupeeInput
+              id="pay-amount"
+              value={amount}
+              onChange={setAmount}
+              required
+              allowZero={false}
+            />
+          )}
         </div>
         <div className="field">
           <label htmlFor="pay-method">Paid by</label>
@@ -244,7 +265,9 @@ export function PaymentForm({
       <ErrorBox error={error} />
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button type="submit" className="primary" disabled={busy || !amount}>
-          {busy ? 'Saving…' : `Record ${amount ? formatRupees(amount) : 'payment'}`}
+          {busy
+            ? 'Saving…'
+            : (fixed?.action ?? `Record ${amount ? formatRupees(amount) : 'payment'}`)}
         </button>
       </div>
     </form>

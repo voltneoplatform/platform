@@ -84,7 +84,11 @@ export const PERMISSIONS = [
   // Module 10: service
   'tickets.read',
   'tickets.manage',
+  /** Record a technician's visit and how the fault was resolved. */
+  'tickets.resolve',
   'messages.send',
+  // Ownership transfer (rule 14): GPS switch-off and certificate
+  'transfers.record',
   // Modules 11-12: dashboard and audit
   'reports.read',
   'audit.read',
@@ -136,6 +140,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'installations.record',
     'recovery.record',
     'tickets.manage',
+    'tickets.resolve',
+    'transfers.record',
     'messages.send',
     'approvals.request',
     'approvals.decide',
@@ -180,6 +186,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agreements.read',
     'installations.record',
     'tickets.read',
+    'tickets.resolve',
   ],
 
   RECOVERY: ['field_app.access', 'agreements.read', 'recovery.record'],

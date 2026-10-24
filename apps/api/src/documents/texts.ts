@@ -105,6 +105,28 @@ export interface Texts {
   }) => string;
   immobilisedSms: (p: { amount: string; agreement: string }) => string;
   restoredSms: (p: { agreement: string }) => string;
+  // Schedule 8 and M4 messages
+  certificateTitle: string;
+  certificateNo: string;
+  agreementDate: string;
+  battery: string;
+  totalPaid: string;
+  paidInFullOn: string;
+  ownershipPassedOn: string;
+  gpsOffOn: string;
+  certificateBody: (p: {
+    driver: string;
+    agreement: string;
+    agreementDate: string;
+    serial: string;
+    transferDate: string;
+    gpsOffDate: string;
+  }) => string;
+  certificateKeep: string;
+  authorisedSignatory: string;
+  transferredSms: (p: { agreement: string; serial: string; certificate: string }) => string;
+  ticketReceivedSms: (p: { ticket: string; hours: number }) => string;
+  ticketResolvedSms: (p: { ticket: string }) => string;
 }
 
 const EN: Texts = {
@@ -193,6 +215,24 @@ const EN: Texts = {
     `Volt Neo: Your battery has been disabled because ${p.amount} is due on agreement ${p.agreement}. Pay ${p.amount} to have it switched back on. There is no reconnection fee.`,
   restoredSms: (p) =>
     `Volt Neo: Thank you. Your battery on agreement ${p.agreement} has been switched back on.`,
+  certificateTitle: 'Schedule 8: Ownership Transfer Certificate',
+  certificateNo: 'Certificate number',
+  agreementDate: 'Agreement date',
+  battery: 'Battery',
+  totalPaid: 'Total Payable paid',
+  paidInFullOn: 'Paid in full on',
+  ownershipPassedOn: 'Ownership passed on',
+  gpsOffOn: 'GPS module switched off on',
+  certificateBody: (p) =>
+    `Volt Neo confirms that ${p.driver} has paid the full amount due under Neo Own agreement ${p.agreement} dated ${p.agreementDate}. Ownership of battery serial number ${p.serial} passed to ${p.driver} on ${p.transferDate}. The GPS module was switched off on ${p.gpsOffDate}. Volt Neo's service obligations ended on that date.`,
+  certificateKeep: 'Keep this certificate as proof that the battery is yours.',
+  authorisedSignatory: 'Authorised signatory, name and date',
+  transferredSms: (p) =>
+    `Volt Neo: Congratulations! Agreement ${p.agreement} is fully paid and battery ${p.serial} is now yours. Certificate ${p.certificate}. The GPS module has been switched off and Volt Neo service has ended.`,
+  ticketReceivedSms: (p) =>
+    `Volt Neo: We have your battery problem report, number ${p.ticket}. A technician will contact you within ${p.hours} hours.`,
+  ticketResolvedSms: (p) =>
+    `Volt Neo: Your service request ${p.ticket} is closed. If the problem comes back, call Volt Neo.`,
 };
 
 const BN: Texts = {
@@ -280,6 +320,24 @@ const BN: Texts = {
   immobilisedSms: (p) =>
     `Volt Neo: চুক্তি ${p.agreement}-এ ${p.amount} বাকি থাকায় আপনার ব্যাটারি বন্ধ করা হয়েছে। ${p.amount} দিলে আবার চালু করা হবে। আবার চালু করার জন্য কোনো ফি নেই।`,
   restoredSms: (p) => `Volt Neo: ধন্যবাদ। চুক্তি ${p.agreement}-এর ব্যাটারি আবার চালু করা হয়েছে।`,
+  certificateTitle: 'তফসিল ৮: মালিকানা হস্তান্তরের শংসাপত্র',
+  certificateNo: 'শংসাপত্র নম্বর',
+  agreementDate: 'চুক্তির তারিখ',
+  battery: 'ব্যাটারি',
+  totalPaid: 'মোট প্রদেয় পরিশোধিত',
+  paidInFullOn: 'সম্পূর্ণ পরিশোধের তারিখ',
+  ownershipPassedOn: 'মালিকানা হস্তান্তরের তারিখ',
+  gpsOffOn: 'জিপিএস মডিউল বন্ধের তারিখ',
+  certificateBody: (p) =>
+    `Volt Neo নিশ্চিত করছে যে ${p.driver} ${p.agreementDate} তারিখের Neo Own চুক্তি ${p.agreement}-এর সম্পূর্ণ প্রদেয় অর্থ পরিশোধ করেছেন। ব্যাটারি সিরিয়াল নম্বর ${p.serial}-এর মালিকানা ${p.transferDate} তারিখে ${p.driver}-এর কাছে হস্তান্তরিত হয়েছে। জিপিএস মডিউল ${p.gpsOffDate} তারিখে বন্ধ করা হয়েছে। সেই তারিখে Volt Neo-র পরিষেবার দায়িত্ব শেষ হয়েছে।`,
+  certificateKeep: 'ব্যাটারি যে আপনার, তার প্রমাণ হিসেবে এই শংসাপত্রটি রেখে দিন।',
+  authorisedSignatory: 'অনুমোদিত স্বাক্ষরকারী, নাম ও তারিখ',
+  transferredSms: (p) =>
+    `Volt Neo: অভিনন্দন! চুক্তি ${p.agreement}-এর সম্পূর্ণ অর্থ পরিশোধ হয়েছে এবং ব্যাটারি ${p.serial} এখন আপনার। শংসাপত্র ${p.certificate}। জিপিএস মডিউল বন্ধ করা হয়েছে এবং Volt Neo-র পরিষেবা শেষ হয়েছে।`,
+  ticketReceivedSms: (p) =>
+    `Volt Neo: আপনার ব্যাটারির সমস্যার অভিযোগ পেয়েছি, নম্বর ${p.ticket}। ${p.hours} ঘণ্টার মধ্যে একজন টেকনিশিয়ান আপনার সঙ্গে যোগাযোগ করবেন।`,
+  ticketResolvedSms: (p) =>
+    `Volt Neo: আপনার পরিষেবা অনুরোধ ${p.ticket} বন্ধ করা হয়েছে। সমস্যা আবার হলে Volt Neo-কে ফোন করুন।`,
 };
 
 const HI: Texts = {
@@ -367,6 +425,24 @@ const HI: Texts = {
   immobilisedSms: (p) =>
     `Volt Neo: अनुबंध ${p.agreement} पर ${p.amount} बाकी होने के कारण आपकी बैटरी बंद कर दी गई है। ${p.amount} का भुगतान करने पर इसे फिर से चालू किया जाएगा। दोबारा चालू करने का कोई शुल्क नहीं है।`,
   restoredSms: (p) => `Volt Neo: धन्यवाद। अनुबंध ${p.agreement} की बैटरी फिर से चालू कर दी गई है।`,
+  certificateTitle: 'अनुसूची 8: स्वामित्व हस्तांतरण प्रमाणपत्र',
+  certificateNo: 'प्रमाणपत्र संख्या',
+  agreementDate: 'अनुबंध की तारीख',
+  battery: 'बैटरी',
+  totalPaid: 'कुल देय राशि का भुगतान',
+  paidInFullOn: 'पूरा भुगतान की तारीख',
+  ownershipPassedOn: 'स्वामित्व हस्तांतरण की तारीख',
+  gpsOffOn: 'जीपीएस मॉड्यूल बंद होने की तारीख',
+  certificateBody: (p) =>
+    `Volt Neo पुष्टि करता है कि ${p.driver} ने ${p.agreementDate} के Neo Own अनुबंध ${p.agreement} के तहत देय पूरी राशि चुका दी है। बैटरी सीरियल नंबर ${p.serial} का स्वामित्व ${p.transferDate} को ${p.driver} को हस्तांतरित हुआ। जीपीएस मॉड्यूल ${p.gpsOffDate} को बंद किया गया। उसी तारीख को Volt Neo की सेवा की ज़िम्मेदारी समाप्त हुई।`,
+  certificateKeep: 'बैटरी आपकी है, इसके प्रमाण के रूप में यह प्रमाणपत्र संभालकर रखें।',
+  authorisedSignatory: 'अधिकृत हस्ताक्षरकर्ता, नाम और तारीख',
+  transferredSms: (p) =>
+    `Volt Neo: बधाई! अनुबंध ${p.agreement} का पूरा भुगतान हो गया है और बैटरी ${p.serial} अब आपकी है। प्रमाणपत्र ${p.certificate}। जीपीएस मॉड्यूल बंद कर दिया गया है और Volt Neo की सेवा समाप्त हो गई है।`,
+  ticketReceivedSms: (p) =>
+    `Volt Neo: आपकी बैटरी की समस्या की शिकायत मिल गई है, नंबर ${p.ticket}। ${p.hours} घंटे के अंदर तकनीशियन आपसे संपर्क करेगा।`,
+  ticketResolvedSms: (p) =>
+    `Volt Neo: आपका सेवा अनुरोध ${p.ticket} बंद कर दिया गया है। समस्या फिर से हो तो Volt Neo को फ़ोन करें।`,
 };
 
 export const TEXTS: Record<Lang, Texts> = { BN, HI, EN };

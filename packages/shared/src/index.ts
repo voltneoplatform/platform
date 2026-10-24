@@ -8,3 +8,4 @@ export * from './agreements';
 export * from './payments';
 export * from './words';
 export * from './collections';
+export * from './operations';

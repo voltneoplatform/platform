@@ -38,6 +38,8 @@ import {
   openLink,
 } from '@/components/AgreementBits';
 import { CollectionsPanel } from '@/components/CollectionsPanel';
+import { OwnershipPanel } from '@/components/OwnershipPanel';
+import { AgreementTickets } from '@/components/TicketBits';
 import { ErrorBox, Modal, Money, formatDate, useLoad } from '@/components/ui';
 
 type Dialog = 'none' | 'edit' | 'sign' | 'cancel' | 'pay' | 'install' | 'reschedule';
@@ -230,6 +232,28 @@ export default function AgreementPage() {
               void reload();
               void payments.reload();
             }}
+          />
+        )}
+
+      {['ACTIVE', 'IN_GRACE', 'IMMOBILISED', 'PAID_OFF', 'EARLY_EXIT', 'TRANSFERRED'].includes(
+        a.state,
+      ) && (
+        <OwnershipPanel
+          refreshKey={`${a.state}-${a.money.paid}`}
+          agreementId={a.id}
+          onChanged={() => {
+            void reload();
+            void payments.reload();
+          }}
+        />
+      )}
+      {can('tickets.read') &&
+        !['DRAFT', 'AWAITING_DOWN_PAYMENT', 'AWAITING_INSTALLATION', 'CANCELLED'].includes(
+          a.state,
+        ) && (
+          <AgreementTickets
+            agreement={{ id: a.id, number: a.number, driverName: a.driver.name }}
+            serviceable={['ACTIVE', 'IN_GRACE', 'IMMOBILISED'].includes(a.state)}
           />
         )}
 

@@ -121,6 +121,15 @@ export class Pdf {
     this.doc.fillColor(INK).fontSize(10).moveDown(0.3);
   }
 
+  /** A paragraph of body text. */
+  paragraph(text: string, fontSize = 11): void {
+    this.doc.font('regular').fontSize(fontSize).fillColor(INK).text(text, MARGIN.left, undefined, {
+      width: this.width,
+      lineGap: 2,
+    });
+    this.doc.fontSize(10).moveDown(0.8);
+  }
+
   /** Label/value rows with a rule between them; long values wrap. */
   rows(rows: readonly (readonly [string, string])[], labelShare = 0.42, fontSize = 10): void {
     const d = this.doc;

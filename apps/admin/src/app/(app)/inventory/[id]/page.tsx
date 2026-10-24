@@ -10,7 +10,7 @@ import {
   type StaffProfile,
 } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
-import type { BatteryRow } from '@/lib/types';
+import type { BatteryRow, ServiceHistoryRow } from '@/lib/types';
 import { ErrorBox, Modal, Money, StatusBadge, formatDate, useLoad } from '@/components/ui';
 
 const EVENT_LABELS: Record<string, string> = {
@@ -19,6 +19,11 @@ const EVENT_LABELS: Record<string, string> = {
   SENT_FOR_REPAIR: 'Sent for repair',
   RETURNED_TO_STOCK: 'Returned to stock',
   RETIRED: 'Retired',
+  INSTALLED: 'Installed',
+  RECOVERED: 'Recovered after default',
+  REPLACED_OUT: 'Taken out (replaced)',
+  INSTALLED_AS_REPLACEMENT: 'Fitted as a replacement',
+  OWNERSHIP_TRANSFERRED: 'Ownership passed to the driver',
 };
 
 export default function BatteryPage() {
@@ -35,6 +40,10 @@ export default function BatteryPage() {
         ? api.get<StaffProfile[]>('/v1/staff?role=TECHNICIAN&status=ACTIVE')
         : Promise.resolve([]),
     [api],
+  );
+  const history = useLoad(
+    () => api.get<ServiceHistoryRow[]>(`/v1/batteries/${id}/service-history`),
+    [api, id],
   );
   const [dialog, setDialog] = useState<'none' | 'move' | 'retire' | 'edit'>('none');
   const [to, setTo] = useState<BatteryStatus>('UNDER_REPAIR');
@@ -195,6 +204,43 @@ export default function BatteryPage() {
           </table>
         </div>
       </div>
+
+      {history.data && history.data.length > 0 && (
+        <div className="section">
+          <h2>Service history</h2>
+          <div className="card table-wrap" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>When (IST)</th>
+                  <th>Ticket</th>
+                  <th>Finding</th>
+                  <th className="num">Voltage</th>
+                  <th>Technician</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.data.map((v) => (
+                  <tr key={v.id}>
+                    <td>{formatDate(v.visitedAt, true)}</td>
+                    <td>
+                      <Link href={`/tickets/${v.ticket.id}`} className="mono">
+                        {v.ticket.number}
+                      </Link>
+                    </td>
+                    <td>
+                      {v.finding}
+                      {v.readingsNote && <div className="muted">{v.readingsNote}</div>}
+                    </td>
+                    <td className="num">{v.voltageReading ? `${v.voltageReading} V` : '—'}</td>
+                    <td>{v.technicianName}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <Modal
         open={dialog === 'move'}
