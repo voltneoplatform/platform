@@ -12,7 +12,7 @@ Foundation V2.1** (Decision Log D1–D52) and the **Platform MVP Spec V1**.
 | **M1 Set-up data**          | Battery types, inventory, plans with versions and cost floor, drivers with KYC         | **Done** |
 | **M2 Agreements and money** | Agreements, schedules, installation, payments, ledger, receipts, Schedule 1 and 5 PDFs | **Done** |
 | M3 Collections              | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              | Next     |
-| M4 Operations               | Service tickets, dashboard, early exit, ownership transfer                             |          |
+| M4 Operations               | Service tickets, dashboard, early exit, ownership transfer                             | Next     |
 | M5 Field App                | Android app for agents, technicians and recovery staff                                 |          |
 | M6 Driver App               | Android app for drivers in Bengali, Hindi and English                                  |          |
 
@@ -109,13 +109,36 @@ docs/
 - **Admin panel**: Agreements (list, new, detail with every action), Payments
   and Cash screens; agreements on the driver page.
 
+## What M3 includes
+
+- **Scheduled jobs** on BullMQ and Redis: the daily check at 00:05 IST and
+  reminders and notices at 09:00 IST. Each business date runs once; up to 7
+  missed days are caught up. "Run daily check now" in the admin panel runs the
+  same work.
+- **Reminders** 5, 3 and 1 day before the due date and on it; **grace** days
+  1-5; **final notice** on day 5; all by SMS in the driver's language.
+- **Late fee**: ₹100 a day from day 6, one charge per agreement per day however
+  many instalments are overdue, at most 30 days per late spell; a spell ends
+  when nothing is overdue.
+- **Immobilisation** with two people: one asks (from day 5), a different
+  operations manager or super admin approves (from day 6), then staff disable
+  the battery in the GPS supplier portal and record the portal reference and
+  that the vehicle was stationary.
+- **Restore**: paying everything overdue creates a restore task at the top of
+  the queue; switching back on without payment needs a written reason.
+- **Recovery** 30 days after the battery was disabled, again with two people;
+  the collection is recorded with optional photos, the battery returns to
+  stock custody, unpaid dues are written off and the agreement is closed.
+- **Collections queue** sorted by days overdue, with stages from grace to
+  collection; a collections panel and GPS portal log on each agreement.
+
 ## Run it locally
 
 Needs Node.js 22.12 or later, pnpm 10 and Docker (or a local PostgreSQL 16).
 
 ```bash
 pnpm install
-docker compose up -d                      # PostgreSQL (and Redis for later milestones)
+docker compose up -d                      # PostgreSQL and Redis (scheduled jobs)
 cp apps/api/.env.example apps/api/.env    # then set the bootstrap admin email
                                           # and, outside your laptop, a fresh KYC_ENCRYPTION_KEY
 pnpm --filter @voltneo/shared build

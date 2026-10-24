@@ -22,6 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 function targetLink(r: ApprovalRow): string | null {
   if (r.targetTable === 'batteries') return `/inventory/${r.targetId}`;
+  if (r.targetTable === 'agreements') return `/agreements/${r.targetId}`;
   const planId = (r.payload as { planId?: string } | null)?.planId;
   if (r.targetTable === 'plan_versions' && planId) return `/plans/${planId}`;
   return null;
@@ -81,8 +82,15 @@ export default function ApprovalsPage() {
       await api.post(`/v1/approval-requests/${deciding.row.id}/${deciding.outcome}`, {
         note: note || undefined,
       });
+      const type = deciding.row.type;
       setMessage(
-        deciding.outcome === 'approve' ? 'Approved. The action has been carried out.' : 'Rejected.',
+        deciding.outcome !== 'approve'
+          ? 'Rejected.'
+          : type === 'IMMOBILISE'
+            ? 'Approved. Now disable the battery in the GPS portal and record it on the agreement.'
+            : type === 'RECOVER'
+              ? 'Approved. Recovery staff can now collect the battery and record it on the agreement.'
+              : 'Approved. The action has been carried out.',
       );
       setDeciding(null);
       await reload();

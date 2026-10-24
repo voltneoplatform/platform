@@ -1,4 +1,4 @@
-import type { Role } from '@voltneo/shared';
+import type { CollectionStage, Role } from '@voltneo/shared';
 
 /** Shapes returned by the API, as the admin panel uses them. */
 
@@ -443,4 +443,97 @@ export interface LedgerBalances {
   accounts: { account: string; debit: number; credit: number; net: number }[];
   totals: { debit: number; credit: number };
   balanced: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// M3: collections
+// ---------------------------------------------------------------------------
+
+export type CollectionStageName = CollectionStage;
+
+export interface QueueRow {
+  agreementId: string;
+  number: string;
+  state: string;
+  stage: CollectionStageName;
+  driver: { id: string; name: string; phone: string; area: string | null; district: string };
+  vehicle: string | null;
+  battery: { serial: string; gpsDeviceId: string | null } | null;
+  spellStartedOn: string | null;
+  daysOverdue: number;
+  overdueAmount: number;
+  lateFeesDue: number;
+  toClear: number;
+  immobilisedAt: string | null;
+  recoveryDueOn: string | null;
+  restoreDueSince: string | null;
+}
+
+export interface CollectionsQueue {
+  today: string;
+  counts: Partial<Record<CollectionStageName, number>>;
+  items: QueueRow[];
+  lastRuns: {
+    job: string;
+    date: string;
+    status: string;
+    summary: Record<string, unknown> | null;
+    finishedAt: string | null;
+  }[];
+}
+
+export interface AgreementCollections {
+  today: string;
+  stage: CollectionStageName | null;
+  spellStartedOn: string | null;
+  daysOverdue: number;
+  overdueAmount: number;
+  lateFeesDue: number;
+  toClear: number;
+  lateFeeFrom: string | null;
+  lateFeeDaysInSpell: number;
+  lateFeeCapDays: number;
+  immobilisedAt: string | null;
+  recoveryDueOn: string | null;
+  restoreDueSince: string | null;
+  immobilisationRequest: {
+    id: string;
+    status: string;
+    requestedByName: string | null;
+    requestedAt: string;
+  } | null;
+  recoveryRequest: {
+    id: string;
+    status: string;
+    requestedByName: string | null;
+    requestedAt: string;
+  } | null;
+  allowed: {
+    requestImmobilisation: boolean;
+    recordDisable: boolean;
+    recordRestore: boolean;
+    requestRecovery: boolean;
+    recordRecovery: boolean;
+  };
+  log: {
+    id: string;
+    action: 'DISABLE' | 'RESTORE';
+    performedAt: string;
+    performedByName: string | null;
+    recordedByName: string | null;
+    portalReference: string;
+    vehicleStationaryConfirmed: boolean;
+    note: string | null;
+  }[];
+  recovery: {
+    id: string;
+    recoveredAt: string;
+    recoveredByName: string | null;
+    location: string;
+    conditionNote: string;
+    writtenOffAmount: number;
+    writtenOffLateFees: number;
+    photos: { id: string; fileName: string }[];
+  } | null;
+  notices: { kind: string; refDate: string; createdAt: string }[];
 }

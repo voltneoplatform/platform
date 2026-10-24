@@ -11,7 +11,7 @@ import {
 } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
 import type { PaymentRow, StaffDirectoryRow } from '@/lib/types';
-import { ErrorBox, RupeeInput } from '@/components/ui';
+import { ErrorBox, RupeeInput, formatDate } from '@/components/ui';
 
 const STATE_TONE: Record<string, string> = {
   DRAFT: '',
@@ -85,7 +85,7 @@ export function allocationLabel(a: PaymentRow['allocations'][number]): string {
     case 'INSTALMENT':
       return `Instalment ${a.sequence}`;
     case 'LATE_FEE':
-      return `Late fee ${a.lateFeeDate ?? ''}`.trim();
+      return a.lateFeeDate ? `Late fee ${formatDate(a.lateFeeDate)}` : 'Late fee';
     default:
       return 'Overpaid (to refund)';
   }
