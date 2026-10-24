@@ -14,6 +14,10 @@ export default tseslint.config(
       '**/coverage/**',
       'apps/api/src/generated/**',
       '**/next-env.d.ts',
+      'apps/field/.expo/**',
+      'apps/field/android/**',
+      'apps/field/dist/**',
+      'apps/field/expo-env.d.ts',
     ],
   },
   js.configs.recommended,
@@ -41,7 +45,7 @@ export default tseslint.config(
     rules: { 'no-console': 'off' },
   },
   {
-    files: ['apps/admin/**/*.{ts,tsx}'],
+    files: ['apps/admin/**/*.{ts,tsx}', 'apps/field/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { 'react-hooks': reactHooks },
     rules: {

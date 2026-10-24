@@ -39,6 +39,7 @@ import {
 } from '@/components/AgreementBits';
 import { CollectionsPanel } from '@/components/CollectionsPanel';
 import { OwnershipPanel } from '@/components/OwnershipPanel';
+import { PaymentLinksCard } from '@/components/PaymentLinksCard';
 import { AgreementTickets } from '@/components/TicketBits';
 import { ErrorBox, Modal, Money, formatDate, useLoad } from '@/components/ui';
 
@@ -405,6 +406,24 @@ export default function AgreementPage() {
             </dd>
           </dl>
         </div>
+      )}
+
+      {a.allowed.pay && (
+        <PaymentLinksCard
+          agreementId={a.id}
+          canSend={a.allowed.pay}
+          max={nextAmount}
+          suggested={Math.min(
+            nextAmount,
+            a.state === 'AWAITING_DOWN_PAYMENT'
+              ? nextAmount
+              : (a.money.nextDue?.amountLeft ?? 0) + a.money.lateFeesDue,
+          )}
+          onPaid={() => {
+            void reload();
+            void payments.reload();
+          }}
+        />
       )}
 
       {payments.data && (

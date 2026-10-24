@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -151,11 +150,7 @@ export class WebhooksController {
   @Public()
   @HttpCode(200)
   @ApiExcludeEndpoint()
-  receive(
-    @Param('provider') provider: string,
-    @Req() req: RawBodyRequest<Request>,
-    @Headers('x-voltneo-signature') signature: string | undefined,
-  ) {
-    return this.webhooks.receive(provider, req.rawBody, signature);
+  receive(@Param('provider') provider: string, @Req() req: RawBodyRequest<Request>) {
+    return this.webhooks.receive(provider, req.rawBody, req.headers);
   }
 }

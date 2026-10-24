@@ -6,3 +6,6 @@ pnpm-lock.yaml
 apps/api/src/generated
 apps/api/prisma/migrations
 next-env.d.ts
+.expo
+apps/field/android
+apps/field/expo-env.d.ts

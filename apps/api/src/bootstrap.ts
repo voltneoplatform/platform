@@ -16,7 +16,7 @@ export function configureApp(app: INestApplication): void {
   app.use(requestIdMiddleware);
   app.use(helmet());
   app.use(cookieParser());
-  app.enableCors({ origin: [config.adminOrigin], credentials: true });
+  app.enableCors({ origin: [config.adminOrigin, ...config.extraOrigins], credentials: true });
   app.setGlobalPrefix('v1');
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

@@ -7,6 +7,16 @@ export type OtpDelivery = 'log' | 'memory';
 /** How SMS and WhatsApp messages to drivers are delivered (no provider chosen yet). */
 export type MessageDelivery = 'log' | 'memory';
 
+/** Which gateway creates UPI payment links. "fake" is for development and tests. */
+export type PaymentGatewayKind = 'none' | 'fake' | 'cashfree';
+
+export interface CashfreeConfig {
+  env: 'sandbox' | 'production';
+  appId: string;
+  secretKey: string;
+  apiVersion: string;
+}
+
 export interface AppConfig {
   nodeEnv: 'development' | 'test' | 'production';
   port: number;
@@ -15,12 +25,16 @@ export interface AppConfig {
   otpHashSecret: string;
   accessTokenTtlSeconds: number;
   sessionIdleTimeoutMinutes: number;
+  /** Field App sessions end after this much inactivity (ASSUMED 240). */
+  appSessionIdleTimeoutMinutes: number;
   sessionAbsoluteTimeoutHours: number;
   otpTtlSeconds: number;
   otpMaxAttempts: number;
   otpResendCooldownSeconds: number;
   otpDelivery: OtpDelivery;
   adminOrigin: string;
+  /** Development only: more browser origins allowed to call the API (the Field App's web preview). */
+  extraOrigins: string[];
   /** 32-byte key for KYC numbers; encryption and fingerprint keys are derived from it. */
   kycEncryptionKey: Buffer;
   /** Private folder for uploaded documents (local storage adapter). */
@@ -33,6 +47,12 @@ export interface AppConfig {
    * exists until the founder opens a payment gateway account.
    */
   paymentWebhookSecrets: Record<string, string>;
+  paymentGateway: PaymentGatewayKind;
+  cashfree: CashfreeConfig | null;
+  /** Public address of this API, for gateway callbacks (e.g. https://api.voltneo.in). */
+  publicApiUrl: string | null;
+  /** Days a payment link stays open (ASSUMED 7). */
+  paymentLinkDays: number;
   /** Run scheduled jobs (BullMQ on Redis) in this process. */
   jobsEnabled: boolean;
   redisUrl: string;
@@ -106,6 +126,45 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     paymentWebhookSecrets.test = testSecret;
   }
 
+  const paymentGateway = (env.PAYMENT_GATEWAY ||
+    (nodeEnv === 'production' ? 'none' : 'fake')) as PaymentGatewayKind;
+  if (!['none', 'fake', 'cashfree'].includes(paymentGateway)) {
+    throw new Error('PAYMENT_GATEWAY must be "none", "fake" or "cashfree"');
+  }
+  if (paymentGateway === 'fake' && nodeEnv === 'production') {
+    throw new Error('PAYMENT_GATEWAY "fake" is for development and tests only');
+  }
+  let cashfree: CashfreeConfig | null = null;
+  if (paymentGateway === 'cashfree') {
+    const cfEnv = (env.CASHFREE_ENV || 'sandbox') as CashfreeConfig['env'];
+    if (!['sandbox', 'production'].includes(cfEnv)) {
+      throw new Error('CASHFREE_ENV must be "sandbox" or "production"');
+    }
+    if (cfEnv === 'sandbox' && nodeEnv === 'production') {
+      throw new Error('Production must use CASHFREE_ENV=production');
+    }
+    cashfree = {
+      env: cfEnv,
+      appId: required(env, 'CASHFREE_APP_ID'),
+      secretKey: required(env, 'CASHFREE_SECRET_KEY'),
+      apiVersion: env.CASHFREE_API_VERSION || '2026-01-01',
+    };
+    // Cashfree signs webhooks with the same secret key.
+    paymentWebhookSecrets.cashfree = cashfree.secretKey;
+  }
+  const publicApiUrl = env.PUBLIC_API_URL ? env.PUBLIC_API_URL.replace(/\/+$/, '') : null;
+  if (paymentGateway === 'cashfree' && !publicApiUrl?.startsWith('https://')) {
+    throw new Error('PUBLIC_API_URL (https) is needed so Cashfree can report payments');
+  }
+
+  const extraOrigins =
+    nodeEnv === 'production'
+      ? []
+      : (env.CORS_EXTRA_ORIGINS ?? '')
+          .split(',')
+          .map((o) => o.trim())
+          .filter(Boolean);
+
   if (nodeEnv === 'production') {
     // "log" prints codes to the server log. Production must wait for a real
     // SMS/email provider adapter (founder decision, needed before M2 goes live).
@@ -122,17 +181,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     otpHashSecret,
     accessTokenTtlSeconds: int(env, 'ACCESS_TOKEN_TTL_SECONDS', 900, 60),
     sessionIdleTimeoutMinutes: int(env, 'SESSION_IDLE_TIMEOUT_MINUTES', 30),
+    appSessionIdleTimeoutMinutes: int(env, 'APP_SESSION_IDLE_TIMEOUT_MINUTES', 240),
     sessionAbsoluteTimeoutHours: int(env, 'SESSION_ABSOLUTE_TIMEOUT_HOURS', 12),
     otpTtlSeconds: int(env, 'OTP_TTL_SECONDS', 300, 60),
     otpMaxAttempts: int(env, 'OTP_MAX_ATTEMPTS', 5),
     otpResendCooldownSeconds: int(env, 'OTP_RESEND_COOLDOWN_SECONDS', 30, 0),
     otpDelivery,
     adminOrigin: env.ADMIN_ORIGIN ?? 'http://localhost:3000',
+    extraOrigins,
     kycEncryptionKey,
     fileStorageDir: env.FILE_STORAGE_DIR || './storage',
     fileLinkTtlSeconds: int(env, 'FILE_LINK_TTL_SECONDS', 300, 30),
     messageDelivery,
     paymentWebhookSecrets,
+    paymentGateway,
+    cashfree,
+    publicApiUrl,
+    paymentLinkDays: int(env, 'PAYMENT_LINK_DAYS', 7),
     jobsEnabled: env.JOBS_ENABLED === 'true',
     redisUrl: env.REDIS_URL || 'redis://localhost:6379',
   };

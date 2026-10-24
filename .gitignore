@@ -11,3 +11,11 @@ apps/api/src/generated/
 .DS_Store
 *.log
 storage/
+
+# Expo (Field App)
+.expo/
+apps/field/android/
+apps/field/ios/
+apps/field/expo-env.d.ts
+*.apk
+*.aab

@@ -21,6 +21,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { OwnershipModule } from './ownership/ownership.module';
 import { ReportsModule } from './reports/reports.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { FieldModule } from './field/field.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -50,6 +51,7 @@ import { HealthController } from './health/health.controller';
     OwnershipModule,
     TicketsModule,
     ReportsModule,
+    FieldModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -1,0 +1,68 @@
+# Builds the Field App as an installable Android file (APK) for the pilot
+# phones (milestone M5). Runs when the app changes, and on demand from the
+# Actions tab ("Run workflow"). The APK is attached to the run as an artifact.
+name: Field App (Android)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['apps/field/**', 'packages/shared/**', '.github/workflows/field-android.yml']
+  pull_request:
+    paths: ['apps/field/**', 'packages/shared/**', '.github/workflows/field-android.yml']
+
+concurrency:
+  group: field-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # The API address baked into the app. Set the repository variable
+      # FIELD_API_URL (Settings > Secrets and variables > Actions > Variables)
+      # once hosting exists; until then the build points at a placeholder.
+      EXPO_PUBLIC_API_URL: ${{ vars.FIELD_API_URL || 'https://api.voltneo.invalid' }}
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @voltneo/shared run build
+
+      - name: Generate the Android project
+        working-directory: apps/field
+        run: pnpm exec expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: apps/field/android
+        # Signed with the template's debug key for pilot installs only. A
+        # private release key (kept in GitHub secrets) is needed before the
+        # Play Store.
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voltneo-field-${{ github.sha }}
+          path: apps/field/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
