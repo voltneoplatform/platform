@@ -33,6 +33,9 @@ export interface AppConfig {
    * exists until the founder opens a payment gateway account.
    */
   paymentWebhookSecrets: Record<string, string>;
+  /** Run scheduled jobs (BullMQ on Redis) in this process. */
+  jobsEnabled: boolean;
+  redisUrl: string;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -130,5 +133,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     fileLinkTtlSeconds: int(env, 'FILE_LINK_TTL_SECONDS', 300, 30),
     messageDelivery,
     paymentWebhookSecrets,
+    jobsEnabled: env.JOBS_ENABLED === 'true',
+    redisUrl: env.REDIS_URL || 'redis://localhost:6379',
   };
 }

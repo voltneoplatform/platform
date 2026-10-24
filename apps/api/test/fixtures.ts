@@ -165,3 +165,73 @@ export async function makeBattery(
     .expect(201);
   return res.body as { id: string; serial: string };
 }
+
+/**
+ * An installed, active agreement: ₹20,000 down payment (paid in cash by
+ * finance) + 18 × ₹3,000 on the 17th, first due on the next 17th at least a
+ * week away.
+ */
+export async function activeAgreement(
+  ctx: TestContext,
+  t: { ops: string; finance: string; pm: string },
+  opts: { typeId?: string; versionId?: string } = {},
+) {
+  const typeId = opts.typeId ?? (await makeBatteryType(ctx, t.pm, { purchase: 50000 })).id;
+  const versionId = opts.versionId ?? (await publishedPlan(ctx, t.pm, typeId)).versionId;
+  const driver = await readyDriver(ctx, t.ops);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const day = Number(today.slice(8, 10));
+  const [y, m] = today.split('-').map(Number) as [number, number];
+  // The next 17th at least 7 days away.
+  const next = new Date(Date.UTC(y, m - 1 + (day <= 10 ? 0 : 1), 17));
+  const firstDueDate = next.toISOString().slice(0, 10);
+  const draft = await ctx.http
+    .post('/v1/agreements')
+    .set(bearer(t.ops))
+    .send({
+      driverId: driver.id,
+      planVersionId: versionId,
+      batteryTypeId: typeId,
+      dueDay: 17,
+      firstDueDate,
+    })
+    .expect(201);
+  const id = draft.body.id as string;
+  await ctx.http
+    .post(`/v1/agreements/${id}/sign`)
+    .set(bearer(t.ops))
+    .field('signedAt', new Date().toISOString())
+    .field('explainedInLanguage', 'BN')
+    .attach('file', PDF, 'signed.pdf')
+    .expect(200);
+  await ctx.http
+    .post('/v1/payments')
+    .set(bearer(t.finance))
+    .send({ agreementId: id, amountPaise: r(20000), method: 'CASH' })
+    .expect(201);
+  const battery = await makeBattery(ctx, t.ops, typeId);
+  const tech = await ctx.prisma.staffUser.create({
+    data: { name: `Tech ${n++}`, email: `tech.${n}@voltneo.test`, role: 'TECHNICIAN' },
+  });
+  const res = await ctx.http
+    .post(`/v1/agreements/${id}/installation`)
+    .set(bearer(t.ops))
+    .field('batteryId', battery.id)
+    .field('technicianId', tech.id)
+    .field('installedAt', new Date().toISOString())
+    .field('location', 'Baruipur')
+    .field('voltageReading', '52.4')
+    .field('conditionNote', 'Good')
+    .field('driverConfirmed', 'true')
+    .attach('photos', PNG, 'p.png')
+    .expect(200);
+  return {
+    id,
+    number: res.body.number as string,
+    firstDueDate,
+    battery,
+    driverPhone: driver.phone,
+    typeId,
+    versionId,
+  };
+}

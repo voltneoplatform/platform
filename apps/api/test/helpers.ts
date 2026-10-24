@@ -7,6 +7,7 @@ import { configureApp } from '../src/bootstrap';
 import { MemoryOtpSender, OTP_SENDER } from '../src/auth/otp-sender';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { MESSAGE_SENDER, MemoryMessageSender } from '../src/messaging/message-sender';
+import { CLOCK, TestClock } from '../src/common/clock';
 
 export interface TestContext {
   app: INestApplication;
@@ -14,6 +15,7 @@ export interface TestContext {
   prisma: PrismaService;
   otp: MemoryOtpSender;
   messages: MemoryMessageSender;
+  clock: TestClock;
 }
 
 export async function createTestApp(): Promise<TestContext> {
@@ -27,6 +29,7 @@ export async function createTestApp(): Promise<TestContext> {
     prisma: app.get(PrismaService),
     otp: app.get<MemoryOtpSender>(OTP_SENDER),
     messages: app.get<MemoryMessageSender>(MESSAGE_SENDER),
+    clock: app.get<TestClock>(CLOCK),
   };
 }
 
@@ -40,7 +43,8 @@ export async function resetData(prisma: PrismaService): Promise<void> {
         "plans", "battery_type_costs", "battery_types", "kyc_documents", "vehicles", "drivers",
         "counters", "webhook_events", "outbound_messages", "ledger_entries", "ledger_journals",
         "cash_deposits", "payment_allocations", "payments", "installation_photos", "installations",
-        "agreement_events", "late_fee_accruals", "instalments", "agreements"
+        "agreement_events", "late_fee_accruals", "instalments", "agreements",
+        "immobilisation_log", "recovery_photos", "recoveries", "collection_notices", "job_runs"
         RESTART IDENTITY CASCADE`,
     );
   } finally {

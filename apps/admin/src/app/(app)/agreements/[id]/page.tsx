@@ -37,6 +37,7 @@ import {
   openBlob,
   openLink,
 } from '@/components/AgreementBits';
+import { CollectionsPanel } from '@/components/CollectionsPanel';
 import { ErrorBox, Modal, Money, formatDate, useLoad } from '@/components/ui';
 
 type Dialog = 'none' | 'edit' | 'sign' | 'cancel' | 'pay' | 'install' | 'reschedule';
@@ -217,6 +218,20 @@ export default function AgreementPage() {
           </div>
         </div>
       </div>
+
+      {can('collections.read') &&
+        !['DRAFT', 'AWAITING_DOWN_PAYMENT', 'AWAITING_INSTALLATION', 'CANCELLED'].includes(
+          a.state,
+        ) && (
+          <CollectionsPanel
+            agreementId={a.id}
+            battery={a.battery}
+            onChanged={() => {
+              void reload();
+              void payments.reload();
+            }}
+          />
+        )}
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
         <div className="card">
