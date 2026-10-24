@@ -603,6 +603,7 @@ model Agreement {
   tickets         ServiceTicket[]
   replacements    BatteryReplacement[]
   transfer        OwnershipTransfer?
+  paymentLinks    PaymentLink[]
 
   @@index([driverId])
   @@index([state])
@@ -1193,4 +1194,43 @@ model OwnershipTransfer {
   agreement Agreement @relation(fields: [agreementId], references: [id])
 
   @@map("ownership_transfers")
+}
+
+// ---------------------------------------------------------------------------
+// M5: UPI payment links (Cashfree)
+// ---------------------------------------------------------------------------
+
+enum PaymentLinkStatus {
+  ACTIVE
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+/// payment_links: a UPI payment link sent to a driver by SMS. The gateway
+/// reports the payment by signed webhook, which records it like any other
+/// payment (late fees first, then the oldest instalment).
+model PaymentLink {
+  id           String            @id @default(uuid()) @db.Uuid
+  linkId       String            @unique @map("link_id")
+  agreementId  String            @map("agreement_id") @db.Uuid
+  driverId     String            @map("driver_id") @db.Uuid
+  gateway      String
+  gatewayRef   String?           @map("gateway_ref")
+  url          String
+  amount       Int
+  purpose      String
+  status       PaymentLinkStatus @default(ACTIVE)
+  expiresAt    DateTime          @map("expires_at") @db.Timestamptz(3)
+  paymentId    String?           @unique @map("payment_id") @db.Uuid
+  closedAt     DateTime?         @map("closed_at") @db.Timestamptz(3)
+  closedNote   String?           @map("closed_note")
+  createdById  String?           @map("created_by_id") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agreement Agreement @relation(fields: [agreementId], references: [id])
+
+  @@index([agreementId, status])
+  @@map("payment_links")
 }

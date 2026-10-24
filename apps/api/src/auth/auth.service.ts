@@ -252,7 +252,11 @@ export class AuthService {
     }
 
     const now = Date.now();
-    const idleLimitMs = this.config.sessionIdleTimeoutMinutes * 60_000;
+    // Field App sessions allow a longer pause: staff work between visits (ASSUMED, T75).
+    const idleLimitMs =
+      (session.client === 'APP'
+        ? this.config.appSessionIdleTimeoutMinutes
+        : this.config.sessionIdleTimeoutMinutes) * 60_000;
     const idle = now - session.lastUsedAt.getTime() > idleLimitMs;
     const expired = now >= session.expiresAt.getTime();
     if (idle || expired || session.staff.status !== 'ACTIVE') {

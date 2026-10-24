@@ -294,13 +294,18 @@ describe('Staff login with OTP (module 1)', () => {
       expect(res.body.refreshToken).toBeUndefined();
     });
 
-    it('ends a session after 30 minutes without activity', async () => {
+    it('ends an admin panel session after 30 minutes without activity', async () => {
       const staff = await createStaff(ctx.prisma, 'FINANCE');
-      const s = await login(ctx, staff.email!);
+      const s = await login(ctx, staff.email!, { web: true });
       await ctx.prisma.staffSession.updateMany({
         data: { lastUsedAt: new Date(Date.now() - 31 * 60_000) },
       });
-      await ctx.http.post('/v1/auth/refresh').send({ refreshToken: s.refreshToken }).expect(401);
+      await ctx.http
+        .post('/v1/auth/refresh')
+        .set('X-Client', 'web')
+        .set('Cookie', s.cookie!)
+        .send({})
+        .expect(401);
       const row = await ctx.prisma.staffSession.findFirstOrThrow({ where: { staffId: staff.id } });
       expect(row.revokedReason).toBe('idle_timeout');
     });

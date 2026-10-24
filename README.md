@@ -13,8 +13,8 @@ Foundation V2.1** (Decision Log D1–D52) and the **Platform MVP Spec V1**.
 | **M2 Agreements and money** | Agreements, schedules, installation, payments, ledger, receipts, Schedule 1 and 5 PDFs | **Done** |
 | **M3 Collections**          | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              | **Done** |
 | **M4 Operations**           | Service tickets, dashboard, early exit, ownership transfer                             | **Done** |
-| M5 Field App                | Android app for agents, technicians and recovery staff                                 | Next     |
-| M6 Driver App               | Android app for drivers in Bengali, Hindi and English                                  |          |
+| **M5 Field App**            | Android app for agents, technicians and recovery staff; Cashfree UPI links             | **Done** |
+| M6 Driver App               | Android app for drivers in Bengali, Hindi and English                                  | Next     |
 
 ## Layout
 
@@ -22,7 +22,7 @@ Foundation V2.1** (Decision Log D1–D52) and the **Platform MVP Spec V1**.
 apps/
   api/      NestJS REST API under /v1, PostgreSQL via Prisma
   admin/    Next.js head-office admin panel
-  field/    Field App (React Native, Expo) — M5
+  field/    Field App (React Native, Expo) for field staff, Android
   driver/   Driver App (React Native, Expo) — M6
 packages/
   shared/   Roles, permissions, money helpers and types used by every app
@@ -156,6 +156,27 @@ docs/
 - **Audit log** (module 12): names, record-type, action, person and date
   filters, and the fields each change touched.
 
+## What M5 includes
+
+- **UPI payment links (Cashfree)**: from the Field App or the admin panel, a
+  link for any amount up to what is owed is sent to the driver by SMS in their
+  language. Links are UPI only, for the exact amount, open 7 days; a new link
+  replaces the open one. Cashfree's signed webhook records the payment like any
+  other (late fees first) and the driver gets the receipt SMS. Without Cashfree
+  keys the API uses a pretend gateway whose links can be marked paid from the
+  admin panel (development only).
+- **Field App** (`apps/field`, Android) in Bengali, Hindi and English, online
+  only:
+  - field agents: register drivers, photograph KYC documents, collect cash with
+    an instant system receipt, send UPI links, see the cash they hold;
+  - technicians: installations waiting (pick the battery by serial, readings,
+    photos), their service tickets (visits, battery replacement, resolution);
+  - recovery staff: approved recoveries with the driver's address, recorded
+    with photos and the serial check.
+- Field App sign-in by OTP with a 4-hour idle limit (the admin panel keeps 30
+  minutes); the refresh token lives in Android's secure storage.
+- An installable APK built by GitHub Actions (`Field App (Android)` workflow).
+
 ## Run it locally
 
 Needs Node.js 22.12 or later, pnpm 10 and Docker (or a local PostgreSQL 16).
@@ -177,6 +198,19 @@ In development, login codes and driver messages (receipts) are printed in the
 API log (`OTP_DELIVERY=log`, `MESSAGE_DELIVERY=log`).
 The API refuses to start in production until a real SMS or email provider is
 connected.
+
+The Field App runs in Expo Go on an Android phone on the same network, or as a
+web preview for checking screens:
+
+```bash
+cd apps/field
+EXPO_PUBLIC_API_URL=http://<your computer's IP>:4000 pnpm start   # scan the QR code with Expo Go
+pnpm web                                                         # screens in a browser (set CORS_EXTRA_ORIGINS=http://localhost:8081 on the API)
+```
+
+For pilot phones, run the **Field App (Android)** workflow in GitHub Actions and
+install the APK from the run's artifacts. Set the repository variable
+`FIELD_API_URL` to the hosted API address first.
 
 ## Tests
 

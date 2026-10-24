@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Role } from '@voltneo/shared';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -18,8 +18,10 @@ export interface TestContext {
   clock: TestClock;
 }
 
-export async function createTestApp(): Promise<TestContext> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+export async function createTestApp(
+  configure: (b: TestingModuleBuilder) => TestingModuleBuilder = (b) => b,
+): Promise<TestContext> {
+  const moduleRef = await configure(Test.createTestingModule({ imports: [AppModule] })).compile();
   const app = moduleRef.createNestApplication({ logger: ['error'], rawBody: true });
   configureApp(app);
   await app.init();
@@ -46,7 +48,7 @@ export async function resetData(prisma: PrismaService): Promise<void> {
         "agreement_events", "late_fee_accruals", "instalments", "agreements",
         "immobilisation_log", "recovery_photos", "recoveries", "collection_notices", "job_runs",
         "ticket_photos", "ticket_visits", "battery_replacements", "service_tickets",
-        "ownership_transfers"
+        "ownership_transfers", "payment_links"
         RESTART IDENTITY CASCADE`,
     );
   } finally {

@@ -127,6 +127,7 @@ export interface Texts {
   transferredSms: (p: { agreement: string; serial: string; certificate: string }) => string;
   ticketReceivedSms: (p: { ticket: string; hours: number }) => string;
   ticketResolvedSms: (p: { ticket: string }) => string;
+  paymentLinkSms: (p: { amount: string; agreement: string; url: string; until: string }) => string;
 }
 
 const EN: Texts = {
@@ -233,6 +234,8 @@ const EN: Texts = {
     `Volt Neo: We have your battery problem report, number ${p.ticket}. A technician will contact you within ${p.hours} hours.`,
   ticketResolvedSms: (p) =>
     `Volt Neo: Your service request ${p.ticket} is closed. If the problem comes back, call Volt Neo.`,
+  paymentLinkSms: (p) =>
+    `Volt Neo: Pay ${p.amount} for agreement ${p.agreement} by UPI: ${p.url} (open until ${p.until}). You get a receipt SMS once it is paid.`,
 };
 
 const BN: Texts = {
@@ -338,6 +341,8 @@ const BN: Texts = {
     `Volt Neo: আপনার ব্যাটারির সমস্যার অভিযোগ পেয়েছি, নম্বর ${p.ticket}। ${p.hours} ঘণ্টার মধ্যে একজন টেকনিশিয়ান আপনার সঙ্গে যোগাযোগ করবেন।`,
   ticketResolvedSms: (p) =>
     `Volt Neo: আপনার পরিষেবা অনুরোধ ${p.ticket} বন্ধ করা হয়েছে। সমস্যা আবার হলে Volt Neo-কে ফোন করুন।`,
+  paymentLinkSms: (p) =>
+    `Volt Neo: চুক্তি ${p.agreement}-এর ${p.amount} UPI-তে দিন: ${p.url} (${p.until} পর্যন্ত খোলা)। পেমেন্ট হলে রসিদের SMS পাবেন।`,
 };
 
 const HI: Texts = {
@@ -443,6 +448,8 @@ const HI: Texts = {
     `Volt Neo: आपकी बैटरी की समस्या की शिकायत मिल गई है, नंबर ${p.ticket}। ${p.hours} घंटे के अंदर तकनीशियन आपसे संपर्क करेगा।`,
   ticketResolvedSms: (p) =>
     `Volt Neo: आपका सेवा अनुरोध ${p.ticket} बंद कर दिया गया है। समस्या फिर से हो तो Volt Neo को फ़ोन करें।`,
+  paymentLinkSms: (p) =>
+    `Volt Neo: अनुबंध ${p.agreement} के ${p.amount} UPI से चुकाएँ: ${p.url} (${p.until} तक खुला)। भुगतान होने पर रसीद का SMS मिलेगा।`,
 };
 
 export const TEXTS: Record<Lang, Texts> = { BN, HI, EN };
