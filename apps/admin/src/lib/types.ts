@@ -1,4 +1,12 @@
-import type { CollectionStage, Role } from '@voltneo/shared';
+import type {
+  CollectionStage,
+  Role,
+  TicketCategory,
+  TicketChannel,
+  TicketOutcome,
+  TicketStatus,
+  TicketTiming,
+} from '@voltneo/shared';
 
 /** Shapes returned by the API, as the admin panel uses them. */
 
@@ -536,4 +544,165 @@ export interface AgreementCollections {
     photos: { id: string; fileName: string }[];
   } | null;
   notices: { kind: string; refDate: string; createdAt: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// M4: finishing early, ownership transfer, service tickets, dashboard
+// ---------------------------------------------------------------------------
+
+export interface Ownership {
+  agreementId: string;
+  state: string;
+  earlyExit: {
+    quotedOn: string;
+    remainingInstalments: number;
+    instalmentsLeft: number;
+    lateFeesDue: number;
+    total: number;
+    notYetDue: number;
+    resultingState: 'PAID_OFF' | 'EARLY_EXIT';
+  } | null;
+  transferDue: boolean;
+  paidInFullOn: string | null;
+  blockers: string[];
+  driverCredit: number;
+  battery: { id: string; serial: string; gpsDeviceId: string | null } | null;
+  transfer: {
+    id: string;
+    certificateNumber: string;
+    paidInFullOn: string;
+    gpsOffAt: string;
+    gpsPortalReference: string;
+    gpsOffByName: string | null;
+    transferredAt: string;
+    recordedByName: string | null;
+    note: string | null;
+  } | null;
+}
+
+export interface TicketRow {
+  id: string;
+  number: string;
+  agreement: { id: string; number: string };
+  driver: { id: string; name: string; phone: string };
+  batterySerial: string | null;
+  category: TicketCategory;
+  channel: TicketChannel;
+  description: string;
+  reportedAt: string;
+  dueBy: string;
+  status: TicketStatus;
+  timing: TicketTiming;
+  technicianId: string | null;
+  technicianName: string | null;
+  respondedAt: string | null;
+  outcome: TicketOutcome | null;
+  resolvedAt: string | null;
+}
+
+export interface TicketList {
+  total: number;
+  page: number;
+  limit: number;
+  counts: { open: number; assigned: number; missed: number };
+  items: TicketRow[];
+}
+
+export interface TicketDetail extends Omit<TicketRow, 'agreement'> {
+  agreement: { id: string; number: string; state: string; batteryTypeId: string };
+  batteryId: string;
+  agreementBatteryId: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  resolution: string | null;
+  resolvedByName: string | null;
+  createdAt: string;
+  createdByName: string | null;
+  visits: {
+    id: string;
+    visitedAt: string;
+    technicianName: string | null;
+    batterySerial: string | null;
+    voltageReading: string | null;
+    readingsNote: string | null;
+    finding: string;
+    recordedByName: string | null;
+    photos: { id: string; fileName: string }[];
+  }[];
+  replacements: {
+    id: string;
+    replacedAt: string;
+    oldBatterySerial: string | null;
+    newBatterySerial: string | null;
+    technicianName: string | null;
+    voltageReading: string;
+    oldBatteryNote: string;
+  }[];
+  allowed: {
+    assign: boolean;
+    visit: boolean;
+    replace: boolean;
+    resolve: boolean;
+    cancel: boolean;
+  };
+}
+
+export interface ServiceHistoryRow {
+  id: string;
+  visitedAt: string;
+  ticket: { id: string; number: string; category: TicketCategory };
+  technicianName: string | null;
+  voltageReading: string | null;
+  readingsNote: string | null;
+  finding: string;
+}
+
+interface Received {
+  total: number;
+  count: number;
+  downPayments: number;
+  instalments: number;
+  lateFees: number;
+  driverCredit: number;
+  byMethod: Partial<Record<'UPI' | 'CARD' | 'CASH', { amount: number; count: number }>>;
+  paymentsTotal: number;
+  matchesLedger: boolean;
+}
+
+interface Due {
+  count: number;
+  amount: number;
+  paid: number;
+  unpaid: number;
+}
+
+export interface DashboardSummary {
+  date: string;
+  today: string;
+  month: string;
+  agreements: {
+    byState: Partial<Record<string, number>>;
+    running: number;
+    transferDue: number;
+    transferredThisMonth: number;
+  };
+  activeDrivers: number;
+  due: { day: Due; month: Due };
+  received: { day: Received; month: Received };
+  overdue: {
+    drivers: number;
+    instalments: number;
+    lateFees: number;
+    byStage: Partial<Record<CollectionStageName, number>>;
+  };
+  batteries: Partial<Record<string, number>>;
+  tickets: {
+    open: number;
+    assigned: number;
+    missed: number;
+    respondedThisMonth: number;
+    respondedOnTimeThisMonth: number;
+  };
+  cash: { withAgents: number; inTransit: number; driverCredit: number };
+  pendingApprovals: number;
 }

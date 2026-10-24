@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; permission?: Permission }[] = [
   { href: '/agreements', label: 'Agreements', permission: 'agreements.read' },
   { href: '/payments', label: 'Payments', permission: 'payments.read' },
   { href: '/collections', label: 'Collections', permission: 'collections.read' },
+  { href: '/tickets', label: 'Service tickets', permission: 'tickets.read' },
   { href: '/cash', label: 'Cash', permission: 'cash_deposits.reconcile' },
   { href: '/drivers', label: 'Drivers', permission: 'drivers.read' },
   { href: '/plans', label: 'Plans', permission: 'plans.read' },
@@ -23,8 +24,8 @@ const NAV: { href: string; label: string; permission?: Permission }[] = [
 
 /** Modules from the MVP Spec that later milestones add. Shown so head office can see what is coming. */
 const COMING: { label: string; milestone: string }[] = [
-  { label: 'Service tickets', milestone: 'M4' },
-  { label: 'Dashboard', milestone: 'M4' },
+  { label: 'Field App (Android)', milestone: 'M5' },
+  { label: 'Driver App', milestone: 'M6' },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

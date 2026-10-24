@@ -10,5 +10,6 @@ import { WebhooksService } from './webhooks.service';
   imports: [DocumentsModule, CollectionsModule],
   controllers: [PaymentsController, WebhooksController],
   providers: [PaymentsService, CashService, WebhooksService],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

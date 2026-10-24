@@ -11,9 +11,9 @@ Foundation V2.1** (Decision Log D1–D52) and the **Platform MVP Spec V1**.
 | **M0 Foundation**           | Monorepo, database, staff login with roles, tests on every change                      | **Done** |
 | **M1 Set-up data**          | Battery types, inventory, plans with versions and cost floor, drivers with KYC         | **Done** |
 | **M2 Agreements and money** | Agreements, schedules, installation, payments, ledger, receipts, Schedule 1 and 5 PDFs | **Done** |
-| M3 Collections              | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              | Next     |
-| M4 Operations               | Service tickets, dashboard, early exit, ownership transfer                             | Next     |
-| M5 Field App                | Android app for agents, technicians and recovery staff                                 |          |
+| **M3 Collections**          | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              | **Done** |
+| **M4 Operations**           | Service tickets, dashboard, early exit, ownership transfer                             | **Done** |
+| M5 Field App                | Android app for agents, technicians and recovery staff                                 | Next     |
 | M6 Driver App               | Android app for drivers in Bengali, Hindi and English                                  |          |
 
 ## Layout
@@ -131,6 +131,30 @@ docs/
   stock custody, unpaid dues are written off and the agreement is closed.
 - **Collections queue** sorted by days overdue, with stages from grace to
   collection; a collections panel and GPS portal log on each agreement.
+
+## What M4 includes
+
+- **Finishing early** (clause E7): a quote of every unpaid instalment plus any
+  late fee owed, never reduced for the down payment; the payment must be
+  exactly the quoted amount, so a figure that changed is refused, not part-paid.
+  Two or more instalments still ahead makes it "paid off early", otherwise
+  "paid off".
+- **Ownership transfer** (clause E9, D32): once paid in full, operations records
+  the GPS switch-off done in the supplier portal; the Schedule 8 Ownership
+  Transfer Certificate is issued in Bengali, Hindi and English, the battery
+  passes to the driver in the custody log and service ends. A disabled battery
+  or an open service ticket blocks the transfer until dealt with.
+- **Service tickets** (module 10): faults logged by support or operations with
+  the 48-hour response deadline (red when missed), technician assignment,
+  visits with readings and photos, battery replacement on the same agreement
+  and schedule (clause C8), resolution, and SMS to the driver when logged and
+  resolved. Each battery keeps a service history.
+- **Dashboard** (module 11) on the home page: active drivers, money received
+  today and this month (from the ledger, checked against payments), instalments
+  due, overdue by collections stage, tickets, batteries by status, cash not yet
+  banked.
+- **Audit log** (module 12): names, record-type, action, person and date
+  filters, and the fields each change touched.
 
 ## Run it locally
 

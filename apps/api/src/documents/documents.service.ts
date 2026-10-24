@@ -52,6 +52,19 @@ export interface ReceiptDocData {
   balanceAfter: number;
 }
 
+export interface CertificateDocData {
+  certificateNumber: string;
+  driverName: string;
+  agreementNumber: string;
+  agreementDate: string;
+  batteryType: string;
+  serial: string;
+  totalPayable: number;
+  paidInFullOn: string;
+  transferredOn: string;
+  gpsOffOn: string;
+}
+
 export type ScheduleDoc = 'schedule-1' | 'schedule-5';
 export const SCHEDULE_DOCS: readonly ScheduleDoc[] = ['schedule-1', 'schedule-5'];
 
@@ -260,6 +273,53 @@ export class DocumentsService {
     pdf.note(t.receiptValidity);
     return pdf.finish((page, of) => ({
       left: `Volt Neo · ${data.receiptNumber}`,
+      right: t.page(page, of),
+    }));
+  }
+
+  /**
+   * Schedule 8: Ownership Transfer Certificate (clause E9). The signatory line
+   * stays blank until the Volt Neo legal entity name is settled (L14).
+   */
+  async certificate(data: CertificateDocData, lang: Lang): Promise<Buffer> {
+    const t = TEXTS[lang];
+    const pdf = new Pdf(lang, {
+      title: `${data.certificateNumber} ${TEXTS.EN.certificateTitle}`,
+      createdAt: new Date(),
+    });
+    pdf.brand(t.certificateTitle, `${t.certificateNo}: ${data.certificateNumber}`);
+    if (AGREEMENT_DOCUMENT_IS_DRAFT) {
+      pdf.banner(
+        lang === 'EN' ? t.draftBanner : `${t.draftBanner}\n${TEXTS.EN.draftBanner}`,
+        'warn',
+      );
+    }
+    pdf.paragraph(
+      t.certificateBody({
+        driver: data.driverName,
+        agreement: data.agreementNumber,
+        agreementDate: docDate(data.agreementDate),
+        serial: data.serial,
+        transferDate: docDate(data.transferredOn),
+        gpsOffDate: docDate(data.gpsOffOn),
+      }),
+    );
+    pdf.rows([
+      [t.certificateNo, data.certificateNumber],
+      [t.driver, data.driverName],
+      [t.agreementNo, data.agreementNumber],
+      [t.agreementDate, docDate(data.agreementDate)],
+      [t.battery, `${data.serial} (${data.batteryType})`],
+      [t.totalPaid, `${rupees(data.totalPayable)}\n${amountInWords(data.totalPayable, lang)}`],
+      [t.paidInFullOn, docDate(data.paidInFullOn)],
+      [t.ownershipPassedOn, docDate(data.transferredOn)],
+      [t.gpsOffOn, docDate(data.gpsOffOn)],
+    ]);
+    pdf.doc.moveDown(0.8);
+    pdf.note(t.certificateKeep);
+    pdf.signatures([{ label: t.forVoltNeo, sub: t.authorisedSignatory }]);
+    return pdf.finish((page, of) => ({
+      left: `Volt Neo · ${data.certificateNumber} · ${data.agreementNumber}`,
       right: t.page(page, of),
     }));
   }

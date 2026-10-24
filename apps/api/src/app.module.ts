@@ -18,6 +18,9 @@ import { PaymentsModule } from './payments/payments.module';
 import { ClockModule } from './common/clock';
 import { CollectionsModule } from './collections/collections.module';
 import { JobsModule } from './jobs/jobs.module';
+import { OwnershipModule } from './ownership/ownership.module';
+import { ReportsModule } from './reports/reports.module';
+import { TicketsModule } from './tickets/tickets.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -44,6 +47,9 @@ import { HealthController } from './health/health.controller';
     ClockModule,
     CollectionsModule,
     JobsModule,
+    OwnershipModule,
+    TicketsModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [
