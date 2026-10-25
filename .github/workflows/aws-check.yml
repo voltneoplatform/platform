@@ -24,7 +24,12 @@ jobs:
           test -n "$AWS_SECRET_ACCESS_KEY" || { echo "::error::AWS_SECRET_ACCESS_KEY secret is missing"; exit 1; }
           test "$AWS_REGION" = "ap-south-1" || { echo "::error::AWS_REGION variable is '$AWS_REGION', expected ap-south-1"; exit 1; }
       - name: Key accepted by AWS
-        run: aws sts get-caller-identity --query Arn --output text | sed 's/[0-9]\{12\}/<account>/'
+        run: |
+          arn=$(aws sts get-caller-identity --query Arn --output text | sed 's/[0-9]\{12\}/<account>/')
+          echo "::notice title=Key belongs to::$arn"
+          if aws iam list-users --max-items 1 >/dev/null 2>&1; then echo "::warning title=Too broad::The key can read IAM users"; fi
+          if aws s3api list-buckets >/dev/null 2>&1; then echo "::warning title=Too broad::The key can list S3 buckets"; fi
+          if aws ec2 describe-regions --region ap-south-1 >/dev/null 2>&1; then echo "::warning title=Too broad::The key can use EC2"; fi
       - name: Lightsail Mumbai reachable
         run: |
           aws lightsail get-instances --region ap-south-1 --query 'length(instances)'
