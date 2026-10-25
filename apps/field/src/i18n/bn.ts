@@ -169,5 +169,6 @@ export const bn: Messages = {
   downPaymentLeft: 'ডাউন পেমেন্ট বাকি',
   changeBattery: 'অন্য ব্যাটারি বেছে নিন',
   depositChecked: 'ফাইন্যান্স যাচাই করেছে',
+  testSite: 'পরীক্ষার সাইট: শুধু পরীক্ষার তথ্য, আসল টাকা নয়',
   upiLinks: 'UPI পেমেন্ট লিংক',
 };

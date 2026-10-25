@@ -5,7 +5,7 @@ import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
-import { LogOtpSender, MemoryOtpSender, OTP_SENDER } from './otp-sender';
+import { LogOtpSender, MemoryOtpSender, OTP_SENDER, SesOtpSender } from './otp-sender';
 
 @Module({
   imports: [
@@ -24,8 +24,17 @@ import { LogOtpSender, MemoryOtpSender, OTP_SENDER } from './otp-sender';
     {
       provide: OTP_SENDER,
       inject: [APP_CONFIG],
-      useFactory: (config: AppConfig) =>
-        config.otpDelivery === 'memory' ? new MemoryOtpSender() : new LogOtpSender(),
+      useFactory: (config: AppConfig) => {
+        if (config.otpDelivery === 'memory') return new MemoryOtpSender();
+        if (config.otpDelivery === 'ses' && config.ses) {
+          return new SesOtpSender(
+            config.ses,
+            Math.round(config.otpTtlSeconds / 60),
+            config.deployment === 'staging',
+          );
+        }
+        return new LogOtpSender();
+      },
     },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],

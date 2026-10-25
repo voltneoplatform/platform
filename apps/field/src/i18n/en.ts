@@ -181,6 +181,7 @@ export const en = {
   downPaymentLeft: 'Down payment still due',
   changeBattery: 'Choose a different battery',
   depositChecked: 'Checked by finance',
+  testSite: 'Test site: test data only, no real money',
   upiLinks: 'UPI payment links',
 } as const;
 

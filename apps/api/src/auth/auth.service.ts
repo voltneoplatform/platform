@@ -97,6 +97,14 @@ export class AuthService {
     meta: RequestMeta,
   ): Promise<{ sent: true; expiresInSeconds: number }> {
     const answer = { sent: true as const, expiresInSeconds: this.config.otpTtlSeconds };
+    // Decided from the identifier alone, so the reply says nothing about whether the account exists.
+    const kind = parseLoginIdentifier(identifier)?.kind;
+    if (kind === 'phone' && !this.sender.channels.has('SMS')) {
+      throw new HttpException(
+        'Sign-in codes by SMS are not set up yet. Sign in with your email address.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
     const found = await this.findStaff(identifier);
     if (!found?.staff || found.staff.status !== 'ACTIVE') return answer;
     const { staff, channel, destination } = found;

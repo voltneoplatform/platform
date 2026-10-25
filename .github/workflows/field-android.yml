@@ -24,10 +24,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      # The API address baked into the app. Set the repository variable
-      # FIELD_API_URL (Settings > Secrets and variables > Actions > Variables)
-      # once hosting exists; until then the build points at a placeholder.
-      EXPO_PUBLIC_API_URL: ${{ vars.FIELD_API_URL || 'https://api.voltneo.invalid' }}
+      # The API address baked into the app: the hosted test site (T82) unless
+      # the repository variable FIELD_API_URL says otherwise. The test-site
+      # banner shows while DEPLOYMENT is staging.
+      EXPO_PUBLIC_API_URL: ${{ vars.FIELD_API_URL || 'https://api.voltcompany.in' }}
+      EXPO_PUBLIC_DEPLOYMENT: ${{ vars.FIELD_DEPLOYMENT || 'staging' }}
       EXPO_NO_TELEMETRY: '1'
     steps:
       - uses: actions/checkout@v5

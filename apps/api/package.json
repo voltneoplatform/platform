@@ -16,6 +16,8 @@
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1149.0",
+    "@aws-sdk/client-sesv2": "3.1149.0",
     "@expo-google-fonts/hind-siliguri": "0.4.1",
     "@expo-google-fonts/noto-sans": "0.4.2",
     "@expo-google-fonts/noto-sans-devanagari": "0.4.1",

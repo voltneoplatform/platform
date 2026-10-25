@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/dist
+**/.expo
+**/android
+**/storage
+**/.env
+**/.env.*
+!**/.env.example
+.git
+apps/field
+docs

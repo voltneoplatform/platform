@@ -1,0 +1,28 @@
+# Caddy fetches and renews the https certificates itself (Let's Encrypt).
+{
+	admin off
+}
+
+{$ADMIN_HOST} {
+	encode zstd gzip
+	# The panel calls the API on its own address, so the sign-in cookie stays first-party.
+	handle /v1/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy admin:3000
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
+
+{$API_HOST} {
+	encode zstd gzip
+	reverse_proxy api:4000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
