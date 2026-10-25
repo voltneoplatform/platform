@@ -5,7 +5,7 @@
 source "$(dirname "$0")/lib.sh"
 
 # --- Server ------------------------------------------------------------------
-if ! lsl get-instance --instance-name "$INSTANCE" >/dev/null 2>&1; then
+if ! exists lsl get-instance --instance-name "$INSTANCE"; then
   bundle=$(lsl get-bundles | jq -r --argjson ram "$SERVER_RAM_GB" '
     [.bundles[] | select(.isActive and .ramSizeInGb == $ram
       and (.supportedPlatforms | index("LINUX_UNIX"))
@@ -23,15 +23,15 @@ fi
 wait_for 600 "the server to start" \
   bash -c "aws lightsail get-instance-state --instance-name '$INSTANCE' --region '$REGION' --query state.name --output text | grep -qx running"
 
-# Daily snapshot at 02:00 IST; Lightsail keeps the last seven.
+# Daily snapshot at 02:30 IST (Lightsail takes whole UTC hours); it keeps the last seven.
 if ! lsl get-instance --instance-name "$INSTANCE" | jq -e '.instance.addOns[]? | select(.name == "AutoSnapshot" and .status == "Enabled")' >/dev/null; then
   lsl enable-add-on --resource-name "$INSTANCE" \
-    --add-on-request 'addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=20:30}' >/dev/null
-  notice "Snapshots" "Daily server snapshots turned on (02:00 IST)"
+    --add-on-request 'addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=21:00}' >/dev/null
+  notice "Snapshots" "Daily server snapshots turned on (02:30 IST)"
 fi
 
 # --- Fixed public address --------------------------------------------------------
-if ! lsl get-static-ip --static-ip-name "$STATIC_IP" >/dev/null 2>&1; then
+if ! exists lsl get-static-ip --static-ip-name "$STATIC_IP"; then
   lsl allocate-static-ip --static-ip-name "$STATIC_IP" >/dev/null
 fi
 if ! lsl get-static-ip --static-ip-name "$STATIC_IP" | jq -e --arg i "$INSTANCE" '.staticIp.attachedTo == $i' >/dev/null; then
@@ -43,7 +43,7 @@ ip=$(lsl get-static-ip --static-ip-name "$STATIC_IP" | jq -r .staticIp.ipAddress
 "$here/aws/ports.sh" closed
 
 # --- Database (managed PostgreSQL, encrypted, not reachable from the internet) ----
-if ! lsl get-relational-database --relational-database-name "$DATABASE" >/dev/null 2>&1; then
+if ! exists lsl get-relational-database --relational-database-name "$DATABASE"; then
   dbbundle=$(lsl get-relational-database-bundles | jq -r --argjson ram "$DB_RAM_GB" '
     [.bundles[] | select(.isActive and .isEncrypted and .ramSizeInGb == $ram
       and (.bundleId | test("ha") | not))] | sort_by(.price) | .[0].bundleId')
@@ -68,7 +68,7 @@ lsl get-relational-database --relational-database-name "$DATABASE" | jq -e '
   || fail "The database must be private with automatic backups on"
 
 # --- File storage (private bucket, versioned so a deleted file can be recovered) ---
-if ! lsl get-buckets --bucket-name "$BUCKET" >/dev/null 2>&1; then
+if ! exists lsl get-buckets --bucket-name "$BUCKET"; then
   bbundle=$(lsl get-bucket-bundles | jq -r --argjson gb "$BUCKET_STORAGE_GB" '
     [.bundles[] | select(.isActive and .storagePerMonthInGb == $gb)][0].bundleId')
   [ "$bbundle" != null ] || fail "No matching storage plan"
@@ -80,7 +80,7 @@ lsl get-buckets --bucket-name "$BUCKET" | jq -e '.buckets[0].accessRules.getObje
   || fail "The file bucket must be private"
 
 # --- DNS -----------------------------------------------------------------------
-dns get-domain --domain-name "$DOMAIN" >/dev/null 2>&1 || dns create-domain --domain-name "$DOMAIN" >/dev/null
+exists dns get-domain --domain-name "$DOMAIN" || dns create-domain --domain-name "$DOMAIN" >/dev/null
 
 # record <type> <name> <target>: creates the record, or corrects it if it differs.
 record() {
@@ -99,7 +99,7 @@ record A "$ADMIN_HOST" "$ip"
 record A "$API_HOST" "$ip"
 
 # --- Email (SES, Mumbai): sending domain with DKIM, SPF and DMARC ---------------
-if ! ses get-email-identity --email-identity "$DOMAIN" >/dev/null 2>&1; then
+if ! exists ses get-email-identity --email-identity "$DOMAIN"; then
   ses create-email-identity --email-identity "$DOMAIN" >/dev/null
 fi
 for token in $(ses get-email-identity --email-identity "$DOMAIN" | jq -r '.DkimAttributes.Tokens[]'); do
@@ -116,7 +116,7 @@ IFS=',' read -ra recipients <<<"${SES_TEST_RECIPIENTS:-}"
 for r in "${recipients[@]}"; do
   r=$(echo "$r" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
   [ -n "$r" ] || continue
-  ses get-email-identity --email-identity "$r" >/dev/null 2>&1 \
+  exists ses get-email-identity --email-identity "$r" \
     || { ses create-email-identity --email-identity "$r" >/dev/null; notice "Email check sent" "AWS emailed $r a link to confirm the address"; }
 done
 
