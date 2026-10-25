@@ -8,5 +8,6 @@
 **/.env.*
 !**/.env.example
 .git
-apps/field
+apps/field/*
+!apps/field/package.json
 docs
