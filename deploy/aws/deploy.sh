@@ -10,22 +10,32 @@ trap 'rm -rf "$work"; "$here/aws/ports.sh" closed || true' EXIT
 umask 077
 
 # --- Short-lived SSH access issued by Lightsail (no stored SSH key) --------------
-access=$(lsl get-instance-access-details --instance-name "$INSTANCE" --protocol ssh)
-jq -r .accessDetails.privateKey <<<"$access" > "$work/key"
-jq -r .accessDetails.certKey <<<"$access" > "$work/key-cert.pub"
-user=$(jq -r .accessDetails.username <<<"$access")
-jq -r --arg ip "$SERVER_IP" '.accessDetails.hostKeys[] | "\($ip) \(.algorithm) \(.publicKey)"' <<<"$access" > "$work/known_hosts"
+# The certificate lasts only minutes, so it is fetched again before each phase.
+ssh_access() {
+  local access
+  access=$(lsl get-instance-access-details --instance-name "$INSTANCE" --protocol ssh)
+  jq -r .accessDetails.privateKey <<<"$access" >"$work/key"
+  jq -r .accessDetails.certKey <<<"$access" >"$work/key-cert.pub"
+  user=$(jq -r .accessDetails.username <<<"$access")
+  jq -r --arg ip "$SERVER_IP" '.accessDetails.hostKeys[] | "\($ip) \(.algorithm) \(.publicKey)"' <<<"$access" >"$work/known_hosts"
+}
 ssh_opts=(-i "$work/key" -o CertificateFile="$work/key-cert.pub" -o UserKnownHostsFile="$work/known_hosts"
   -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o BatchMode=yes)
 remote() { ssh "${ssh_opts[@]}" "$user@$SERVER_IP" "$@"; }
 
 runner_ip=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')
 "$here/aws/ports.sh" open "$runner_ip/32"
-notice "SSH host keys" "$(jq -r '[.accessDetails.hostKeys[] | "\(.algorithm): \(.publicKey[0:24])…"] | join(" | ")' <<<"$access")"
-first_try=$(remote true 2>&1 >/dev/null) || notice "First SSH try" "$(tr '\n' ' ' <<<"$first_try" | cut -c1-300)"
-if ! (QUIET=1 wait_for 600 "SSH and the first-boot setup" remote test -f /var/lib/voltneo-first-boot-done); then
-  echo "::error::SSH: $(remote 'cloud-init status --long; tail -5 /var/log/cloud-init-output.log' 2>&1 | tr '\n' ' ' | cut -c1-600)"
-  exit 1
+ssh_access
+wait_for 300 "SSH to the server" remote true
+
+# --- One-time server setup (Docker, swap); safe to repeat --------------------------
+if ! remote test -f /var/lib/voltneo-first-boot-done; then
+  notice "Server setup" "Installing Docker and swap on the server"
+  if ! out=$(remote 'sudo bash -s' <"$here/server/first-boot.sh" 2>&1); then
+    echo "::error title=Server setup failed::$(tail -c 600 <<<"$out" | tr '\n' ' ')"
+    exit 1
+  fi
+  ssh_access
 fi
 
 # --- File storage key: created once and kept on the server ------------------------
@@ -94,6 +104,7 @@ payment=none
 [ "$payment" = cashfree ] || notice "UPI links" "Off: add the CASHFREE_APP_ID and CASHFREE_SECRET_KEY secrets to turn on Cashfree sandbox"
 
 # --- Copy and apply ---------------------------------------------------------------
+ssh_access
 remote 'rm -rf /tmp/voltneo-release && mkdir -m 700 /tmp/voltneo-release'
 files=("$here/server/compose.yml" "$here/server/Caddyfile" "$here/server/apply.sh" "$work/runtime.env" "$work/.env")
 [ -f "$work/s3.env" ] && files+=("$work/s3.env")
