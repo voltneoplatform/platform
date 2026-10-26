@@ -21,7 +21,12 @@ remote() { ssh "${ssh_opts[@]}" "$user@$SERVER_IP" "$@"; }
 
 runner_ip=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')
 "$here/aws/ports.sh" open "$runner_ip/32"
-wait_for 600 "SSH and the first-boot setup" remote test -f /var/lib/voltneo-first-boot-done
+notice "SSH host keys" "$(jq -r '[.accessDetails.hostKeys[] | "\(.algorithm): \(.publicKey[0:24])…"] | join(" | ")' <<<"$access")"
+first_try=$(remote true 2>&1 >/dev/null) || notice "First SSH try" "$(tr '\n' ' ' <<<"$first_try" | cut -c1-300)"
+if ! (QUIET=1 wait_for 600 "SSH and the first-boot setup" remote test -f /var/lib/voltneo-first-boot-done); then
+  echo "::error::SSH: $(remote 'cloud-init status --long; tail -5 /var/log/cloud-init-output.log' 2>&1 | tr '\n' ' ' | cut -c1-600)"
+  exit 1
+fi
 
 # --- File storage key: created once and kept on the server ------------------------
 if ! remote sudo test -s /opt/voltneo/s3.env; then
