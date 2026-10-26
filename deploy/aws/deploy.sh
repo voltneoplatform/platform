@@ -99,5 +99,5 @@ printf '%s' "${GHCR_TOKEN:?}" | remote "sudo GHCR_USER='${GHCR_USER:?}' bash /tm
 if curl -fsS --max-time 10 "https://$API_HOST/v1/health" >/dev/null 2>&1; then
   notice "Online" "https://$ADMIN_HOST and https://$API_HOST are answering"
 else
-  notice "Not reachable by name yet" "Point $DOMAIN to the Lightsail nameservers; https starts once DNS has moved"
+  notice "Not reachable by name yet" "Add the DNS records listed by the setup step; https starts once they are live"
 fi

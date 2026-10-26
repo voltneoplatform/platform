@@ -20,8 +20,10 @@ Actions tab, or on a push to the `hosting-test` branch):
 1. Builds `deploy/api.Dockerfile` and `deploy/admin.Dockerfile` and pushes them
    to GitHub's container registry, tagged with the commit.
 2. `deploy/aws/provision.sh` creates anything missing (server, IP, firewall,
-   database, bucket, DNS records, SES domain) and checks the rest. It never
-   deletes anything.
+   database, bucket, SES domain) and checks the rest. It never deletes
+   anything. DNS stays with the domain's current provider (it also serves the
+   website and email): the run lists any records still to add there as
+   notices, and checks them through public DNS.
 3. `deploy/aws/deploy.sh` gets a short-lived SSH certificate from Lightsail,
    opens SSH to the runner only, writes the settings, and runs
    `deploy/server/apply.sh` on the server: pull images, run migrations, start,

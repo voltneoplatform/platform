@@ -79,37 +79,40 @@ fi
 lsl get-buckets --bucket-name "$BUCKET" | jq -e '.buckets[0].accessRules.getObject == "private" and (.buckets[0].accessRules.allowPublicOverrides | not)' >/dev/null \
   || fail "The file bucket must be private"
 
-# --- DNS -----------------------------------------------------------------------
-exists dns get-domain --domain-name "$DOMAIN" || dns create-domain --domain-name "$DOMAIN" >/dev/null
-
-# record <type> <name> <target>: creates the record, or corrects it if it differs.
-record() {
-  local type=$1 name=$2 target=$3 existing
-  existing=$(dns get-domain --domain-name "$DOMAIN" | jq -c --arg t "$type" --arg n "$name" \
-    '[.domain.domainEntries[] | select(.type == $t and (.name | rtrimstr(".")) == $n)][0] // empty')
-  if [ -z "$existing" ]; then
-    dns create-domain-entry --domain-name "$DOMAIN" \
-      --domain-entry "$(jq -nc --arg t "$type" --arg n "$name" --arg v "$target" '{name:$n,type:$t,target:$v}')" >/dev/null
-  elif [ "$(jq -r .target <<<"$existing" | sed 's/\.$//')" != "${target%.}" ]; then
-    dns update-domain-entry --domain-name "$DOMAIN" \
-      --domain-entry "$(jq -c --arg v "$target" '.target = $v | del(.options)' <<<"$existing")" >/dev/null
+# --- DNS ---------------------------------------------------------------------
+# The domain already serves the website and email from its current DNS provider,
+# so its nameservers stay where they are. This script lists the records to add
+# there and checks them through public DNS; it never changes them itself.
+need=()
+# want <type> <name> <value>: notes a record that must exist, and whether it does.
+want() {
+  local type=$1 name=$2 value=$3 have
+  have=$(dig +short "$type" "$name" @1.1.1.1 | sed 's/\.$//' | tr -d '"' | tr '[:upper:]' '[:lower:]')
+  if grep -qixF -- "$(tr -d '"' <<<"${value%.}" | tr '[:upper:]' '[:lower:]')" <<<"$have"; then
+    echo "DNS ok: $type $name"
+  else
+    need+=("$type  $name  →  $value")
   fi
 }
-record A "$ADMIN_HOST" "$ip"
-record A "$API_HOST" "$ip"
+notice "Current DNS for $DOMAIN" "nameservers: $(dig +short NS "$DOMAIN" @1.1.1.1 | tr '\n' ' ')· mail: $(dig +short MX "$DOMAIN" @1.1.1.1 | tr '\n' ' ')"
+want A "$ADMIN_HOST" "$ip"
+want A "$API_HOST" "$ip"
 
 # --- Email (SES, Mumbai): sending domain with DKIM, SPF and DMARC ---------------
 if ! exists ses get-email-identity --email-identity "$DOMAIN"; then
   ses create-email-identity --email-identity "$DOMAIN" >/dev/null
 fi
 for token in $(ses get-email-identity --email-identity "$DOMAIN" | jq -r '.DkimAttributes.Tokens[]'); do
-  record CNAME "$token._domainkey.$DOMAIN" "$token.dkim.amazonses.com"
+  want CNAME "$token._domainkey.$DOMAIN" "$token.dkim.amazonses.com"
 done
 ses put-email-identity-mail-from-attributes --email-identity "$DOMAIN" \
   --mail-from-domain "$MAIL_FROM_DOMAIN" --behavior-on-mx-failure USE_DEFAULT_VALUE >/dev/null
-record MX "$MAIL_FROM_DOMAIN" "10 feedback-smtp.$REGION.amazonses.com"
-record TXT "$MAIL_FROM_DOMAIN" '"v=spf1 include:amazonses.com ~all"'
-record TXT "_dmarc.$DOMAIN" '"v=DMARC1; p=none;"'
+want MX "$MAIL_FROM_DOMAIN" "10 feedback-smtp.$REGION.amazonses.com"
+want TXT "$MAIL_FROM_DOMAIN" "v=spf1 include:amazonses.com ~all"
+# A DMARC record only if the domain has none; an existing one is left as it is.
+if ! dig +short TXT "_dmarc.$DOMAIN" @1.1.1.1 | grep -qi 'v=DMARC1'; then
+  want TXT "_dmarc.$DOMAIN" "v=DMARC1; p=none;"
+fi
 
 # While SES is in its sandbox it only delivers to confirmed addresses.
 IFS=',' read -ra recipients <<<"${SES_TEST_RECIPIENTS:-}"
@@ -123,9 +126,16 @@ done
 # --- Summary -----------------------------------------------------------------------
 domain_status=$(ses get-email-identity --email-identity "$DOMAIN" | jq -r '.VerificationStatus')
 sandbox=$(ses get-account | jq -r 'if .ProductionAccessEnabled then "production access" else "sandbox (confirmed addresses only)" end')
-ns=$(dns get-domain --domain-name "$DOMAIN" | jq -r '[.domain.domainEntries[] | select(.type == "NS") | .target] | unique | join(", ")')
 notice "Server address" "$ip"
-notice "Nameservers for $DOMAIN" "$ns"
+if [ ${#need[@]} -gt 0 ]; then
+  i=0
+  for r in "${need[@]}"; do
+    i=$((i + 1))
+    notice "Add DNS record $i of ${#need[@]}" "$r"
+  done
+else
+  notice "DNS" "All records are in place"
+fi
 notice "Email" "Domain $domain_status; SES $sandbox"
 
 db=$(lsl get-relational-database --relational-database-name "$DATABASE")
