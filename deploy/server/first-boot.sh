@@ -3,13 +3,13 @@
 # deploy/aws/deploy.sh if it has not finished. Installs Docker
 # from Ubuntu's own packages and adds 2 GB of swap as a safety margin.
 set -euxo pipefail
-if [ ! -f /swapfile ]; then
-  fallocate -l 2G /swapfile
+if ! swapon --show=NAME --noheadings | grep -qx /swapfile; then
+  [ -f /swapfile ] || fallocate -l 2G /swapfile
   chmod 600 /swapfile
   mkswap /swapfile
   swapon /swapfile
-  echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 export DEBIAN_FRONTEND=noninteractive
 apt-get -o DPkg::Lock::Timeout=300 update
 apt-get -o DPkg::Lock::Timeout=300 install -y docker.io docker-compose-v2 unattended-upgrades
