@@ -1,0 +1,64 @@
+# The Volt Neo server stack. deploy/aws/deploy.sh copies this file to
+# /opt/voltneo on the server and writes .env (image tags, addresses) and
+# runtime.env (settings); secrets.env and s3.env are created once there.
+name: voltneo
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      ADMIN_HOST: ${ADMIN_HOST}
+      API_HOST: ${API_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - admin
+
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - ./secrets.env
+      - ./s3.env
+      - ./runtime.env
+    environment:
+      REDIS_URL: redis://valkey:6379
+    depends_on:
+      valkey:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: 20m, max-file: '5' }
+
+  admin:
+    image: ${ADMIN_IMAGE}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+  # Background-job queue (BullMQ). Valkey is the open-source Redis fork.
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    restart: unless-stopped
+    command: ['valkey-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  caddy_data:
+  caddy_config:
+  valkey_data:

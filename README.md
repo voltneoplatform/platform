@@ -14,6 +14,7 @@ Foundation V2.1** (Decision Log D1–D52) and the **Platform MVP Spec V1**.
 | **M3 Collections**          | Daily jobs, reminders, grace, late fee, immobilisation, restore, recovery              | **Done** |
 | **M4 Operations**           | Service tickets, dashboard, early exit, ownership transfer                             | **Done** |
 | **M5 Field App**            | Android app for agents, technicians and recovery staff; Cashfree UPI links             | **Done** |
+| **Test site hosting**       | AWS Lightsail Mumbai, email sign-in codes, deploys from GitHub Actions (`deploy/`)     | **Done** |
 | M6 Driver App               | Android app for drivers in Bengali, Hindi and English                                  | Next     |
 
 ## Layout
@@ -26,6 +27,7 @@ apps/
   driver/   Driver App (React Native, Expo) — M6
 packages/
   shared/   Roles, permissions, money helpers and types used by every app
+deploy/     Server images, the server stack and the AWS scripts (see deploy/README.md)
 docs/
   decisions.md   Technical decisions and why
 ```

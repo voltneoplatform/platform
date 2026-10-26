@@ -689,3 +689,14 @@ label.check {
 .main > .grid + .section {
   margin-top: 16px;
 }
+
+/* Hosted test site (NEXT_PUBLIC_DEPLOYMENT=staging) */
+.test-site-banner {
+  background: #fff3dd;
+  color: #7a4b00;
+  border-bottom: 1px solid #f0d9a8;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  text-align: center;
+}

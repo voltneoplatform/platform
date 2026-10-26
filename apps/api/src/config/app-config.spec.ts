@@ -35,10 +35,64 @@ describe('loadConfig', () => {
     );
   });
 
-  it('refuses to start in production without a real OTP provider', () => {
-    expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(
-      /real SMS\/email provider/,
-    );
+  describe('hosted servers', () => {
+    const hosted = {
+      ...base,
+      NODE_ENV: 'production',
+      DEPLOYMENT: 'staging',
+      OTP_DELIVERY: 'ses',
+      SES_FROM: 'Volt Neo <no-reply@voltcompany.in>',
+      SES_ACCESS_KEY_ID: 'AKIAEXAMPLE',
+      SES_SECRET_ACCESS_KEY: 'x'.repeat(40),
+      FILE_STORAGE: 's3',
+      S3_BUCKET: 'voltneo-files',
+      S3_ACCESS_KEY_ID: 'AKIAEXAMPLE2',
+      S3_SECRET_ACCESS_KEY: 'y'.repeat(40),
+    };
+
+    it('starts the test site with email codes, S3 files and logged driver messages', () => {
+      const c = loadConfig(hosted);
+      expect(c.deployment).toBe('staging');
+      expect(c.ses?.region).toBe('ap-south-1');
+      expect(c.fileStorage).toMatchObject({
+        kind: 's3',
+        bucket: 'voltneo-files',
+        region: 'ap-south-1',
+      });
+      expect(c.messageDelivery).toBe('log');
+      expect(c.paymentGateway).toBe('none');
+    });
+
+    it('needs DEPLOYMENT to match NODE_ENV', () => {
+      expect(() => loadConfig({ ...hosted, DEPLOYMENT: '' })).toThrow(/staging or production/);
+      expect(() => loadConfig({ ...base, DEPLOYMENT: 'staging' })).toThrow(/NODE_ENV=production/);
+    });
+
+    it('refuses codes in the log and files on the server disk', () => {
+      expect(() => loadConfig({ ...hosted, OTP_DELIVERY: 'log' })).toThrow(/OTP_DELIVERY=ses/);
+      expect(() => loadConfig({ ...hosted, FILE_STORAGE: 'local' })).toThrow(/FILE_STORAGE=s3/);
+      expect(() => loadConfig({ ...hosted, SES_FROM: '' })).toThrow(/SES_FROM/);
+    });
+
+    it('keeps production waiting for an SMS provider', () => {
+      expect(() => loadConfig({ ...hosted, DEPLOYMENT: 'production' })).toThrow(
+        /real SMS\/WhatsApp provider/,
+      );
+    });
+
+    it('allows only Cashfree sandbox on the test site', () => {
+      const cf = {
+        ...hosted,
+        PAYMENT_GATEWAY: 'cashfree',
+        CASHFREE_APP_ID: 'TEST123',
+        CASHFREE_SECRET_KEY: 'cfsk_test',
+        PUBLIC_API_URL: 'https://api.voltcompany.in',
+      };
+      expect(loadConfig(cf).cashfree?.env).toBe('sandbox');
+      expect(() => loadConfig({ ...cf, CASHFREE_ENV: 'production' })).toThrow(
+        /only with DEPLOYMENT=production/,
+      );
+    });
   });
 
   it('refuses example secrets in production', () => {
@@ -46,6 +100,7 @@ describe('loadConfig', () => {
       loadConfig({
         ...base,
         NODE_ENV: 'production',
+        DEPLOYMENT: 'staging',
         JWT_ACCESS_SECRET: 'change-me-' + 'x'.repeat(30),
       }),
     ).toThrow(/example value/);

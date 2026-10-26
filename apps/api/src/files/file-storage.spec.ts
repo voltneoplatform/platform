@@ -1,6 +1,7 @@
 import { loadConfig } from '../config/app-config';
 import { KycCryptoService } from '../kyc/kyc-crypto.service';
-import { FileLinks, checkUpload, newFileKey } from './file-storage';
+import { Readable } from 'node:stream';
+import { FileLinks, S3FileStorage, checkUpload, fileStorageFor, newFileKey } from './file-storage';
 
 const config = loadConfig({
   DATABASE_URL: 'postgresql://x@localhost/db',
@@ -79,5 +80,58 @@ describe('KYC number protection', () => {
       encrypted: null,
       last4: '0123',
     });
+  });
+});
+
+describe('S3 file storage', () => {
+  const s3 = {
+    kind: 's3' as const,
+    bucket: 'voltneo-files',
+    region: 'ap-south-1',
+    accessKeyId: 'AKIAEXAMPLE',
+    secretAccessKey: 'x'.repeat(40),
+    endpoint: null,
+  };
+  const key = 'kyc/d/00000000-0000-0000-0000-000000000000.png';
+
+  it('writes once, without overwriting, to the private bucket', async () => {
+    const sent: { input: Record<string, unknown> }[] = [];
+    const storage = new S3FileStorage(s3, { send: async (c) => void sent.push(c as never) });
+    await storage.put(key, Buffer.from('png'), 'image/png');
+    expect(sent[0]!.input).toMatchObject({
+      Bucket: 'voltneo-files',
+      Key: key,
+      ContentType: 'image/png',
+      ContentLength: 3,
+      IfNoneMatch: '*',
+    });
+    await expect(storage.put('../etc/passwd', Buffer.from('x'), 'image/png')).rejects.toThrow(
+      /Invalid storage key/,
+    );
+  });
+
+  it('streams a stored file back', async () => {
+    const storage = new S3FileStorage(s3, {
+      send: async () => ({ Body: Readable.from([Buffer.from('hello')]), ContentLength: 5 }),
+    });
+    const { stream, size } = await storage.open(key);
+    expect(size).toBe(5);
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(Buffer.from(c as Buffer));
+    expect(Buffer.concat(chunks).toString()).toBe('hello');
+  });
+
+  it('is chosen by FILE_STORAGE=s3', () => {
+    const c = loadConfig({
+      DATABASE_URL: 'postgresql://x@localhost/db',
+      JWT_ACCESS_SECRET: 'a'.repeat(40),
+      OTP_HASH_SECRET: 'b'.repeat(40),
+      KYC_ENCRYPTION_KEY: Buffer.alloc(32, 3).toString('base64'),
+      FILE_STORAGE: 's3',
+      S3_BUCKET: 'voltneo-files',
+      S3_ACCESS_KEY_ID: 'AKIAEXAMPLE',
+      S3_SECRET_ACCESS_KEY: 'x'.repeat(40),
+    });
+    expect(fileStorageFor(c)).toBeInstanceOf(S3FileStorage);
   });
 });

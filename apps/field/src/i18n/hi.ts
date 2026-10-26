@@ -169,5 +169,6 @@ export const hi: Messages = {
   downPaymentLeft: 'डाउन पेमेंट बाकी',
   changeBattery: 'दूसरी बैटरी चुनें',
   depositChecked: 'फ़ाइनेंस ने जाँच की',
+  testSite: 'टेस्ट साइट: केवल टेस्ट डेटा, असली पैसा नहीं',
   upiLinks: 'UPI भुगतान लिंक',
 };

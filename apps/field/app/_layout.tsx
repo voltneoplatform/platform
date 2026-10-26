@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Text, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SessionProvider, useSession } from '@/session';
 import { C, Loading, Screen } from '@/ui';
 
@@ -44,12 +45,32 @@ function Routes() {
   );
 }
 
+/** Shown on every screen of a build that talks to the test site (EXPO_PUBLIC_DEPLOYMENT=staging). */
+function TestSiteBanner() {
+  const { t } = useSession();
+  const insets = useSafeAreaInsets();
+  if (process.env.EXPO_PUBLIC_DEPLOYMENT !== 'staging') return null;
+  return (
+    <View
+      style={{ backgroundColor: C.warnBg, paddingTop: 6, paddingBottom: 6 + insets.bottom }}
+      accessibilityRole="alert"
+    >
+      <Text style={{ color: '#7A4B00', textAlign: 'center', fontWeight: '700', fontSize: 13 }}>
+        {t('testSite')}
+      </Text>
+    </View>
+  );
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SessionProvider>
         <StatusBar style="light" />
-        <Routes />
+        <View style={{ flex: 1 }}>
+          <Routes />
+        </View>
+        <TestSiteBanner />
       </SessionProvider>
     </SafeAreaProvider>
   );

@@ -3,15 +3,16 @@ import { createHmac, hkdfSync, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import type { Readable } from 'node:stream';
-import { APP_CONFIG, type AppConfig } from '../config/app-config';
+import { Readable } from 'node:stream';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { APP_CONFIG, type AppConfig, type FileStorageConfig } from '../config/app-config';
 
 /**
  * Private file storage (spec section 7: private cloud storage with short-lived
  * links). Files are never served directly: an authorised route issues a
- * signed link that expires after FILE_LINK_TTL_SECONDS. This local-disk adapter
- * is for development and tests; a cloud adapter replaces it once the hosting
- * provider is chosen.
+ * signed link that expires after FILE_LINK_TTL_SECONDS, and the API streams
+ * the file. LocalFileStorage is for development and tests; hosted servers use
+ * S3FileStorage (a private Lightsail bucket in Mumbai).
  */
 export interface FileStorage {
   put(key: string, data: Buffer, contentType: string): Promise<void>;
@@ -22,16 +23,19 @@ export const FILE_STORAGE = Symbol('FILE_STORAGE');
 
 const KEY_RE = /^[a-z0-9-]+\/[a-z0-9-]+\/[a-f0-9-]{36}\.(jpg|png|webp|pdf)$/;
 
-@Injectable()
+function checkKey(key: string): void {
+  if (!KEY_RE.test(key)) throw new Error('Invalid storage key');
+}
+
 export class LocalFileStorage implements FileStorage {
   private readonly root: string;
 
-  constructor(@Inject(APP_CONFIG) config: AppConfig) {
-    this.root = resolve(config.fileStorageDir);
+  constructor(dir: string) {
+    this.root = resolve(dir);
   }
 
   private pathFor(key: string): string {
-    if (!KEY_RE.test(key)) throw new Error('Invalid storage key');
+    checkKey(key);
     const full = resolve(join(this.root, key));
     if (!full.startsWith(this.root + '/')) throw new Error('Invalid storage key');
     return full;
@@ -48,6 +52,59 @@ export class LocalFileStorage implements FileStorage {
     const info = await stat(path);
     return { stream: createReadStream(path), size: info.size };
   }
+}
+
+/** The parts of the S3 client this adapter uses, so tests can pass a stand-in. */
+export interface S3Like {
+  send(command: PutObjectCommand | GetObjectCommand): Promise<unknown>;
+}
+
+export class S3FileStorage implements FileStorage {
+  private readonly client: S3Like;
+
+  constructor(
+    private readonly config: Extract<FileStorageConfig, { kind: 's3' }>,
+    client?: S3Like,
+  ) {
+    this.client =
+      client ??
+      new S3Client({
+        region: config.region,
+        credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+        ...(config.endpoint ? { endpoint: config.endpoint, forcePathStyle: true } : {}),
+      });
+  }
+
+  async put(key: string, data: Buffer, contentType: string): Promise<void> {
+    checkKey(key);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key,
+        Body: data,
+        ContentType: contentType,
+        ContentLength: data.length,
+        // Keys are random, so this only guards against a bug ever overwriting a document.
+        IfNoneMatch: '*',
+      }),
+    );
+  }
+
+  async open(key: string) {
+    checkKey(key);
+    const out = (await this.client.send(
+      new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+    )) as { Body?: unknown; ContentLength?: number };
+    if (!(out.Body instanceof Readable)) throw new Error('Unexpected S3 response body');
+    return { stream: out.Body, size: out.ContentLength ?? 0 };
+  }
+}
+
+/** Picks the adapter from the configuration. */
+export function fileStorageFor(config: AppConfig): FileStorage {
+  return config.fileStorage.kind === 's3'
+    ? new S3FileStorage(config.fileStorage)
+    : new LocalFileStorage(config.fileStorage.dir);
 }
 
 // ---------------------------------------------------------------------------

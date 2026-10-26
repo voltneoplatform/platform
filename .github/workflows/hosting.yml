@@ -1,0 +1,104 @@
+# Builds the server images and puts them on the hosted test site (T82: AWS
+# Lightsail, Mumbai). Runs after CI passes on main, or on demand from the
+# Actions tab. The first run also creates the server, database, file storage,
+# DNS records and email settings (deploy/aws/provision.sh).
+name: Hosting (test site)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+  # For trying hosting changes before they reach main.
+  push:
+    branches: [hosting-test]
+
+concurrency:
+  group: hosting-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/platform
+
+jobs:
+  images:
+    name: Build server images
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SHA }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/api.Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_BASE }}-api:${{ env.SHA }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Admin panel image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/admin.Dockerfile
+          build-args: DEPLOYMENT=staging
+          push: true
+          tags: ${{ env.IMAGE_BASE }}-admin:${{ env.SHA }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=admin
+          cache-to: type=gha,scope=admin,mode=max
+
+  deploy:
+    name: Provision and deploy
+    needs: images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment:
+      name: staging
+      url: https://admin.voltcompany.in
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SHA }}
+      - name: Check the deploy key
+        run: |
+          test "$AWS_REGION" = ap-south-1 || { echo "::error::Set the AWS_REGION variable to ap-south-1"; exit 1; }
+          aws sts get-caller-identity --query Arn --output text | grep -q ':user/github-deploy$' \
+            || { echo "::error::AWS_ACCESS_KEY_ID must belong to the github-deploy user"; exit 1; }
+      - name: Create or check the hosting
+        env:
+          SES_TEST_RECIPIENTS: ${{ vars.SES_TEST_RECIPIENTS }}
+        run: deploy/aws/provision.sh
+      - name: Deploy
+        env:
+          API_IMAGE: ${{ env.IMAGE_BASE }}-api:${{ env.SHA }}
+          ADMIN_IMAGE: ${{ env.IMAGE_BASE }}-admin:${{ env.SHA }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SES_ACCESS_KEY_ID: ${{ secrets.SES_ACCESS_KEY_ID }}
+          SES_SECRET_ACCESS_KEY: ${{ secrets.SES_SECRET_ACCESS_KEY }}
+          CASHFREE_APP_ID: ${{ secrets.CASHFREE_APP_ID }}
+          CASHFREE_SECRET_KEY: ${{ secrets.CASHFREE_SECRET_KEY }}
+          FIRST_ADMIN_EMAIL: ${{ vars.FIRST_ADMIN_EMAIL }}
+          FIRST_ADMIN_NAME: ${{ vars.FIRST_ADMIN_NAME }}
+        run: deploy/aws/deploy.sh

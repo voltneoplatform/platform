@@ -3,7 +3,10 @@
  * setting is missing or unsafe, rather than failing later at runtime.
  */
 
-export type OtpDelivery = 'log' | 'memory';
+/** "ses" emails codes through AWS SES (staff who sign in with email). SMS needs a provider. */
+export type OtpDelivery = 'log' | 'memory' | 'ses';
+/** Where the server runs. "staging" is the hosted test site; only NODE_ENV=production uses it. */
+export type Deployment = 'local' | 'staging' | 'production';
 /** How SMS and WhatsApp messages to drivers are delivered (no provider chosen yet). */
 export type MessageDelivery = 'log' | 'memory';
 
@@ -17,8 +20,29 @@ export interface CashfreeConfig {
   apiVersion: string;
 }
 
+export interface SesConfig {
+  region: string;
+  /** e.g. "Volt Neo <no-reply@voltcompany.in>" */
+  from: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+export type FileStorageConfig =
+  | { kind: 'local'; dir: string }
+  | {
+      kind: 's3';
+      bucket: string;
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      /** Only for S3-compatible test servers; AWS needs none. */
+      endpoint: string | null;
+    };
+
 export interface AppConfig {
   nodeEnv: 'development' | 'test' | 'production';
+  deployment: Deployment;
   port: number;
   databaseUrl: string;
   jwtAccessSecret: string;
@@ -39,6 +63,9 @@ export interface AppConfig {
   kycEncryptionKey: Buffer;
   /** Private folder for uploaded documents (local storage adapter). */
   fileStorageDir: string;
+  /** Where uploaded documents live: the local folder, or a private S3 bucket. */
+  fileStorage: FileStorageConfig;
+  ses: SesConfig | null;
   /** Minutes a link to a private file stays valid. */
   fileLinkTtlSeconds: number;
   messageDelivery: MessageDelivery;
@@ -102,9 +129,35 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('KYC_ENCRYPTION_KEY still has the development example value');
   }
 
+  const deployment = (env.DEPLOYMENT || 'local') as Deployment;
+  if (!['local', 'staging', 'production'].includes(deployment)) {
+    throw new Error('DEPLOYMENT must be local, staging or production');
+  }
+  if (nodeEnv === 'production' && deployment === 'local') {
+    throw new Error('Set DEPLOYMENT to staging or production when NODE_ENV=production');
+  }
+  if (nodeEnv !== 'production' && deployment !== 'local') {
+    throw new Error(`DEPLOYMENT=${deployment} needs NODE_ENV=production`);
+  }
+
   const otpDelivery = (env.OTP_DELIVERY ?? 'log') as OtpDelivery;
-  if (!['log', 'memory'].includes(otpDelivery)) {
-    throw new Error('OTP_DELIVERY must be "log" or "memory" until real providers are added');
+  if (!['log', 'memory', 'ses'].includes(otpDelivery)) {
+    throw new Error('OTP_DELIVERY must be "log", "memory" or "ses"');
+  }
+  if (otpDelivery === 'log' && nodeEnv === 'production') {
+    // "log" prints codes to the server log: never on a hosted server.
+    throw new Error(
+      'A hosted server needs OTP_DELIVERY=ses (email codes); "log" is for development',
+    );
+  }
+  let ses: SesConfig | null = null;
+  if (otpDelivery === 'ses') {
+    ses = {
+      region: env.SES_REGION || 'ap-south-1',
+      from: required(env, 'SES_FROM'),
+      accessKeyId: required(env, 'SES_ACCESS_KEY_ID'),
+      secretAccessKey: required(env, 'SES_SECRET_ACCESS_KEY'),
+    };
   }
   if (otpDelivery === 'memory' && nodeEnv !== 'test') {
     throw new Error('OTP_DELIVERY "memory" is for automated tests only');
@@ -116,6 +169,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (messageDelivery === 'memory' && nodeEnv !== 'test') {
     throw new Error('MESSAGE_DELIVERY "memory" is for automated tests only');
   }
+  if (messageDelivery === 'log' && deployment === 'production') {
+    // Receipts and reminders must reach drivers (D16); the test site only logs them.
+    throw new Error(
+      'Production needs a real SMS/WhatsApp provider for driver messages; none is configured yet',
+    );
+  }
+
+  const storageKind = env.FILE_STORAGE || 'local';
+  if (!['local', 's3'].includes(storageKind)) throw new Error('FILE_STORAGE must be local or s3');
+  if (storageKind === 'local' && nodeEnv === 'production') {
+    throw new Error('A hosted server needs FILE_STORAGE=s3 (the server disk is not backed up)');
+  }
+  const fileStorageDir = env.FILE_STORAGE_DIR || './storage';
+  const fileStorage: FileStorageConfig =
+    storageKind === 's3'
+      ? {
+          kind: 's3',
+          bucket: required(env, 'S3_BUCKET'),
+          region: env.S3_REGION || 'ap-south-1',
+          accessKeyId: required(env, 'S3_ACCESS_KEY_ID'),
+          secretAccessKey: required(env, 'S3_SECRET_ACCESS_KEY'),
+          endpoint: env.S3_ENDPOINT || null,
+        }
+      : { kind: 'local', dir: fileStorageDir };
 
   const paymentWebhookSecrets: Record<string, string> = {};
   const testSecret = env.PAYMENT_TEST_WEBHOOK_SECRET;
@@ -140,8 +217,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (!['sandbox', 'production'].includes(cfEnv)) {
       throw new Error('CASHFREE_ENV must be "sandbox" or "production"');
     }
-    if (cfEnv === 'sandbox' && nodeEnv === 'production') {
+    if (cfEnv === 'sandbox' && deployment === 'production') {
       throw new Error('Production must use CASHFREE_ENV=production');
+    }
+    if (cfEnv === 'production' && deployment !== 'production') {
+      // Real money only moves on the production server, never on the test site.
+      throw new Error('CASHFREE_ENV=production is allowed only with DEPLOYMENT=production');
     }
     cashfree = {
       env: cfEnv,
@@ -165,16 +246,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           .map((o) => o.trim())
           .filter(Boolean);
 
-  if (nodeEnv === 'production') {
-    // "log" prints codes to the server log. Production must wait for a real
-    // SMS/email provider adapter (founder decision, needed before M2 goes live).
-    throw new Error(
-      'Production needs a real SMS/email provider for OTP delivery; none is configured yet',
-    );
-  }
-
   return {
     nodeEnv,
+    deployment,
     port: int(env, 'PORT', 4000),
     databaseUrl: required(env, 'DATABASE_URL'),
     jwtAccessSecret,
@@ -190,7 +264,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminOrigin: env.ADMIN_ORIGIN ?? 'http://localhost:3000',
     extraOrigins,
     kycEncryptionKey,
-    fileStorageDir: env.FILE_STORAGE_DIR || './storage',
+    fileStorageDir,
+    fileStorage,
+    ses,
     fileLinkTtlSeconds: int(env, 'FILE_LINK_TTL_SECONDS', 300, 30),
     messageDelivery,
     paymentWebhookSecrets,

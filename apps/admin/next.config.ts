@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import type { NextConfig } from 'next';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
@@ -6,6 +7,10 @@ const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ['@voltneo/shared'],
+  // The server image (deploy/admin.Dockerfile) runs the self-contained build.
+  ...(process.env.NEXT_OUTPUT === 'standalone'
+    ? { output: 'standalone' as const, outputFileTracingRoot: join(__dirname, '../..') }
+    : {}),
   // The panel calls the API on its own origin (/v1/...), so the refresh-token
   // cookie stays first-party and SameSite=Strict works.
   async rewrites() {
