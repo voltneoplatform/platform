@@ -123,6 +123,8 @@ for r in "${recipients[@]}"; do
     || { ses create-email-identity --email-identity "$r" >/dev/null; notice "Email check sent" "AWS emailed $r a link to confirm the address"; }
 done
 
+[ -n "${SES_TEST_RECIPIENTS:-}" ] || notice "Email testers" "Not set: add the GitHub variable SES_TEST_RECIPIENTS (comma-separated emails) while SES is in its sandbox"
+
 # --- Summary -----------------------------------------------------------------------
 domain_status=$(ses get-email-identity --email-identity "$DOMAIN" | jq -r '.VerificationStatus')
 sandbox=$(ses get-account | jq -r 'if .ProductionAccessEnabled then "production access" else "sandbox (confirmed addresses only)" end')

@@ -101,6 +101,7 @@ payment=none
   put ADMIN_HOST "$ADMIN_HOST"
   put API_HOST "$API_HOST"
 } > "$work/.env"
+[ -n "${FIRST_ADMIN_EMAIL:-}" ] || notice "First admin" "Not set: add the GitHub variable FIRST_ADMIN_EMAIL to create the first super admin"
 [ "$payment" = cashfree ] || notice "UPI links" "Off: add the CASHFREE_APP_ID and CASHFREE_SECRET_KEY secrets to turn on Cashfree sandbox"
 
 # --- Copy and apply ---------------------------------------------------------------
