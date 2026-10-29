@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { COMPANY, companyIdentity } from '@voltneo/shared';
 import type { Lang } from './texts';
 
 /**
@@ -54,7 +55,7 @@ export class Pdf {
       bufferPages: true,
       info: {
         Title: info.title,
-        Author: 'Volt Neo',
+        Author: `Volt Neo (${COMPANY.legalName})`,
         Creator: 'Volt Neo platform',
         CreationDate: info.createdAt,
       },
@@ -81,6 +82,9 @@ export class Pdf {
     const d = this.doc;
     d.font('bold').fontSize(16).fillColor(INK).text('Volt Neo', MARGIN.left, MARGIN.top);
     d.font('regular').fontSize(9).fillColor(MUTED).text('Neo Own');
+    // The company behind the brand (L14). The legal name stays in English in every language.
+    d.font('regular').fontSize(7.5).fillColor(MUTED);
+    for (const line of companyIdentity()) d.text(line, { width: this.width });
     d.moveDown(0.6);
     d.font('bold').fontSize(14).fillColor(INK).text(title);
     if (subtitle) d.font('regular').fontSize(9).fillColor(MUTED).text(subtitle);

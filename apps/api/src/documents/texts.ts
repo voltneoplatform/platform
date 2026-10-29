@@ -1,3 +1,5 @@
+import { COMPANY } from '@voltneo/shared';
+
 /**
  * Wording for Schedule 1, Schedule 5, receipts and receipt messages, in the
  * driver's language. English follows the Plain-Language Draft V1.
@@ -165,7 +167,7 @@ const EN: Texts = {
   beforeInstallation: 'Before installation',
   driverSignature: 'Driver signature or thumb impression',
   date: 'Date',
-  forVoltNeo: 'For Volt Neo',
+  forVoltNeo: `For ${COMPANY.legalName} (Volt Neo)`,
   nameAndId: 'Name and staff ID',
   k5Intro: 'Read aloud to the driver before signing.',
   k5PayNow: 'You pay now (Down Payment, not refunded)',
@@ -273,7 +275,7 @@ const BN: Texts = {
   beforeInstallation: 'ইনস্টলেশনের আগে',
   driverSignature: 'চালকের সই বা টিপসই',
   date: 'তারিখ',
-  forVoltNeo: 'Volt Neo-র পক্ষে',
+  forVoltNeo: `${COMPANY.legalName} (Volt Neo)-র পক্ষে`,
   nameAndId: 'নাম ও কর্মী আইডি',
   k5Intro: 'সই করার আগে চালককে পড়ে শোনাতে হবে।',
   k5PayNow: 'এখন দেবেন (ডাউন পেমেন্ট, ফেরত হবে না)',
@@ -380,7 +382,7 @@ const HI: Texts = {
   beforeInstallation: 'इंस्टॉलेशन से पहले',
   driverSignature: 'चालक के हस्ताक्षर या अँगूठे का निशान',
   date: 'तारीख',
-  forVoltNeo: 'Volt Neo की ओर से',
+  forVoltNeo: `${COMPANY.legalName} (Volt Neo) की ओर से`,
   nameAndId: 'नाम और कर्मचारी आईडी',
   k5Intro: 'हस्ताक्षर से पहले चालक को पढ़कर सुनाएँ।',
   k5PayNow: 'अभी देंगे (डाउन पेमेंट, वापस नहीं होगा)',
