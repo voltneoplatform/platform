@@ -278,8 +278,8 @@ export class DocumentsService {
   }
 
   /**
-   * Schedule 8: Ownership Transfer Certificate (clause E9). The signatory line
-   * stays blank until the Volt Neo legal entity name is settled (L14).
+   * Schedule 8: Ownership Transfer Certificate (clause E9), signed for the
+   * company behind the brand (L14).
    */
   async certificate(data: CertificateDocData, lang: Lang): Promise<Buffer> {
     const t = TEXTS[lang];

@@ -9,3 +9,4 @@ export * from './payments';
 export * from './words';
 export * from './collections';
 export * from './operations';
+export * from './company';
