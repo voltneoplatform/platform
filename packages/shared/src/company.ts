@@ -1,6 +1,6 @@
 /**
  * The company behind the Volt Neo brand (L14), from its GST registration
- * certificate (REG-06, issued 4 Sep 2026) and PAN. Printed on every document
+ * certificate (REG-06, issued 4 Sep 2026), PAN and CIN. Printed on every document
  * the platform issues. CONFIRMED by the founder on 29 Oct 2026.
  */
 export const COMPANY = {
@@ -9,9 +9,9 @@ export const COMPANY = {
   constitution: 'Private Limited Company',
   gstin: '19AAKCV8039M1ZG',
   pan: 'AAKCV8039M',
-  /** Not on the GST or PAN documents; added once the founder sends it. */
-  cin: null as string | null,
-  /** Principal place of business on the GST certificate. The registered office may differ. */
+  /** Corporate Identification Number (founder, 29 Oct 2026). */
+  cin: 'U74901WB2025PTC276936' as string | null,
+  /** Registered office and GST principal place of business (the same, founder 29 Oct 2026). */
   address: 'Ground Floor, 1966, Nayabad, Kolkata, West Bengal 700094',
 } as const;
 
