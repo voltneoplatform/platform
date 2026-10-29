@@ -80,6 +80,31 @@ describe('loadConfig', () => {
       );
     });
 
+    it('sends SMS through SMSGatewayHub when its key is set', () => {
+      expect(() => loadConfig({ ...hosted, MESSAGE_DELIVERY: 'smsgatewayhub' })).toThrow(
+        /SMSGATEWAYHUB_API_KEY/,
+      );
+      const c = loadConfig({
+        ...hosted,
+        MESSAGE_DELIVERY: 'smsgatewayhub',
+        SMSGATEWAYHUB_API_KEY: 'k'.repeat(20),
+      });
+      expect(c.smsGatewayHub).toEqual({
+        apiKey: 'k'.repeat(20),
+        baseUrl: 'https://www.smsgatewayhub.com',
+        route: '1',
+      });
+      // With a real SMS provider, production no longer waits on driver messages.
+      expect(() =>
+        loadConfig({
+          ...hosted,
+          DEPLOYMENT: 'production',
+          MESSAGE_DELIVERY: 'smsgatewayhub',
+          SMSGATEWAYHUB_API_KEY: 'k'.repeat(20),
+        }),
+      ).not.toThrow(/SMS\/WhatsApp provider/);
+    });
+
     it('allows only Cashfree sandbox on the test site', () => {
       const cf = {
         ...hosted,

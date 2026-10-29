@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -17,7 +17,8 @@ export function configureApp(app: INestApplication): void {
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({ origin: [config.adminOrigin, ...config.extraOrigins], credentials: true });
-  app.setGlobalPrefix('v1');
+  // Short payment links (/p/<code>) stay outside /v1 so the SMS address is short.
+  app.setGlobalPrefix('v1', { exclude: [{ path: 'p/:code', method: RequestMethod.GET }] });
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );

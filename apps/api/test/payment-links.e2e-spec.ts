@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { matchesTemplate } from '../src/messaging/sms-templates';
 import { rupeesToPaise as r } from '@voltneo/shared';
 import { APP_CONFIG, loadConfig } from '../src/config/app-config';
 import { CashfreeGateway, FakeGateway, PAYMENT_GATEWAY } from '../src/payments/gateway';
@@ -51,8 +52,16 @@ describe('UPI payment links (M5)', () => {
       expect(first.items[0]).toMatchObject({ amount: r(1500), status: 'ACTIVE' });
       const sms = ctx.messages.sent.at(-1)!;
       expect(sms.template).toBe('payment_link');
-      expect(sms.body).toContain(first.items[0].url);
-      expect(sms.body).toContain('₹1,500');
+      // The SMS carries our short link, which forwards to the gateway's page.
+      const short = first.items[0].smsUrl as string;
+      expect(short).toMatch(/^https:\/\/api\.voltcompany\.in\/p\/[A-Za-z0-9]{8}$/);
+      expect(sms.body).toContain(short);
+      expect(matchesTemplate(sms.body, 'payment_link', sms.language)).toBe(true);
+      const code = short.split('/').pop()!;
+      const go = await ctx.http.get(`/p/${code}`).expect(302);
+      expect(go.headers.location).toBe(first.items[0].url);
+      await ctx.http.get('/p/NoSuchOne').expect(404);
+      await ctx.http.get('/p/../v1').expect(404);
 
       // A second link replaces the first, so the driver has one to pay.
       const second = (await send(r(3000), finance.token).expect(201)).body;
@@ -61,6 +70,9 @@ describe('UPI payment links (M5)', () => {
         'CANCELLED',
       ]);
       const open = second.items[0];
+      // The replaced link's short address now says it is closed.
+      const res = await ctx.http.get(`/p/${code}`).expect(410);
+      expect(res.text).toContain('expired or was replaced');
 
       ctx.messages.sent.length = 0;
       const paid = await ctx.http
@@ -74,6 +86,8 @@ describe('UPI payment links (M5)', () => {
       });
       expect(payment).toMatchObject({ amount: r(3000), source: 'GATEWAY', provider: 'fake' });
       expect(ctx.messages.sent.at(-1)!.template).toBe('payment_receipt');
+      const paidPage = await ctx.http.get(`/p/${open.smsUrl.split('/').pop()}`).expect(410);
+      expect(paidPage.text).toContain('already been paid');
 
       // Final: no second payment, no resend.
       await ctx.http

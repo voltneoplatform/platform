@@ -99,6 +99,7 @@ jobs:
           SES_SECRET_ACCESS_KEY: ${{ secrets.SES_SECRET_ACCESS_KEY }}
           CASHFREE_APP_ID: ${{ secrets.CASHFREE_APP_ID }}
           CASHFREE_SECRET_KEY: ${{ secrets.CASHFREE_SECRET_KEY }}
+          SMSGATEWAYHUB_API_KEY: ${{ secrets.SMSGATEWAYHUB_API_KEY }}
           FIRST_ADMIN_EMAIL: ${{ vars.FIRST_ADMIN_EMAIL }}
           FIRST_ADMIN_NAME: ${{ vars.FIRST_ADMIN_NAME }}
         run: deploy/aws/deploy.sh

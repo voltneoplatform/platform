@@ -2,7 +2,7 @@
 # Puts a built release on the server. Needs: API_IMAGE, ADMIN_IMAGE, GHCR_USER,
 # GHCR_TOKEN, SES_ACCESS_KEY_ID, SES_SECRET_ACCESS_KEY, and SERVER_IP, DB_HOST,
 # DB_PORT from provision.sh. Optional: CASHFREE_APP_ID, CASHFREE_SECRET_KEY,
-# FIRST_ADMIN_EMAIL, FIRST_ADMIN_NAME.
+# FIRST_ADMIN_EMAIL, FIRST_ADMIN_NAME, SMSGATEWAYHUB_API_KEY.
 # shellcheck source=deploy/aws/lib.sh
 source "$(dirname "$0")/lib.sh"
 work=$(mktemp -d)
@@ -81,7 +81,14 @@ payment=none
   put FILE_STORAGE s3
   put S3_BUCKET "$BUCKET"
   put S3_REGION "$REGION"
-  put MESSAGE_DELIVERY log
+  # Driver SMS and staff SMS codes: SMSGatewayHub once its key is in GitHub secrets.
+  # Each message still needs its DLT template ID (apps/api/src/messaging/dlt-registration.ts).
+  if [ -n "${SMSGATEWAYHUB_API_KEY:-}" ]; then
+    put MESSAGE_DELIVERY smsgatewayhub
+    put SMSGATEWAYHUB_API_KEY "$SMSGATEWAYHUB_API_KEY"
+  else
+    put MESSAGE_DELIVERY log
+  fi
   put JOBS_ENABLED true
   put ADMIN_ORIGIN "https://$ADMIN_HOST"
   put PUBLIC_API_URL "https://$API_HOST"
@@ -101,6 +108,7 @@ payment=none
   put ADMIN_HOST "$ADMIN_HOST"
   put API_HOST "$API_HOST"
 } > "$work/.env"
+[ -n "${SMSGATEWAYHUB_API_KEY:-}" ] || notice "SMS" "Off (logged only): add the SMSGATEWAYHUB_API_KEY secret to send SMS through SMSGatewayHub"
 [ -n "${FIRST_ADMIN_EMAIL:-}" ] || notice "First admin" "Not set: add the GitHub variable FIRST_ADMIN_EMAIL to create the first super admin"
 [ "$payment" = cashfree ] || notice "UPI links" "Off: add the CASHFREE_APP_ID and CASHFREE_SECRET_KEY secrets to turn on Cashfree sandbox"
 

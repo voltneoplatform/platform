@@ -15,12 +15,32 @@ import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { MessagingService } from '../messaging/messaging.service';
+import { PAY_LINK_BASE } from '../messaging/sms-templates';
 import { TEXTS, docDate } from '../documents/texts';
 import type { AuthenticatedStaff, RequestMeta } from '../common/decorators';
 import { CLOCK, type Clock } from '../common/clock';
 import { istDate, isUniqueViolation, serializable, type Tx } from '../common/util';
 import { PAYMENT_GATEWAY, type PaymentGateway } from './gateway';
 import { WebhooksService } from './webhooks.service';
+
+const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+/** 8 random letters and digits (about 47 bits): the code in https://api.voltcompany.in/p/<code>. */
+export function newShortCode(): string {
+  const bytes = randomBytes(16);
+  let out = '';
+  for (const b of bytes) {
+    if (b >= 248) continue; // keep the spread even (248 = 4 × 62)
+    out += BASE62[b % 62];
+    if (out.length === 8) return out;
+  }
+  return newShortCode();
+}
+
+/** The address sent by SMS: our short link, or the gateway's own for links made before short codes. */
+export function smsLinkUrl(link: Pick<PaymentLink, 'shortCode' | 'url'>): string {
+  return link.shortCode ? `${PAY_LINK_BASE}${link.shortCode}` : link.url;
+}
 
 const DAY = 86_400_000;
 
@@ -49,6 +69,8 @@ export class PaymentLinksService {
       linkId: l.linkId,
       gateway: l.gateway,
       url: l.url,
+      /** The address the driver gets by SMS. */
+      smsUrl: smsLinkUrl(l),
       amount: l.amount,
       status: l.status,
       expiresAt: l.expiresAt,
@@ -164,6 +186,7 @@ export class PaymentLinksService {
             gateway: this.gateway.name,
             gatewayRef: created.gatewayRef,
             url: created.url,
+            shortCode: newShortCode(),
             amount: amountPaise,
             purpose: `Volt Neo agreement ${a.number}`,
             expiresAt,
@@ -222,11 +245,26 @@ export class PaymentLinksService {
       body: TEXTS[to.language].paymentLinkSms({
         amount: formatRupees(link.amount),
         agreement: agreementNumber,
-        url: link.url,
+        url: smsLinkUrl(link),
         until: docDate(istDate(link.expiresAt)),
       }),
       agreementId: link.agreementId,
     });
+  }
+
+  /**
+   * Where a short link leads: the gateway's payment page while the link is open,
+   * otherwise why it is closed. Public: the driver opens it from the SMS.
+   */
+  async resolveShortCode(
+    code: string,
+  ): Promise<{ redirect: string } | { closed: 'PAID' | 'CLOSED' | 'UNKNOWN' }> {
+    if (!/^[A-Za-z0-9]{8}$/.test(code)) return { closed: 'UNKNOWN' };
+    const l = await this.prisma.paymentLink.findUnique({ where: { shortCode: code } });
+    if (!l) return { closed: 'UNKNOWN' };
+    if (l.status === 'PAID') return { closed: 'PAID' };
+    if (l.status === 'ACTIVE' && l.expiresAt > this.clock.now()) return { redirect: l.url };
+    return { closed: 'CLOSED' };
   }
 
   private async load(id: string) {

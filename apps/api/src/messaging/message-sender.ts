@@ -1,16 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Lang } from '../documents/texts';
+import { dltKeyFor } from './sms-templates';
+import type { SmsGatewayHubClient } from './smsgatewayhub';
 
 export interface DriverMessage {
   channel: 'SMS' | 'WHATSAPP';
   to: string;
   body: string;
   template: string;
+  language: Lang;
 }
 
 /**
  * Sends SMS and WhatsApp messages to drivers. Every outside service sits behind
- * an adapter (spec section 7); a real provider adapter is added once the
- * founder opens an account. Until then messages are logged, not delivered.
+ * an adapter (spec section 7): SMSGatewayHub for SMS; logged in development.
  */
 export interface MessageSender {
   readonly provider: string;
@@ -45,5 +48,19 @@ export class MemoryMessageSender implements MessageSender {
     }
     this.sent.push(m);
     return { providerRef: `mem-${this.sent.length}` };
+  }
+}
+
+/** Driver SMS through SMSGatewayHub, each matched to its DLT template. WhatsApp is not set up. */
+export class SmsGatewayHubMessageSender implements MessageSender {
+  readonly provider = 'smsgatewayhub';
+
+  constructor(private readonly client: SmsGatewayHubClient) {}
+
+  async send(m: DriverMessage) {
+    if (m.channel !== 'SMS') throw new Error('WhatsApp is not set up');
+    const key = dltKeyFor(m.template);
+    if (!key) throw new Error(`No DLT template for message "${m.template}"`);
+    return this.client.send({ to: m.to, text: m.body, key, lang: m.language });
   }
 }

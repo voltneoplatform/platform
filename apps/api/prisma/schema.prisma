@@ -1218,6 +1218,8 @@ model PaymentLink {
   gateway      String
   gatewayRef   String?           @map("gateway_ref")
   url          String
+  /// Sent by SMS as https://api.voltcompany.in/p/<shortCode> (DLT variable limit)
+  shortCode    String?           @unique @map("short_code")
   amount       Int
   purpose      String
   status       PaymentLinkStatus @default(ACTIVE)
