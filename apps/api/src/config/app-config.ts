@@ -7,8 +7,16 @@
 export type OtpDelivery = 'log' | 'memory' | 'ses';
 /** Where the server runs. "staging" is the hosted test site; only NODE_ENV=production uses it. */
 export type Deployment = 'local' | 'staging' | 'production';
-/** How SMS and WhatsApp messages to drivers are delivered (no provider chosen yet). */
-export type MessageDelivery = 'log' | 'memory';
+/** How SMS to drivers (and staff sign-in codes by SMS) are delivered. */
+export type MessageDelivery = 'log' | 'memory' | 'smsgatewayhub';
+
+/** SMSGatewayHub account (founder decision 29 Oct 2026). The DLT IDs live in dlt-registration.ts. */
+export interface SmsGatewayHubConfig {
+  apiKey: string;
+  baseUrl: string;
+  /** Route ID from the SMSGatewayHub panel. */
+  route: string;
+}
 
 /** Which gateway creates UPI payment links. "fake" is for development and tests. */
 export type PaymentGatewayKind = 'none' | 'fake' | 'cashfree';
@@ -66,6 +74,7 @@ export interface AppConfig {
   /** Where uploaded documents live: the local folder, or a private S3 bucket. */
   fileStorage: FileStorageConfig;
   ses: SesConfig | null;
+  smsGatewayHub: SmsGatewayHubConfig | null;
   /** Minutes a link to a private file stays valid. */
   fileLinkTtlSeconds: number;
   messageDelivery: MessageDelivery;
@@ -163,9 +172,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('OTP_DELIVERY "memory" is for automated tests only');
   }
   const messageDelivery = (env.MESSAGE_DELIVERY ?? 'log') as MessageDelivery;
-  if (!['log', 'memory'].includes(messageDelivery)) {
-    throw new Error('MESSAGE_DELIVERY must be "log" or "memory" until a provider is added');
+  if (!['log', 'memory', 'smsgatewayhub'].includes(messageDelivery)) {
+    throw new Error('MESSAGE_DELIVERY must be "log", "memory" or "smsgatewayhub"');
   }
+  const smsGatewayHub: SmsGatewayHubConfig | null =
+    messageDelivery === 'smsgatewayhub'
+      ? {
+          apiKey: required(env, 'SMSGATEWAYHUB_API_KEY'),
+          baseUrl: (env.SMSGATEWAYHUB_BASE_URL || 'https://www.smsgatewayhub.com').replace(
+            /\/+$/,
+            '',
+          ),
+          route: env.SMSGATEWAYHUB_ROUTE || '1',
+        }
+      : null;
   if (messageDelivery === 'memory' && nodeEnv !== 'test') {
     throw new Error('MESSAGE_DELIVERY "memory" is for automated tests only');
   }
@@ -267,6 +287,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     fileStorageDir,
     fileStorage,
     ses,
+    smsGatewayHub,
     fileLinkTtlSeconds: int(env, 'FILE_LINK_TTL_SECONDS', 300, 30),
     messageDelivery,
     paymentWebhookSecrets,

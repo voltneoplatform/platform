@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import type { SesConfig } from '../config/app-config';
+import { TEXTS } from '../documents/texts';
+import type { SmsGatewayHubClient } from '../messaging/smsgatewayhub';
 
 export interface OtpMessage {
   channel: 'EMAIL' | 'SMS';
@@ -105,5 +107,42 @@ export class SesOtpSender implements OtpSender {
         },
       }),
     );
+  }
+}
+
+/** Sign-in codes by SMS through SMSGatewayHub, on the approved DLT sign-in template (English for staff). */
+export class SmsOtpSender implements OtpSender {
+  readonly channels = new Set<OtpMessage['channel']>(['SMS']);
+
+  constructor(
+    private readonly client: SmsGatewayHubClient,
+    private readonly ttlMinutes: number,
+  ) {}
+
+  async send(m: OtpMessage): Promise<void> {
+    if (m.channel !== 'SMS') throw new Error('SMS sender sends SMS only');
+    const text = TEXTS.EN.signInCodeSms({ code: m.code, minutes: String(this.ttlMinutes) });
+    await this.client.send({ to: m.destination, text, key: 'sign_in_code', lang: 'EN', otp: true });
+  }
+}
+
+/** Email codes through one sender and SMS codes through another (either may be missing). */
+export class RoutingOtpSender implements OtpSender {
+  readonly channels: ReadonlySet<OtpMessage['channel']>;
+
+  constructor(
+    private readonly email: OtpSender | null,
+    private readonly sms: OtpSender | null,
+  ) {
+    this.channels = new Set([
+      ...(email ? (['EMAIL'] as const) : []),
+      ...(sms ? (['SMS'] as const) : []),
+    ]);
+  }
+
+  async send(m: OtpMessage): Promise<void> {
+    const target = m.channel === 'EMAIL' ? this.email : this.sms;
+    if (!target) throw new Error(`No sender for ${m.channel} codes`);
+    await target.send(m);
   }
 }

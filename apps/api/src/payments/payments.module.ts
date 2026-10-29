@@ -4,6 +4,7 @@ import { CollectionsModule } from '../collections/collections.module';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { CashService } from './cash.service';
 import { PAYMENT_GATEWAY, gatewayFor } from './gateway';
+import { PayLinkController } from './pay-link.controller';
 import { PaymentLinksController } from './payment-links.controller';
 import { PaymentLinksService } from './payment-links.service';
 import { PaymentsController, WebhooksController } from './payments.controller';
@@ -12,7 +13,7 @@ import { WebhooksService } from './webhooks.service';
 
 @Module({
   imports: [DocumentsModule, CollectionsModule],
-  controllers: [PaymentsController, WebhooksController, PaymentLinksController],
+  controllers: [PaymentsController, WebhooksController, PaymentLinksController, PayLinkController],
   providers: [
     PaymentsService,
     CashService,

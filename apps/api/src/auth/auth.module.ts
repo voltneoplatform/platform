@@ -5,7 +5,16 @@ import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
-import { LogOtpSender, MemoryOtpSender, OTP_SENDER, SesOtpSender } from './otp-sender';
+import { DLT_REGISTRATION } from '../messaging/dlt-registration';
+import { SmsGatewayHubClient } from '../messaging/smsgatewayhub';
+import {
+  LogOtpSender,
+  MemoryOtpSender,
+  OTP_SENDER,
+  RoutingOtpSender,
+  SesOtpSender,
+  SmsOtpSender,
+} from './otp-sender';
 
 @Module({
   imports: [
@@ -26,14 +35,15 @@ import { LogOtpSender, MemoryOtpSender, OTP_SENDER, SesOtpSender } from './otp-s
       inject: [APP_CONFIG],
       useFactory: (config: AppConfig) => {
         if (config.otpDelivery === 'memory') return new MemoryOtpSender();
-        if (config.otpDelivery === 'ses' && config.ses) {
-          return new SesOtpSender(
-            config.ses,
-            Math.round(config.otpTtlSeconds / 60),
-            config.deployment === 'staging',
-          );
-        }
-        return new LogOtpSender();
+        if (config.otpDelivery !== 'ses' || !config.ses) return new LogOtpSender();
+        const minutes = Math.round(config.otpTtlSeconds / 60);
+        const email = new SesOtpSender(config.ses, minutes, config.deployment === 'staging');
+        // SMS codes only once the DLT sign-in template is approved and filled in.
+        const client = config.smsGatewayHub
+          ? new SmsGatewayHubClient(config.smsGatewayHub, DLT_REGISTRATION)
+          : null;
+        const sms = client?.ready('sign_in_code', 'EN') ? new SmsOtpSender(client, minutes) : null;
+        return new RoutingOtpSender(email, sms);
       },
     },
     { provide: APP_GUARD, useClass: AuthGuard },

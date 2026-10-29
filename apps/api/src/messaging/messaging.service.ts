@@ -48,6 +48,7 @@ export class MessagingService {
           to: m.toPhone,
           body: m.body,
           template: m.template,
+          language: m.language,
         });
         await this.prisma.outboundMessage.update({
           where: { id },
