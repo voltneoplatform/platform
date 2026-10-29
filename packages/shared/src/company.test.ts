@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { COMPANY, companyIdentity, companyLine } from './company';
 
 describe('company identity', () => {
