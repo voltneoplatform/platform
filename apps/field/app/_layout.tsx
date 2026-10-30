@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LanguageSwitch } from '@/LanguageSwitch';
 import { SessionProvider, useSession } from '@/session';
 import { C, Loading, Screen } from '@/ui';
 
@@ -22,6 +23,8 @@ function Routes() {
         headerTintColor: '#FFF',
         headerTitleStyle: { fontWeight: '700' },
         contentStyle: { backgroundColor: C.bg },
+        // Language is changed from the small button at the top right of every screen.
+        headerRight: () => <LanguageSwitch onDark />,
       }}
     >
       <Stack.Protected guard={!signedIn}>
