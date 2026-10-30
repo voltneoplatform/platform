@@ -8,24 +8,10 @@ source "$(dirname "$0")/lib.sh"
 work=$(mktemp -d)
 trap 'rm -rf "$work"; "$here/aws/ports.sh" closed || true' EXIT
 umask 077
+SERVER_IP=${SERVER_IP:-$(lsl get-static-ip --static-ip-name "$STATIC_IP" | jq -r .staticIp.ipAddress)}
 
 # --- Short-lived SSH access issued by Lightsail (no stored SSH key) --------------
-# The certificate lasts only minutes, so it is fetched again before each phase.
-ssh_access() {
-  local access
-  access=$(lsl get-instance-access-details --instance-name "$INSTANCE" --protocol ssh)
-  jq -r .accessDetails.privateKey <<<"$access" >"$work/key"
-  jq -r .accessDetails.certKey <<<"$access" >"$work/key-cert.pub"
-  user=$(jq -r .accessDetails.username <<<"$access")
-  jq -r --arg ip "$SERVER_IP" '.accessDetails.hostKeys[] | "\($ip) \(.algorithm) \(.publicKey)"' <<<"$access" >"$work/known_hosts"
-}
-ssh_opts=(-i "$work/key" -o CertificateFile="$work/key-cert.pub" -o UserKnownHostsFile="$work/known_hosts"
-  -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o BatchMode=yes)
-remote() { ssh "${ssh_opts[@]}" "$user@$SERVER_IP" "$@"; }
-
-runner_ip=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')
-"$here/aws/ports.sh" open "$runner_ip/32"
-ssh_access
+ssh_open
 wait_for 300 "SSH to the server" remote true
 
 # --- One-time server setup (Docker, swap); safe to repeat --------------------------
@@ -117,7 +103,7 @@ ssh_access
 remote 'rm -rf /tmp/voltneo-release && mkdir -m 700 /tmp/voltneo-release'
 files=("$here/server/compose.yml" "$here/server/Caddyfile" "$here/server/apply.sh" "$work/runtime.env" "$work/.env")
 [ -f "$work/s3.env" ] && files+=("$work/s3.env")
-scp -q "${ssh_opts[@]}" "${files[@]}" "$user@$SERVER_IP:/tmp/voltneo-release/"
+remote_copy "${files[@]}" "$user@$SERVER_IP:/tmp/voltneo-release/"
 printf '%s' "${GHCR_TOKEN:?}" | remote "sudo GHCR_USER='${GHCR_USER:?}' bash /tmp/voltneo-release/apply.sh"
 
 # --- Check from outside --------------------------------------------------------------

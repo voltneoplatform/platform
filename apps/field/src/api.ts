@@ -41,6 +41,36 @@ export interface Session {
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+/** When a sign-in token (JWT) expires, in ms since 1970; null if it cannot be read. */
+export function tokenExpiry(token: string): number | null {
+  const part = token.split('.')[1];
+  if (!part) return null;
+  let bits = 0;
+  let value = 0;
+  let text = '';
+  for (const ch of part.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')) {
+    const v = B64.indexOf(ch);
+    if (v < 0) return null;
+    value = (value << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      text += String.fromCharCode((value >> bits) & 0xff);
+    }
+  }
+  try {
+    const exp = (JSON.parse(text) as { exp?: unknown }).exp;
+    return typeof exp === 'number' ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Renew the sign-in token this long before it expires, so a request is never refused midway. */
+const RENEW_BEFORE_MS = 60_000;
+
 function messageFrom(body: unknown, status: number): string {
   const b = body as { message?: unknown } | undefined;
   if (Array.isArray(b?.message)) return (b.message as unknown[]).map(String).join('. ');
@@ -50,6 +80,7 @@ function messageFrom(body: unknown, status: number): string {
 
 export class FieldApi {
   private access: string | null = null;
+  private accessExpiresAt: number | null = null;
   private refreshing: Promise<Session | null> | null = null;
   private readonly fetchImpl: Fetch;
 
@@ -59,6 +90,7 @@ export class FieldApi {
       store: TokenStore;
       fetch?: Fetch;
       timeoutMs?: number;
+      now?: () => number;
       onSessionEnded?: () => void;
     },
   ) {
@@ -78,8 +110,9 @@ export class FieldApi {
         headers,
         signal: controller.signal,
       });
-    } catch {
-      throw new ApiError(0, 'NO_CONNECTION');
+    } catch (err) {
+      // Kept for the error notice, so a field report says what the phone saw.
+      throw new ApiError(0, 'NO_CONNECTION', { detail: String(err).slice(0, 200) });
     } finally {
       clearTimeout(timer);
     }
@@ -100,6 +133,7 @@ export class FieldApi {
 
   private async keep(session: Session): Promise<Session> {
     this.access = session.accessToken;
+    this.accessExpiresAt = tokenExpiry(session.accessToken);
     await this.opts.store.set(session.refreshToken);
     return session;
   }
@@ -140,6 +174,7 @@ export class FieldApi {
           if (res.status === 401 || res.status === 403) {
             await this.opts.store.set(null);
             this.access = null;
+            this.accessExpiresAt = null;
             return null;
           }
           return this.keep(await this.parse<Session>(res));
@@ -152,6 +187,16 @@ export class FieldApi {
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    // An expired token is refused before the server reads the body; for a photo
+    // upload that breaks the connection mid-send. Renew it first instead.
+    const now = this.opts.now?.() ?? Date.now();
+    if (
+      this.access &&
+      this.accessExpiresAt !== null &&
+      this.accessExpiresAt - now < RENEW_BEFORE_MS
+    ) {
+      await this.restore();
+    }
     let res = await this.raw(path, init);
     if (res.status === 401) {
       const session = await this.restore();
@@ -187,6 +232,7 @@ export class FieldApi {
       /* signing out on the phone matters more than telling the server */
     }
     this.access = null;
+    this.accessExpiresAt = null;
     await this.opts.store.set(null);
   }
 }

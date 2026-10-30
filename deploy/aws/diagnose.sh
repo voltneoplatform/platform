@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Read-only health report for the test site, shown as annotations on the run:
+# container state, recent errors from the API and Caddy, and a file-storage
+# round trip. Changes nothing except a small test file in the bucket.
+# shellcheck source=deploy/aws/lib.sh
+source "$(dirname "$0")/lib.sh"
+work=$(mktemp -d)
+trap 'rm -rf "$work"; "$here/aws/ports.sh" closed || true' EXIT
+umask 077
+SERVER_IP=$(lsl get-static-ip --static-ip-name "$STATIC_IP" | jq -r .staticIp.ipAddress)
+ssh_open
+wait_for 120 "SSH to the server" remote true
+
+# show <title> <text>: up to 10 notices of ~3,000 characters each.
+show() {
+  local title=$1 text=$2 i=0
+  while [ -n "$text" ] && [ $i -lt 10 ]; do
+    i=$((i + 1))
+    echo "::notice title=$title ($i)::$(head -c 3000 <<<"$text" | tr '\n' '¶' | sed 's/¶/ ¶ /g')"
+    text=$(tail -c +3001 <<<"$text")
+  done
+}
+
+# /opt/voltneo is readable by root only.
+dc() { remote "sudo bash -c $(printf '%q' "cd /opt/voltneo && $1")"; }
+
+show "Containers" "$(dc 'docker compose ps --format "{{.Service}} {{.State}} {{.Status}}"' 2>&1)"
+show "API errors (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h api 2>&1 | grep -iE 'error|exception|warn|fail' | tail -40" 2>&1)"
+# Caddy's request log is JSON; summarise refused or failed requests on the server.
+cat >"$work/requests.py" <<'PY'
+import json, sys
+for line in sys.stdin:
+    try:
+        e = json.loads(line[line.index("{"):])
+    except ValueError:
+        continue
+    status = e.get("status", 0)
+    if status >= 400 or e.get("err_id"):
+        r = e.get("request", {})
+        print(f'{e.get("ts", 0):.0f} {status} {r.get("method", "")} {r.get("uri", "").split("?")[0]} '
+              f'{e.get("duration", 0):.2f}s in={r.get("headers", {}).get("Content-Length", ["-"])[0]} {e.get("msg", "")}')
+PY
+remote_copy "$work/requests.py" "$user@$SERVER_IP:/tmp/requests.py"
+show "Requests answered 4xx/5xx (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h caddy 2>&1 | python3 /tmp/requests.py | tail -30; rm -f /tmp/requests.py" 2>&1)"
+show "Caddy errors (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h caddy 2>&1 | grep -iE '\"level\":\"(error|warn)\"' | tail -15" 2>&1)"
+
+# File storage round trip from inside the API container, with its own settings.
+cat >"$work/s3check.js" <<'JS'
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+(async () => {
+  const c = new S3Client({ region: process.env.S3_REGION, credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY } });
+  const Key = `ops-check/${Date.now()}.txt`, Bucket = process.env.S3_BUCKET;
+  const t = Date.now();
+  try {
+    await c.send(new PutObjectCommand({ Bucket, Key, Body: 'ok', ContentType: 'text/plain', IfNoneMatch: '*' }));
+    const g = await c.send(new GetObjectCommand({ Bucket, Key }));
+    const body = await g.Body.transformToString();
+    await c.send(new DeleteObjectCommand({ Bucket, Key }));
+    console.log(`put/get/delete ok in ${Date.now() - t} ms, read back "${body}", encryption ${g.ServerSideEncryption || 'none reported'}`);
+  } catch (e) {
+    console.log(`FAILED after ${Date.now() - t} ms: ${e.name}: ${e.message} (HTTP ${e.$metadata?.httpStatusCode})`);
+  }
+})();
+JS
+remote_copy "$work/s3check.js" "$user@$SERVER_IP:/tmp/s3check.js"
+# Copied next to the API's own packages so Node finds the AWS SDK.
+show "File storage check" "$(dc 'docker compose cp /tmp/s3check.js api:/repo/apps/api/ops-s3check.js >/dev/null && docker compose exec -T api node ops-s3check.js; docker compose exec -T -u root api rm -f ops-s3check.js; rm -f /tmp/s3check.js' 2>&1)"

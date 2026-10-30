@@ -23,6 +23,7 @@ if [ -s "$REL/s3.env" ]; then mv "$REL/s3.env" s3.env; fi
 test -s s3.env || { echo "s3.env is missing"; exit 1; }
 
 [ -f .env ] && cp .env .env.previous
+caddy_before=$(sha256sum Caddyfile 2>/dev/null || true)
 install -m 644 "$REL/compose.yml" compose.yml
 install -m 644 "$REL/Caddyfile" Caddyfile
 install -m 600 "$REL/.env" .env
@@ -39,6 +40,11 @@ if grep -q "^BOOTSTRAP_SUPER_ADMIN_EMAIL='[^']" runtime.env; then
   docker compose run --rm --no-deps -T api node_modules/.bin/tsx prisma/seed.ts
 fi
 
+# Caddy reads its file only at start (its admin endpoint is off), so restart it when the file changed.
+if [ "$caddy_before" != "$(sha256sum Caddyfile)" ] && [ -n "$(docker compose ps -q caddy)" ]; then
+  echo "Caddyfile changed; Caddy restarts after the update"
+  restart_caddy=1
+fi
 docker compose up -d --remove-orphans --wait --wait-timeout 180 || {
   echo "::error::The new version did not become healthy; rolling back"
   docker compose logs --tail 80 api admin || true
@@ -48,6 +54,9 @@ docker compose up -d --remove-orphans --wait --wait-timeout 180 || {
   fi
   exit 1
 }
+if [ -n "${restart_caddy:-}" ]; then
+  docker compose restart caddy
+fi
 docker compose ps
 docker image prune -af --filter 'until=168h' >/dev/null
 echo "Deployed"
