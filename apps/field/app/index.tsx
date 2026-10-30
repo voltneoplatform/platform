@@ -1,7 +1,7 @@
 import { Stack, router } from 'expo-router';
-import { LANGS, LANG_NAMES, rupees } from '@/i18n';
+import { rupees } from '@/i18n';
 import { useSession } from '@/session';
-import { Button, Card, Choice, ErrorNotice, H1, Muted, Screen, Tile, useLoad } from '@/ui';
+import { Button, ErrorNotice, H1, Muted, Screen, Tile, useLoad } from '@/ui';
 
 interface Summary {
   today: string;
@@ -18,7 +18,7 @@ interface Summary {
 }
 
 export default function Home() {
-  const { t, staff, can, api, signOut, lang, setLang, labels } = useSession();
+  const { t, staff, can, api, signOut, labels } = useSession();
   const { data, error, loading, reload } = useLoad(
     () => api.get<Summary>('/v1/field/summary'),
     [api],
@@ -75,14 +75,6 @@ export default function Home() {
         />
       )}
 
-      <Card>
-        <Choice
-          label={t('language')}
-          value={lang}
-          onChange={setLang}
-          options={LANGS.map((l) => ({ value: l, label: LANG_NAMES[l] }))}
-        />
-      </Card>
       <Button title={t('signOut')} variant="secondary" onPress={() => void signOut()} />
     </Screen>
   );
