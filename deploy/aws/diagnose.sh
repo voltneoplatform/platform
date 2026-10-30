@@ -21,9 +21,12 @@ show() {
   done
 }
 
-show "Containers" "$(remote 'cd /opt/voltneo && sudo docker compose ps --format "{{.Service}} {{.State}} {{.Status}}"' 2>&1)"
-show "API errors (last ${HOURS:-6} h)" "$(remote "cd /opt/voltneo && sudo docker compose logs --no-color --since ${HOURS:-6}h api 2>&1 | grep -iE 'error|exception|warn|fail' | tail -40" 2>&1)"
-show "Caddy errors (last ${HOURS:-6} h)" "$(remote "cd /opt/voltneo && sudo docker compose logs --no-color --since ${HOURS:-6}h caddy 2>&1 | grep -iE '\"level\":\"(error|warn)\"' | tail -15" 2>&1)"
+# /opt/voltneo is readable by root only.
+dc() { remote "sudo bash -c $(printf '%q' "cd /opt/voltneo && $1")"; }
+
+show "Containers" "$(dc 'docker compose ps --format "{{.Service}} {{.State}} {{.Status}}"' 2>&1)"
+show "API errors (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h api 2>&1 | grep -iE 'error|exception|warn|fail' | tail -40" 2>&1)"
+show "Caddy errors (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h caddy 2>&1 | grep -iE '\"level\":\"(error|warn)\"' | tail -15" 2>&1)"
 
 # File storage round trip from inside the API container, with its own settings.
 cat >"$work/s3check.js" <<'JS'
@@ -44,4 +47,4 @@ const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = re
 })();
 JS
 remote_copy "$work/s3check.js" "$user@$SERVER_IP:/tmp/s3check.js"
-show "File storage check" "$(remote 'cd /opt/voltneo && sudo docker compose cp /tmp/s3check.js api:/tmp/s3check.js >/dev/null && sudo docker compose exec -T -w /repo/apps/api api node /tmp/s3check.js; rm -f /tmp/s3check.js' 2>&1)"
+show "File storage check" "$(dc 'docker compose cp /tmp/s3check.js api:/tmp/s3check.js >/dev/null && docker compose exec -T -w /repo/apps/api api node /tmp/s3check.js; rm -f /tmp/s3check.js' 2>&1)"
