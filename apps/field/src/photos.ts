@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { SaveFormat, manipulateAsync } from 'expo-image-manipulator';
 
@@ -47,8 +48,11 @@ export async function appendPhotos(form: FormData, field: string, photos: Photo[
       const blob = p.file ?? (await (await fetch(p.uri)).blob());
       form.append(field, blob, p.name);
     } else {
-      // React Native's FormData takes a file description object.
-      form.append(field, { uri: p.uri, name: p.name, type: 'image/jpeg' } as unknown as Blob);
+      // Expo's fetch reads a part's bytes itself and refuses React Native's
+      // { uri, name, type } descriptions ("Unsupported FormDataPart
+      // implementation"); expo-file-system's File provides them. Its name is the
+      // file's own (a .jpg from the resize step) and its type comes from that.
+      form.append(field, new File(p.uri) as unknown as Blob, p.name);
     }
   }
 }
