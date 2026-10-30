@@ -4,10 +4,17 @@
 }
 
 {$ADMIN_HOST} {
+	# Request log (method, path, status, timing; Caddy hides sign-in headers and cookies).
+	log
 	encode zstd gzip
 	# The panel calls the API on its own address, so the sign-in cookie stays first-party.
 	handle /v1/* {
-		reverse_proxy api:4000
+		reverse_proxy api:4000 {
+			# Take the whole upload before passing it on, so an early refusal
+			# (for example an expired sign-in) reaches the user as a message
+			# instead of breaking the connection mid-upload.
+			request_buffers 12MiB
+		}
 	}
 	handle {
 		reverse_proxy admin:3000
@@ -19,8 +26,11 @@
 }
 
 {$API_HOST} {
+	log
 	encode zstd gzip
-	reverse_proxy api:4000
+	reverse_proxy api:4000 {
+		request_buffers 12MiB
+	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		-Server

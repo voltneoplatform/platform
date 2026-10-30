@@ -102,3 +102,57 @@ describe('Field App API client', () => {
     expect(e2.code).toBe('OVERPAYMENT');
   });
 });
+
+describe('sign-in renewal before requests', () => {
+  /** A JWT-shaped token that expires at `exp` seconds (signature not checked by the app). */
+  const jwt = (exp: number) =>
+    `x.${btoa(JSON.stringify({ sub: 's1', exp }))
+      .replace(/=+$/, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')}.y`;
+
+  it('reads the expiry of a sign-in token', async () => {
+    const { tokenExpiry } = await import('./api');
+    expect(tokenExpiry(jwt(1_800_000_000))).toBe(1_800_000_000_000);
+    expect(tokenExpiry('not-a-jwt')).toBeNull();
+  });
+
+  it('renews an expiring token before an upload, so the server never refuses it midway', async () => {
+    let clock = 1_000_000_000_000;
+    const calls: string[] = [];
+    const store = memoryStore();
+    const api = new FieldApi({
+      baseUrl: 'https://api.test',
+      store,
+      now: () => clock,
+      fetch: async (url, init) => {
+        calls.push(url.replace('https://api.test', ''));
+        if (url.endsWith('/v1/auth/otp/verify') || url.endsWith('/v1/auth/refresh')) {
+          const n = calls.length;
+          return json(200, { ...session(n), accessToken: jwt(clock / 1000 + 900) });
+        }
+        const auth = new Headers(init?.headers).get('authorization');
+        return json(200, { ok: true, auth });
+      },
+    });
+    await api.verify('agent@voltneo.example', '123456');
+    clock += 14.5 * 60_000; // 30 seconds before the 15-minute token expires
+    const form = new FormData();
+    form.append('type', 'VOTER_ID');
+    await api.upload('/v1/drivers/d1/kyc', form);
+    expect(calls).toEqual(['/v1/auth/otp/verify', '/v1/auth/refresh', '/v1/drivers/d1/kyc']);
+  });
+
+  it('says what the phone reported when there is no answer', async () => {
+    const api = new FieldApi({
+      baseUrl: 'https://api.test',
+      store: memoryStore(),
+      fetch: async () => {
+        throw new TypeError('Network request failed');
+      },
+    });
+    const err = (await api.get('/v1/field/summary').catch((e) => e)) as ApiError;
+    expect(err.offline).toBe(true);
+    expect(err.body).toEqual({ detail: 'TypeError: Network request failed' });
+  });
+});

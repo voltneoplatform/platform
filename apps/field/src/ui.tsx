@@ -334,14 +334,18 @@ export function ErrorNotice({ error }: { error: unknown }) {
   const { t } = useSession();
   if (!error) return null;
   let text = t('somethingWrong');
+  let detail: string | null = null;
   if (error instanceof ApiError) {
     text = error.offline
       ? t('noConnection')
       : error.message === 'SESSION_ENDED'
         ? t('sessionEnded')
         : error.message;
+    // What the phone itself reported, small, for anyone reporting the problem.
+    const d = (error.body as { detail?: unknown } | undefined)?.detail;
+    if (error.offline && typeof d === 'string') detail = d;
   }
-  return <Notice tone="danger">{text}</Notice>;
+  return <Notice tone="danger">{detail ? `${text}\n(${detail})` : text}</Notice>;
 }
 
 export function Badge({

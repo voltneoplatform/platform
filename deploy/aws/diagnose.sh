@@ -26,6 +26,22 @@ dc() { remote "sudo bash -c $(printf '%q' "cd /opt/voltneo && $1")"; }
 
 show "Containers" "$(dc 'docker compose ps --format "{{.Service}} {{.State}} {{.Status}}"' 2>&1)"
 show "API errors (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h api 2>&1 | grep -iE 'error|exception|warn|fail' | tail -40" 2>&1)"
+# Caddy's request log is JSON; summarise refused or failed requests on the server.
+cat >"$work/requests.py" <<'PY'
+import json, sys
+for line in sys.stdin:
+    try:
+        e = json.loads(line[line.index("{"):])
+    except ValueError:
+        continue
+    status = e.get("status", 0)
+    if status >= 400 or e.get("err_id"):
+        r = e.get("request", {})
+        print(f'{e.get("ts", 0):.0f} {status} {r.get("method", "")} {r.get("uri", "").split("?")[0]} '
+              f'{e.get("duration", 0):.2f}s in={r.get("headers", {}).get("Content-Length", ["-"])[0]} {e.get("msg", "")}')
+PY
+remote_copy "$work/requests.py" "$user@$SERVER_IP:/tmp/requests.py"
+show "Requests answered 4xx/5xx (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h caddy 2>&1 | python3 /tmp/requests.py | tail -30; rm -f /tmp/requests.py" 2>&1)"
 show "Caddy errors (last ${HOURS:-6} h)" "$(dc "docker compose logs --no-color --since ${HOURS:-6}h caddy 2>&1 | grep -iE '\"level\":\"(error|warn)\"' | tail -15" 2>&1)"
 
 # File storage round trip from inside the API container, with its own settings.
@@ -47,4 +63,5 @@ const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = re
 })();
 JS
 remote_copy "$work/s3check.js" "$user@$SERVER_IP:/tmp/s3check.js"
-show "File storage check" "$(dc 'docker compose cp /tmp/s3check.js api:/tmp/s3check.js >/dev/null && docker compose exec -T -w /repo/apps/api api node /tmp/s3check.js; rm -f /tmp/s3check.js' 2>&1)"
+# Copied next to the API's own packages so Node finds the AWS SDK.
+show "File storage check" "$(dc 'docker compose cp /tmp/s3check.js api:/repo/apps/api/ops-s3check.js >/dev/null && docker compose exec -T api node ops-s3check.js; docker compose exec -T -u root api rm -f ops-s3check.js; rm -f /tmp/s3check.js' 2>&1)"
