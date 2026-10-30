@@ -1,0 +1,32 @@
+# Read-only health report for the test site (containers, recent errors, file
+# storage). Runs on demand from the Actions tab, or on a push to hosting-diagnose.
+name: Diagnose test site
+
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: How many hours of logs to scan
+        default: '6'
+  push:
+    branches: [hosting-diagnose]
+
+concurrency:
+  group: hosting-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      HOURS: ${{ inputs.hours || '6' }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: deploy/aws/diagnose.sh
