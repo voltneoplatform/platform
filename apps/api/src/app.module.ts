@@ -22,6 +22,8 @@ import { OwnershipModule } from './ownership/ownership.module';
 import { ReportsModule } from './reports/reports.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { FieldModule } from './field/field.module';
+import { DriverAuthModule } from './driver-auth/driver-auth.module';
+import { MeModule } from './me/me.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -52,6 +54,8 @@ import { HealthController } from './health/health.controller';
     TicketsModule,
     ReportsModule,
     FieldModule,
+    DriverAuthModule,
+    MeModule,
   ],
   controllers: [HealthController],
   providers: [

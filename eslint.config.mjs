@@ -18,6 +18,10 @@ export default tseslint.config(
       'apps/field/android/**',
       'apps/field/dist/**',
       'apps/field/expo-env.d.ts',
+      'apps/driver/.expo/**',
+      'apps/driver/android/**',
+      'apps/driver/dist/**',
+      'apps/driver/expo-env.d.ts',
     ],
   },
   js.configs.recommended,
@@ -45,7 +49,7 @@ export default tseslint.config(
     rules: { 'no-console': 'off' },
   },
   {
-    files: ['apps/admin/**/*.{ts,tsx}', 'apps/field/**/*.{ts,tsx}'],
+    files: ['apps/admin/**/*.{ts,tsx}', 'apps/field/**/*.{ts,tsx}', 'apps/driver/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { 'react-hooks': reactHooks },
     rules: {

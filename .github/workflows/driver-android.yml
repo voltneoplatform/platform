@@ -1,0 +1,69 @@
+# Builds the Driver App as an installable Android file (APK) for the pilot
+# drivers (milestone M6). Runs when the app changes, and on demand from the
+# Actions tab ("Run workflow"). The APK is attached to the run as an artifact.
+name: Driver App (Android)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['apps/driver/**', 'packages/shared/**', '.github/workflows/driver-android.yml']
+  pull_request:
+    paths: ['apps/driver/**', 'packages/shared/**', '.github/workflows/driver-android.yml']
+
+concurrency:
+  group: driver-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # The API address baked into the app: the hosted test site (T82) unless
+      # the repository variable DRIVER_API_URL says otherwise. The test-site
+      # banner shows while DEPLOYMENT is staging.
+      EXPO_PUBLIC_API_URL: ${{ vars.DRIVER_API_URL || 'https://api.voltcompany.in' }}
+      EXPO_PUBLIC_DEPLOYMENT: ${{ vars.DRIVER_DEPLOYMENT || 'staging' }}
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @voltneo/shared run build
+
+      - name: Generate the Android project
+        working-directory: apps/driver
+        run: pnpm exec expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: apps/driver/android
+        # Signed with the template's debug key for pilot installs only. A
+        # private release key (kept in GitHub secrets) is needed before the
+        # Play Store.
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voltneo-driver-${{ github.sha }}
+          path: apps/driver/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30

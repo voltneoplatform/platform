@@ -66,7 +66,13 @@ const ticketInclude = {
 
 type TicketFull = Prisma.ServiceTicketGetPayload<{ include: typeof ticketInclude }>;
 
-type Actor = { id: string; ip?: string | null; requestId?: string | null };
+type Actor = {
+  id: string;
+  ip?: string | null;
+  requestId?: string | null;
+  /** Staff unless a driver reported it from the Driver App (M6). */
+  type?: 'STAFF' | 'DRIVER';
+};
 
 /**
  * Service tickets (spec module 10): a reported fault gets a technician response
@@ -313,7 +319,7 @@ export class TicketsService {
   ) {
     await this.audit.record(
       {
-        actorType: 'STAFF',
+        actorType: actor.type ?? 'STAFF',
         actorId: actor.id,
         action,
         tableName: 'service_tickets',
@@ -356,6 +362,30 @@ export class TicketsService {
   // ---------------------------------------------------------------------------
 
   async create(dto: CreateTicketDto, actor: AuthenticatedStaff, meta: RequestMeta) {
+    const id = await this.open(dto, { id: actor.id, type: 'STAFF' }, meta);
+    return this.get(id, actor);
+  }
+
+  /** A fault reported by the driver in the Driver App: channel APP, no technician yet (M6). */
+  async createFromDriver(
+    driverId: string,
+    input: { agreementId: string; category: CreateTicketDto['category']; description: string },
+    meta: RequestMeta,
+  ): Promise<string> {
+    const a = await this.prisma.agreement.findUnique({ where: { id: input.agreementId } });
+    if (!a || a.driverId !== driverId) throw new NotFoundException('Agreement not found');
+    return this.open(
+      { ...input, channel: 'APP', technicianId: null },
+      { id: driverId, type: 'DRIVER' },
+      meta,
+    );
+  }
+
+  private async open(
+    dto: CreateTicketDto,
+    by: { id: string; type: 'STAFF' | 'DRIVER' },
+    meta: RequestMeta,
+  ): Promise<string> {
     const now = this.clock.now();
     const reportedAt = dto.reportedAt ? new Date(dto.reportedAt) : now;
     if (reportedAt.getTime() > now.getTime() + MINUTE) {
@@ -393,12 +423,12 @@ export class TicketsService {
           status: technician ? 'ASSIGNED' : 'OPEN',
           technicianId: technician?.id ?? null,
           assignedAt: technician ? now : null,
-          createdById: actor.id,
+          createdById: by.type === 'STAFF' ? by.id : null,
         },
       });
       await this.record(
         tx,
-        { id: actor.id, ip: meta.ip, requestId: meta.requestId },
+        { id: by.id, type: by.type, ip: meta.ip, requestId: meta.requestId },
         'ticket.create',
         ticket.id,
         null,
@@ -417,7 +447,7 @@ export class TicketsService {
       return { id: ticket.id, messageId };
     });
     await this.messaging.deliver([result.messageId]);
-    return this.get(result.id, actor);
+    return result.id;
   }
 
   async assign(id: string, dto: AssignTicketDto, actor: AuthenticatedStaff, meta: RequestMeta) {

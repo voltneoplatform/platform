@@ -230,6 +230,108 @@ export class PaymentLinksService {
     return this.list(a.id);
   }
 
+  /**
+   * The Driver App's Pay button (M6): a UPI link for exactly the amount due,
+   * open until the end of the day in India (late fees can change at midnight).
+   * An open link for the same amount is reused; any other open link is replaced.
+   * No SMS: the app opens the link itself.
+   */
+  async forDriver(
+    agreementId: string,
+    driverId: string,
+    amountPaise: number,
+    meta: RequestMeta,
+  ): Promise<PaymentLink> {
+    const a = await this.prisma.agreement.findUnique({
+      where: { id: agreementId },
+      include: { driver: true },
+    });
+    if (!a || a.driverId !== driverId) throw new NotFoundException('Agreement not found');
+    const now = this.clock.now();
+    await this.expireStale(this.prisma, a.id);
+    const reusable = await this.prisma.paymentLink.findFirst({
+      where: {
+        agreementId: a.id,
+        status: 'ACTIVE',
+        amount: amountPaise,
+        expiresAt: { gt: new Date(now.getTime() + 10 * 60_000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (reusable) return reusable;
+
+    const today = istDate(now);
+    // 23:59:59 India time today = 18:29:59 UTC.
+    const expiresAt = new Date(`${today}T18:29:59.000Z`);
+    const linkId = `VNA_${a.number}_${randomBytes(4).toString('hex')}`;
+    const created = await this.gateway.createLink({
+      linkId,
+      amountPaise,
+      purpose: `Volt Neo agreement ${a.number}`,
+      customer: { phone: a.driver.phone, name: a.driver.name },
+      expiresAt,
+      agreementNumber: a.number,
+    });
+    let replaced: string[] = [];
+    let link: PaymentLink;
+    try {
+      link = await serializable(this.prisma, async (tx) => {
+        await this.expireStale(tx, a.id);
+        const open = await tx.paymentLink.findMany({
+          where: { agreementId: a.id, status: 'ACTIVE' },
+        });
+        if (open.length) {
+          await tx.paymentLink.updateMany({
+            where: { id: { in: open.map((o) => o.id) } },
+            data: { status: 'CANCELLED', closedAt: now, closedNote: 'Replaced by a new link' },
+          });
+          replaced = open.map((o) => o.linkId);
+        }
+        const row = await tx.paymentLink.create({
+          data: {
+            linkId,
+            agreementId: a.id,
+            driverId: a.driverId,
+            gateway: this.gateway.name,
+            gatewayRef: created.gatewayRef,
+            url: created.url,
+            shortCode: newShortCode(),
+            amount: amountPaise,
+            purpose: `Volt Neo agreement ${a.number}`,
+            expiresAt,
+            createdById: null,
+          },
+        });
+        await this.audit.record(
+          {
+            actorType: 'DRIVER',
+            actorId: driverId,
+            action: 'payment_link.create',
+            tableName: 'payment_links',
+            recordId: row.id,
+            after: { ...row, agreementId: a.id, replaced, via: 'driver_app' },
+            ip: meta.ip,
+            requestId: meta.requestId,
+          },
+          tx,
+        );
+        return row;
+      });
+    } catch (err) {
+      await this.gateway.cancelLink(linkId).catch(() => undefined);
+      if (isUniqueViolation(err)) {
+        throw new ConflictException('A payment was being set up at the same time. Try again.');
+      }
+      throw err;
+    }
+    for (const old of replaced) {
+      await this.gateway.cancelLink(old).catch((e: Error) => {
+        this.logger.warn(`Could not cancel old link ${old} at the gateway: ${e.message}`);
+      });
+    }
+    return link;
+  }
+
   private queueSms(
     tx: Tx,
     link: PaymentLink,
