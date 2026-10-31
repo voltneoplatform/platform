@@ -56,6 +56,7 @@ export const LABELS: Record<Lang, Labels> = {
     readiness: {
       ADULT: 'Driver is 18 or older',
       IDENTITY_VERIFIED: 'Identity document checked',
+      PAN_VERIFIED: 'PAN card checked',
       ADDRESS_VERIFIED: 'Proof of address checked',
       PHOTO_VERIFIED: 'Driver photo checked',
       VEHICLE_RECORDED: 'Vehicle recorded',
@@ -131,6 +132,7 @@ export const LABELS: Record<Lang, Labels> = {
     readiness: {
       ADULT: 'চালকের বয়স ১৮ বা তার বেশি',
       IDENTITY_VERIFIED: 'পরিচয়পত্র যাচাই হয়েছে',
+      PAN_VERIFIED: 'প্যান কার্ড যাচাই হয়েছে',
       ADDRESS_VERIFIED: 'ঠিকানার প্রমাণ যাচাই হয়েছে',
       PHOTO_VERIFIED: 'চালকের ছবি যাচাই হয়েছে',
       VEHICLE_RECORDED: 'গাড়ি নথিভুক্ত',
@@ -206,6 +208,7 @@ export const LABELS: Record<Lang, Labels> = {
     readiness: {
       ADULT: 'चालक की उम्र 18 या उससे अधिक',
       IDENTITY_VERIFIED: 'पहचान पत्र की जाँच हो गई',
+      PAN_VERIFIED: 'पैन कार्ड की जाँच हो गई',
       ADDRESS_VERIFIED: 'पते के प्रमाण की जाँच हो गई',
       PHOTO_VERIFIED: 'चालक की फ़ोटो की जाँच हो गई',
       VEHICLE_RECORDED: 'गाड़ी दर्ज',

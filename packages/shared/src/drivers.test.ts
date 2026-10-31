@@ -56,6 +56,7 @@ describe('driver readiness checklist', () => {
     nomineeRecorded: true,
     documents: [
       { type: 'VOTER_ID', status: 'VERIFIED', usedForAddress: true },
+      { type: 'PAN', status: 'VERIFIED', usedForAddress: false },
       { type: 'DRIVER_PHOTO', status: 'VERIFIED', usedForAddress: false },
     ],
     vehicle: { ownedByDriver: true, ownerConsentUploaded: false },
@@ -73,6 +74,7 @@ describe('driver readiness checklist', () => {
     expect(r.ready).toBe(false);
     expect(r.items.filter((i) => !i.done).map((i) => i.item)).toEqual([
       'IDENTITY_VERIFIED',
+      'PAN_VERIFIED',
       'ADDRESS_VERIFIED',
       'PHOTO_VERIFIED',
     ]);
@@ -95,6 +97,16 @@ describe('driver readiness checklist', () => {
       ],
     });
     expect(r.items.find((i) => i.item === 'ADDRESS_VERIFIED')?.done).toBe(false);
+  });
+
+  it('needs a verified PAN card (founder, 31 Oct 2026)', () => {
+    const noPan = complete.documents.filter((d) => d.type !== 'PAN');
+    expect(readiness({ ...complete, documents: noPan }).ready).toBe(false);
+    const pending = [
+      ...noPan,
+      { type: 'PAN' as const, status: 'PENDING' as const, usedForAddress: false },
+    ];
+    expect(readiness({ ...complete, documents: pending }).ready).toBe(false);
   });
 
   it('needs the driver to be 18 on the day', () => {

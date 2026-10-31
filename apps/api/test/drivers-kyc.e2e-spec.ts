@@ -393,7 +393,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
   });
 
   describe('readiness for an agreement', () => {
-    it('becomes ready once identity, address and photo are verified and the renter has owner consent', async () => {
+    it('becomes ready once identity, PAN, address and photo are verified and the renter has owner consent', async () => {
       const d = await makeDriver(ctx, ops.token, {
         vehicle: {
           registration: 'WB 19 R 5555',
@@ -418,6 +418,17 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
             .expect(200)
         ).body;
       }
+      const panItem = () =>
+        profile.readiness.items.find((i: { item: string }) => i.item === 'PAN_VERIFIED');
+      expect(panItem()).toMatchObject({ applies: true, done: false });
+      profile = (
+        await uploadKyc(ctx, ops.token, d.id, { type: 'PAN', number: 'ABCDE1234F' }).expect(201)
+      ).body;
+      const pan = profile.documents.find((x: { type: string }) => x.type === 'PAN');
+      profile = (
+        await ctx.http.post(`/v1/kyc-documents/${pan.id}/verify`).set(bearer(ops.token)).expect(200)
+      ).body;
+      expect(panItem()).toMatchObject({ done: true });
       expect(profile.readiness.ready).toBe(false);
       expect(
         profile.readiness.items.find((i: { item: string }) => i.item === 'OWNER_CONSENT'),

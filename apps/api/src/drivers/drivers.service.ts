@@ -10,6 +10,7 @@ import {
   MIN_DRIVER_AGE,
   ageOn,
   docNumberProblem,
+  hasPermission,
   maskDocNumber,
   normaliseIndianMobile,
   normaliseRegistration,
@@ -767,6 +768,38 @@ export class DriversService {
   }
 
   /** Shows the full ID number. Every reveal is logged; Aadhaar numbers are not stored in full. */
+  /**
+   * The driver's verified PAN for the printed agreement. The full number goes
+   * only to staff who may see full ID numbers (kyc.view_full, T26), and each
+   * such print is logged as a number reveal; everyone else gets the last 4.
+   */
+  async panForAgreement(
+    driverId: string,
+    actor: AuthenticatedStaff,
+    meta: RequestMeta,
+  ): Promise<{ number: string | null; last4: string } | null> {
+    const pan = await this.prisma.kycDocument.findFirst({
+      where: { driverId, type: 'PAN', status: 'VERIFIED' },
+      orderBy: { verifiedAt: 'desc' },
+      select: { id: true, numberLast4: true, numberEncrypted: true },
+    });
+    if (!pan?.numberLast4) return null;
+    if (!hasPermission(actor.role, 'kyc.view_full') || !pan.numberEncrypted) {
+      return { number: null, last4: pan.numberLast4 };
+    }
+    await this.audit.record({
+      actorType: 'STAFF',
+      actorId: actor.id,
+      action: 'kyc.number_revealed',
+      tableName: 'kyc_documents',
+      recordId: pan.id,
+      after: { driverId, type: 'PAN', purpose: 'agreement_print' },
+      ip: meta.ip,
+      requestId: meta.requestId,
+    });
+    return { number: this.crypto.decrypt(pan.numberEncrypted), last4: pan.numberLast4 };
+  }
+
   async revealNumber(id: string, actor: AuthenticatedStaff, meta: RequestMeta) {
     const d = await this.doc(id);
     if (!d.numberEncrypted) {

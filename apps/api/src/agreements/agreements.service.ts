@@ -1011,14 +1011,19 @@ export class AgreementsService implements OnModuleInit {
   }
 
   /** The whole agreement for printing on stamp paper (English, founder 31 Oct 2026). */
-  async agreementDocument(id: string) {
+  async agreementDocument(id: string, actor: AuthenticatedStaff, meta: RequestMeta) {
     const a = await this.loadFull(id);
     if (a.state === 'CANCELLED') throw new ConflictException('This agreement was cancelled');
     const ids = await this.prisma.kycDocument.findMany({
       where: { driverId: a.driverId, status: 'VERIFIED', numberLast4: { not: null } },
       select: { type: true, numberLast4: true },
     });
-    const id0 = ID_PREFERENCE.map((t) => ids.find((d) => d.type === t)).find(Boolean);
+    // The PAN has its own place in the parties line, so another ID comes first.
+    const id0 =
+      ID_PREFERENCE.filter((t) => t !== 'PAN')
+        .map((t) => ids.find((d) => d.type === t))
+        .find(Boolean) ?? null;
+    const pan = await this.drivers.panForAgreement(a.driverId, actor, meta);
     const d = a.driver;
     const today = istDate(new Date());
     const dob = dateOnly(d.dateOfBirth);
@@ -1041,6 +1046,7 @@ export class AgreementsService implements OnModuleInit {
               last4: id0.numberLast4!,
             }
           : null,
+        pan,
       },
       vehicleDetail: {
         type: VEHICLE_LABELS[a.vehicle.type],

@@ -159,10 +159,12 @@ export class AgreementsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('schedule') schedule: string,
     @Query() q: DocumentQuery,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
     @Res() res: Response,
   ) {
     if (schedule === AGREEMENT_DOC) {
-      const { pdf, fileName } = await this.agreements.agreementDocument(id);
+      const { pdf, fileName } = await this.agreements.agreementDocument(id, staff, meta);
       return sendPdf(res, pdf, fileName);
     }
     if (!(SCHEDULE_DOCS as readonly string[]).includes(schedule)) {

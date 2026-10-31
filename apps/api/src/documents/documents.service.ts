@@ -49,6 +49,11 @@ export interface AgreementPackData extends AgreementDocData {
     relative: { relation: string; name: string } | null;
     /** Identity document, with only its last four characters (UIDAI masking rules). */
     id: { label: string; last4: string } | null;
+    /**
+     * Verified PAN (founder, 31 Oct 2026): the full number for staff allowed to
+     * see full ID numbers, otherwise only the last 4; null leaves a blank.
+     */
+    pan: { number: string | null; last4: string } | null;
   };
   vehicleDetail: {
     type: string;
@@ -310,9 +315,12 @@ export class DocumentsService {
         text:
           `, ${p.relative ? `${p.relative.relation} ${p.relative.name}` : `son / daughter / wife of ${blank(24)}`}, aged ${p.age === null ? `${blank(4)}` : `about ${p.age}`} years, ` +
           `residing at ${p.address}, mobile ${p.phone}, ` +
-          (p.id
-            ? `holding ${p.id.label} number ending ${p.id.last4} `
-            : `holding ${blank(14)} number ${blank(14)} `) +
+          (p.id ? `holding ${p.id.label} number ending ${p.id.last4} and ` : 'holding ') +
+          (p.pan
+            ? p.pan.number
+              ? `PAN ${p.pan.number} `
+              : `PAN ending ${p.pan.last4} `
+            : `PAN ${blank(14)} `) +
           '(called "you" or "the Driver" in this agreement), of the OTHER PART.',
       },
     ]);

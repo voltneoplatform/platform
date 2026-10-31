@@ -116,7 +116,7 @@ export function uploadKyc(
   return req.attach('file', file, filename);
 }
 
-/** A driver whose readiness checklist is complete (identity, address, photo verified). */
+/** A driver whose readiness checklist is complete (identity, PAN, address, photo verified). */
 export async function readyDriver(
   ctx: TestContext,
   opsToken: string,
@@ -127,6 +127,10 @@ export async function readyDriver(
     type: 'VOTER_ID',
     number: `ABC${String(1000000 + n++).slice(-7)}`,
     usedForAddress: 'true',
+  }).expect(201);
+  await uploadKyc(ctx, opsToken, d.id, {
+    type: 'PAN',
+    number: `ABCDE${String(1000 + (n++ % 9000)).padStart(4, '0')}F`,
   }).expect(201);
   const profile = (await uploadKyc(ctx, opsToken, d.id, { type: 'DRIVER_PHOTO' }).expect(201))
     .body as { documents: { id: string }[] };

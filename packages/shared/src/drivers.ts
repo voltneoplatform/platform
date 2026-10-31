@@ -185,6 +185,7 @@ export interface ReadinessInput {
 export const READINESS_ITEMS = [
   'ADULT',
   'IDENTITY_VERIFIED',
+  'PAN_VERIFIED',
   'ADDRESS_VERIFIED',
   'PHOTO_VERIFIED',
   'VEHICLE_RECORDED',
@@ -196,6 +197,7 @@ export type ReadinessItem = (typeof READINESS_ITEMS)[number];
 export const READINESS_LABELS: Record<ReadinessItem, string> = {
   ADULT: `Driver is ${MIN_DRIVER_AGE} or older`,
   IDENTITY_VERIFIED: 'Identity document verified',
+  PAN_VERIFIED: 'PAN card verified',
   ADDRESS_VERIFIED: 'Proof of address verified',
   PHOTO_VERIFIED: 'Driver photo verified',
   VEHICLE_RECORDED: 'Vehicle recorded',
@@ -222,6 +224,8 @@ export function readiness(input: ReadinessInput): Readiness {
       applies: true,
       done: verified.some((d) => KYC_DOC_INFO[d.type].identity),
     },
+    // The agreement prints the driver's PAN (founder, 31 Oct 2026).
+    { item: 'PAN_VERIFIED', applies: true, done: verified.some((d) => d.type === 'PAN') },
     {
       item: 'ADDRESS_VERIFIED',
       applies: true,
