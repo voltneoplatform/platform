@@ -114,7 +114,6 @@ function DueCard({ a, onPaid }: { a: MyAgreement; onPaid: () => void }) {
 function AutopayCard({ a, onChange }: { a: MyAgreement; onChange: () => void }) {
   const { t, api } = useSession();
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const ap = a.autopay;
   if (ap.status === 'OFF' && !ap.available) return null;
@@ -129,7 +128,6 @@ function AutopayCard({ a, onChange }: { a: MyAgreement; onChange: () => void }) 
       setError(err);
     } finally {
       setBusy(false);
-      setConfirm(false);
     }
   }
 
@@ -202,21 +200,17 @@ function AutopayCard({ a, onChange }: { a: MyAgreement; onChange: () => void }) 
           </Muted>
         </>
       )}
-      {ap.status !== 'OFF' &&
-        (confirm ? (
-          <>
-            <Notice tone="warn">{t('autopayStopConfirm')}</Notice>
-            <Button title={t('yes')} variant="danger" busy={busy} onPress={() => void stop()} />
-            <Button title={t('cancel')} variant="secondary" onPress={() => setConfirm(false)} />
-          </>
-        ) : (
-          <Button
-            testID="autopay-stop"
-            title={ap.status === 'PENDING' ? t('cancel') : t('autopayStop')}
-            variant="secondary"
-            onPress={() => setConfirm(true)}
-          />
-        ))}
+      {ap.status === 'PENDING' && (
+        // A request not yet approved can be withdrawn, e.g. to choose the other method.
+        // Once AutoPay or e-NACH is on, only head office can switch it off (founder, 31 Oct 2026).
+        <Button
+          testID="autopay-withdraw"
+          title={t('cancel')}
+          variant="secondary"
+          busy={busy}
+          onPress={() => void stop()}
+        />
+      )}
       <ErrorNotice error={error} />
     </Card>
   );

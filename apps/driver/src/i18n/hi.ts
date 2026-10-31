@@ -98,8 +98,6 @@ export const hi: Messages = {
   autopayIdle: 'हर किस्त अपनी तारीख पर कटती है।',
   autopayPending: 'आपके UPI ऐप में मंज़ूरी का इंतज़ार।',
   autopayApprove: 'मंज़ूरी का पेज खोलें',
-  autopayStop: 'ऑटोपे बंद करें',
-  autopayStopConfirm: 'ऑटोपे बंद करें? फिर हर किस्त आपको खुद चुकानी होगी।',
   autopayDue: 'ऑटोपे इसे {date} को काटेगा।',
   autopayOverdue: 'ऑटोपे बकाया या विलंब शुल्क नहीं काटता। इन्हें यहाँ चुकाएँ।',
   autopayPendingEnach: 'आपके बैंक की ई-नैक पुष्टि का इंतज़ार। आमतौर पर 1-2 दिन लगते हैं।',

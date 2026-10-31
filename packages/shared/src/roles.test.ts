@@ -35,6 +35,12 @@ describe('role permissions (spec section 2)', () => {
     expect(hasPermission('FIELD_AGENT', 'plans.manage')).toBe(false);
   });
 
+  it('lets field agents record installations, picking from batteries in stock', () => {
+    expect(hasPermission('FIELD_AGENT', 'installations.record')).toBe(true);
+    expect(hasPermission('FIELD_AGENT', 'batteries.read')).toBe(true);
+    expect(hasPermission('FIELD_AGENT', 'batteries.manage')).toBe(false);
+  });
+
   it('stops operations managers editing payments', () => {
     expect(hasPermission('OPERATIONS_MANAGER', 'payments.record')).toBe(false);
   });

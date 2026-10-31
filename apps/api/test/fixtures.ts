@@ -204,7 +204,12 @@ export async function makeBattery(
 export async function activeAgreement(
   ctx: TestContext,
   t: { ops: string; finance: string; pm: string },
-  opts: { typeId?: string; versionId?: string } = {},
+  opts: {
+    typeId?: string;
+    versionId?: string;
+    /** Who records the installation and installs (default: ops, a new technician). */
+    installAs?: { token: string; staffId: string };
+  } = {},
 ) {
   const typeId = opts.typeId ?? (await makeBatteryType(ctx, t.pm, { purchase: 50000 })).id;
   const versionId = opts.versionId ?? (await publishedPlan(ctx, t.pm, typeId)).versionId;
@@ -243,14 +248,18 @@ export async function activeAgreement(
     .send({ agreementId: id, amountPaise: r(20000), method: 'CASH' })
     .expect(201);
   const battery = await makeBattery(ctx, t.ops, typeId);
-  const tech = await ctx.prisma.staffUser.create({
-    data: { name: `Tech ${n++}`, email: `tech.${n}@voltneo.test`, role: 'TECHNICIAN' },
-  });
+  const techId =
+    opts.installAs?.staffId ??
+    (
+      await ctx.prisma.staffUser.create({
+        data: { name: `Tech ${n++}`, email: `tech.${n}@voltneo.test`, role: 'TECHNICIAN' },
+      })
+    ).id;
   const res = await ctx.http
     .post(`/v1/agreements/${id}/installation`)
-    .set(bearer(t.ops))
+    .set(bearer(opts.installAs?.token ?? t.ops))
     .field('batteryId', battery.id)
-    .field('technicianId', tech.id)
+    .field('technicianId', techId)
     .field('installedAt', new Date().toISOString())
     .field('location', 'Baruipur')
     .field('voltageReading', '52.4')

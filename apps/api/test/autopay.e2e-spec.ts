@@ -161,25 +161,34 @@ describe('UPI AutoPay (M6)', () => {
     await ctx.http.post(`/v1/me/agreements/${a.id}/pay`).set(bearer(driver)).expect(200);
   });
 
-  it('lets the driver or head office switch AutoPay off, cancelling waiting charges', async () => {
-    await switchOn();
-    await run(addDays(a.firstDueDate, -3));
-    const off = await ctx.http
+  it('lets only head office switch AutoPay off once it is on; the driver may withdraw a request', async () => {
+    await ctx.http
+      .post(`/v1/me/agreements/${a.id}/autopay`)
+      .set(bearer(driver))
+      .send({})
+      .expect(200);
+    const withdrawn = await ctx.http
       .post(`/v1/me/agreements/${a.id}/autopay/cancel`)
       .set(bearer(driver))
       .expect(200);
-    expect(off.body.autopay.status).toBe('OFF');
-    expect(gateway.cancelledCharges).toHaveLength(1);
-    expect([...gateway.mandates.values()].at(-1)!.status).toBe('CANCELLED');
-    const view = await staffView();
-    expect(view.mandate).toMatchObject({ status: 'CANCELLED', endedBy: 'DRIVER' });
+    expect(withdrawn.body.autopay.status).toBe('OFF');
 
     await switchOn();
+    await run(addDays(a.firstDueDate, -3));
+    const locked = await ctx.http
+      .post(`/v1/me/agreements/${a.id}/autopay/cancel`)
+      .set(bearer(driver))
+      .expect(403);
+    expect(locked.body.code).toBe('AUTOPAY_LOCKED');
+    expect((await staffView()).mandate.status).toBe('ACTIVE');
+
     await ctx.http
       .post(`/v1/agreements/${a.id}/autopay/cancel`)
       .set(bearer(ops.token))
       .send({ reason: 'Driver asked at the office' })
       .expect(200);
+    expect(gateway.cancelledCharges).toHaveLength(1);
+    expect([...gateway.mandates.values()].at(-1)!.status).toBe('CANCELLED');
     expect((await staffView()).mandate).toMatchObject({ status: 'CANCELLED', endedBy: 'STAFF' });
   });
 

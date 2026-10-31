@@ -101,8 +101,6 @@ export const en = {
   autopayIdle: 'Each instalment is taken on its Due Date.',
   autopayPending: 'Waiting for your approval in your UPI app.',
   autopayApprove: 'Open the approval page',
-  autopayStop: 'Switch off AutoPay',
-  autopayStopConfirm: 'Switch off AutoPay? You will then pay each instalment yourself.',
   autopayDue: 'AutoPay will take this on {date}.',
   autopayOverdue: 'AutoPay does not take overdue amounts or late fees. Pay them here.',
   autopayPendingEnach:
