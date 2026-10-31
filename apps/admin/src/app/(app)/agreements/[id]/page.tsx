@@ -319,6 +319,24 @@ export default function AgreementPage() {
             Wording {a.documentVersion}, schedule revision {a.scheduleRevision}. Draft wording: not
             yet reviewed by a lawyer or native-speaker translators.
           </p>
+          <div className="stamp-print">
+            <div>
+              <strong>Full agreement for stamp paper</strong>
+              <div className="muted" style={{ fontSize: 13 }}>
+                English, A4. Print page 1 on the stamp paper: its top half is left blank for the
+                stamp. Both parties initial every page; the driver signs Schedules 1, 4 and 6.
+              </div>
+            </div>
+            <button
+              onClick={() =>
+                void openBlob(() => api.blob(`/v1/agreements/${a.id}/documents/agreement`)).catch(
+                  setActionError,
+                )
+              }
+            >
+              Print agreement
+            </button>
+          </div>
           <div className="doc-grid">
             {(['schedule-1', 'schedule-5'] as const).map((doc) => (
               <DocRow
@@ -343,6 +361,15 @@ export default function AgreementPage() {
                   {DRIVER_LANGUAGE_LABELS[a.signed.explainedInLanguage]} by{' '}
                   {a.signed.explainedByName}
                 </dd>
+                {a.signed.stamp && (
+                  <>
+                    <dt>Stamp paper</dt>
+                    <dd>
+                      No. {a.signed.stamp.number}, {formatRupees(a.signed.stamp.value)}, bought{' '}
+                      {formatDate(a.signed.stamp.purchasedOn)}
+                    </dd>
+                  </>
+                )}
                 <dt>Signed copy</dt>
                 <dd>
                   <button
@@ -678,6 +705,10 @@ function SignForm({
   onSubmit: (form: FormData) => void;
 }) {
   const file = useRef<HTMLInputElement>(null);
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
+  const [stampNumber, setStampNumber] = useState('');
+  const [stampValue, setStampValue] = useState('');
+  const [stampDate, setStampDate] = useState('');
   const [signedAt, setSignedAt] = useState(nowLocal());
   const [language, setLanguage] = useState<Lang>(a.language);
   const [explainedBy, setExplainedBy] = useState(meId);
@@ -685,24 +716,79 @@ function SignForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        const f = file.current?.files?.[0];
-        if (!f) return;
+        if (!pickedFiles.length) return;
         const form = new FormData();
         form.set('signedAt', localToIso(signedAt));
         form.set('explainedInLanguage', language);
         form.set('explainedById', explainedBy);
-        form.set('file', f);
+        form.set('stampPaperNumber', stampNumber.trim());
+        form.set('stampValueRupees', stampValue);
+        form.set('stampPurchasedOn', stampDate);
+        for (const f of pickedFiles) form.append('files', f);
         onSubmit(form);
       }}
     >
       <p className="muted">
-        Upload a scan or photo of the signed agreement with Schedules 1 and 5 (signed or
-        thumb-printed). Signing fixes the payment table; the terms cannot change afterwards except
-        by an approved variation.
+        Upload the whole signed agreement, initialled on every page and signed by both parties and
+        two witnesses, with the signed Key Facts (Schedule 5). Signing fixes the payment table; the
+        terms, the signed copy and the stamp paper details cannot change afterwards.
       </p>
       <div className="field">
-        <label htmlFor="sign-file">Signed copy (PDF or photo)</label>
-        <input id="sign-file" ref={file} type="file" accept="application/pdf,image/*" required />
+        <label htmlFor="sign-file">
+          Signed copy: one scanned PDF (up to 25 MB) or photos of every page
+        </label>
+        <input
+          id="sign-file"
+          ref={file}
+          type="file"
+          accept="application/pdf,image/jpeg,image/png"
+          multiple
+          required
+          onChange={(e) => setPickedFiles(Array.from(e.target.files ?? []))}
+        />
+        {pickedFiles.length > 1 && (
+          <small className="muted">
+            {pickedFiles.length} photos, joined into one PDF in this order:{' '}
+            {pickedFiles.map((f) => f.name).join(', ')}
+          </small>
+        )}
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor="stamp-no">Stamp paper number</label>
+          <input
+            id="stamp-no"
+            required
+            minLength={3}
+            maxLength={60}
+            placeholder="Serial or e-stamp certificate number"
+            value={stampNumber}
+            onChange={(e) => setStampNumber(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="stamp-value">Stamp value (₹)</label>
+          <input
+            id="stamp-value"
+            type="number"
+            required
+            min={1}
+            step={1}
+            value={stampValue}
+            onChange={(e) => setStampValue(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="stamp-date">Stamp paper bought on</label>
+          <input
+            id="stamp-date"
+            type="date"
+            required
+            max={signedAt.slice(0, 10)}
+            value={stampDate}
+            onChange={(e) => setStampDate(e.target.value)}
+          />
+        </div>
       </div>
       <div className="form-grid">
         <div className="field">

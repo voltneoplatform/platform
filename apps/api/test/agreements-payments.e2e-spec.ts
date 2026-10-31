@@ -13,6 +13,7 @@ import {
 import {
   PDF,
   PNG,
+  realPng,
   makeBattery,
   makeBatteryType,
   makeDriver,
@@ -74,7 +75,10 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
       .set(bearer(ops.token))
       .field('signedAt', new Date().toISOString())
       .field('explainedInLanguage', 'BN')
-      .attach('file', PDF, 'signed.pdf')
+      .field('stampPaperNumber', 'WB-NJ-123456')
+      .field('stampValueRupees', '100')
+      .field('stampPurchasedOn', '2026-10-01')
+      .attach('files', PDF, 'signed.pdf')
       .expect(200);
     return res.body;
   }
@@ -275,7 +279,10 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         .set(bearer(ops.token))
         .field('signedAt', new Date().toISOString())
         .field('explainedInLanguage', 'BN')
-        .attach('file', PDF, 'signed.pdf')
+        .field('stampPaperNumber', 'WB-NJ-123456')
+        .field('stampValueRupees', '100')
+        .field('stampPurchasedOn', '2026-10-01')
+        .attach('files', PDF, 'signed.pdf')
         .expect(422);
       expect(res.body.code).toBe('NOT_READY');
     });
@@ -319,6 +326,71 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         .expect(200);
       const file = await ctx.http.get(link.body.url).expect(200);
       expect(file.headers['content-type']).toContain('application/pdf');
+    });
+
+    it('joins page photos into one PDF and records the stamp paper, which then cannot change', async () => {
+      const d = await readyDriver(ctx, ops.token);
+      const a = (await draft(d.id).expect(201)).body;
+      const sign = () =>
+        ctx.http
+          .post(`/v1/agreements/${a.id}/sign`)
+          .set(bearer(ops.token))
+          .field('signedAt', new Date().toISOString())
+          .field('explainedInLanguage', 'HI')
+          .field('stampPaperNumber', 'WB-NJ-778899')
+          .field('stampValueRupees', '50');
+      // Stamp paper bought after signing, or a PDF mixed with photos: refused.
+      await sign()
+        .field('stampPurchasedOn', '2099-01-01')
+        .attach('files', realPng(), 'p1.png')
+        .expect(400);
+      const mixed = await sign()
+        .field('stampPurchasedOn', '2026-10-01')
+        .attach('files', PDF, 'scan.pdf')
+        .attach('files', realPng(), 'p1.png')
+        .expect(400);
+      expect(mixed.body.message).toMatch(/one PDF, or photos/);
+
+      const res = await sign()
+        .field('stampPurchasedOn', '2026-10-01')
+        .attach('files', realPng(), 'page1.png')
+        .attach('files', realPng(60, 80), 'page2.png')
+        .attach('files', realPng(), 'page3.png')
+        .expect(200);
+      expect(res.body.signed).toMatchObject({
+        fileName: `${a.number}-signed.pdf`,
+        stamp: { number: 'WB-NJ-778899', value: r(50), purchasedOn: '2026-10-01' },
+      });
+      const link = await ctx.http
+        .post(`/v1/agreements/${a.id}/signed-copy/link`)
+        .set(bearer(ops.token))
+        .expect(200);
+      const file = await ctx.http.get(link.body.url).buffer(true).expect(200);
+      const pdf = Buffer.from(file.body as Buffer).toString('latin1');
+      expect(pdf.startsWith('%PDF-')).toBe(true);
+      expect(pdf.match(/\/Type \/Page\b/g)).toHaveLength(3);
+
+      await expect(
+        ctx.prisma.agreement.update({ where: { id: a.id }, data: { stampPaperNumber: 'X-1' } }),
+      ).rejects.toThrow(/cannot be changed/);
+    });
+
+    it('prints the whole agreement for stamp paper, with the company and the driver named', async () => {
+      const d = await readyDriver(ctx, ops.token);
+      const a = (await draft(d.id).expect(201)).body;
+      const res = await ctx.http
+        .get(`/v1/agreements/${a.id}/documents/agreement`)
+        .set(bearer(ops.token))
+        .buffer(true)
+        .expect(200);
+      expect(res.headers['content-type']).toContain('application/pdf');
+      expect(res.headers['content-disposition']).toContain(`${a.number}-agreement.pdf`);
+      const pdf = Buffer.from(res.body as Buffer).toString('latin1');
+      expect((pdf.match(/\/Type \/Page\b/g) ?? []).length).toBeGreaterThan(8);
+      await ctx.http
+        .get(`/v1/agreements/${a.id}/documents/nonsense`)
+        .set(bearer(ops.token))
+        .expect(404);
     });
 
     it('cancels a signed agreement only while no money has been received', async () => {
