@@ -40,6 +40,10 @@ interface AgreementDetail {
   };
   schedule: { sequence: number; amount: number; amountPaid: number }[];
   allowed: { pay: boolean; install: boolean };
+  installation: {
+    status: 'VERIFIED' | 'PENDING_VERIFICATION' | 'REJECTED';
+    rejectedReason: string | null;
+  } | null;
 }
 
 interface Link {
@@ -62,7 +66,11 @@ export default function AgreementPage() {
   const links = useLoad(() => api.get<Links>(`/v1/agreements/${id}/payment-links`), [api, id]);
   const [mode, setMode] = useState<'none' | 'cash' | 'link'>('none');
   const [message, setMessage] = useState<string | null>(
-    doneFlag === 'installed' ? t('installed') : null,
+    doneFlag === 'installed'
+      ? t('installed')
+      : doneFlag === 'installRecorded'
+        ? t('installRecorded')
+        : null,
   );
   const a = ag.data;
   const mayCollect = can('payments.collect_cash');
@@ -130,6 +138,14 @@ export default function AgreementPage() {
         )}
       </Card>
 
+      {a.installation?.status === 'PENDING_VERIFICATION' && (
+        <Notice tone="warn">{t('installWaiting')}</Notice>
+      )}
+      {a.installation?.status === 'REJECTED' && a.state === 'AWAITING_INSTALLATION' && (
+        <Notice tone="danger">
+          {t('installRejected', { reason: a.installation.rejectedReason ?? '' })}
+        </Notice>
+      )}
       {a.allowed.install && can('installations.record') && (
         <Button
           testID="record-installation"

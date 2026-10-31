@@ -393,13 +393,78 @@ export default function AgreementPage() {
       {a.installation && (
         <div className="card">
           <h2>Installation (Schedule 3)</h2>
+          {a.installation.status === 'PENDING_VERIFICATION' && (
+            <div className="alert warn">
+              Recorded by {a.installation.recordedByName ?? 'field staff'}. Waiting for head office
+              to verify it: check the photos and readings. The agreement starts only once it is
+              verified.
+              {a.allowed.verifyInstallation && can('installations.verify') && (
+                <div className="row" style={{ marginTop: 10 }}>
+                  <button
+                    className="primary"
+                    onClick={() =>
+                      void act(
+                        () =>
+                          api.post<AgreementDetail>(
+                            `/v1/agreements/${a.id}/installation/${a.installation!.id}/verify`,
+                          ),
+                        'Installation verified. The agreement is active.',
+                      )
+                    }
+                  >
+                    Verify installation
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={() => {
+                      const reason = window.prompt(
+                        'What is wrong? The installer will see this and record it again.',
+                      );
+                      if (!reason || reason.trim().length < 5) return;
+                      void act(
+                        () =>
+                          api.post<AgreementDetail>(
+                            `/v1/agreements/${a.id}/installation/${a.installation!.id}/reject`,
+                            { reason: reason.trim() },
+                          ),
+                        'Installation sent back to be recorded again.',
+                      );
+                    }}
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {a.installation.status === 'REJECTED' && (
+            <div className="alert danger">
+              Rejected by {a.installation.decidedByName ?? 'head office'}
+              {a.installation.decidedAt &&
+                ` on ${formatDate(a.installation.decidedAt, true)}`}:{' '}
+              {a.installation.rejectedReason}. It must be recorded again.
+            </div>
+          )}
           <dl className="kv">
             <dt>Installed</dt>
             <dd>
               {formatDate(a.installation.installedAt, true)} at {a.installation.location}
             </dd>
-            <dt>Technician</dt>
+            <dt>Installed by</dt>
             <dd>{a.installation.technicianName}</dd>
+            <dt>Recorded by</dt>
+            <dd>{a.installation.recordedByName}</dd>
+            {a.installation.status === 'VERIFIED' &&
+              a.installation.decidedByName &&
+              a.installation.decidedByName !== a.installation.recordedByName && (
+                <>
+                  <dt>Verified by</dt>
+                  <dd>
+                    {a.installation.decidedByName}
+                    {a.installation.decidedAt && `, ${formatDate(a.installation.decidedAt, true)}`}
+                  </dd>
+                </>
+              )}
             <dt>Voltage reading</dt>
             <dd>{a.installation.voltageReading} V</dd>
             {a.installation.readingsNote && (

@@ -16,7 +16,12 @@ import type { DashboardSummary } from '@/lib/types';
 import { ErrorBox, formatDate, useLoad } from '@/components/ui';
 
 const rs = (p: number) => formatRupees(p);
-const METHOD_ROW = { CASH: 'In cash', UPI: 'By UPI', CARD: 'By card' } as const;
+const METHOD_ROW = {
+  CASH: 'In cash',
+  UPI: 'By UPI',
+  CARD: 'By card',
+  ENACH: 'By e-NACH',
+} as const;
 
 function Received({ r, label }: { r: DashboardSummary['received']['day']; label: string }) {
   return (
@@ -39,7 +44,7 @@ function Received({ r, label }: { r: DashboardSummary['received']['day']; label:
             <dd>{rs(r.driverCredit)}</dd>
           </>
         )}
-        {(['CASH', 'UPI', 'CARD'] as const)
+        {(['CASH', 'UPI', 'CARD', 'ENACH'] as const)
           .filter((m) => r.byMethod[m])
           .map((m) => (
             <span key={m} style={{ display: 'contents' }}>

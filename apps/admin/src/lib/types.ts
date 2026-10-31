@@ -377,6 +377,10 @@ export interface AgreementDetail {
     technicianName: string | null;
     recordedByName: string | null;
     photos: { id: string; fileName: string }[];
+    status: 'VERIFIED' | 'PENDING_VERIFICATION' | 'REJECTED';
+    decidedByName: string | null;
+    decidedAt: string | null;
+    rejectedReason: string | null;
   } | null;
   readiness: DriverDetail['readiness'] | null;
   pendingVariation: { id: string; summary: string; requestedById: string } | null;
@@ -386,6 +390,7 @@ export interface AgreementDetail {
     cancel: boolean;
     reschedule: boolean;
     install: boolean;
+    verifyInstallation: boolean;
     pay: boolean;
   };
 }
@@ -669,7 +674,7 @@ interface Received {
   instalments: number;
   lateFees: number;
   driverCredit: number;
-  byMethod: Partial<Record<'UPI' | 'CARD' | 'CASH', { amount: number; count: number }>>;
+  byMethod: Partial<Record<'UPI' | 'CARD' | 'CASH' | 'ENACH', { amount: number; count: number }>>;
   paymentsTotal: number;
   matchesLedger: boolean;
 }

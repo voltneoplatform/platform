@@ -64,17 +64,97 @@ describe('Field App support (M5)', () => {
     await ctx.http.post('/v1/auth/refresh').send({ refreshToken: other.refreshToken }).expect(401);
   });
 
-  it('lets a field agent record an installation as the installer (founder, 31 Oct 2026)', async () => {
+  it('has a field installation verified by head office before the agreement starts', async () => {
     const agent = await loginAs(ctx, 'FIELD_AGENT');
+    const tech = await loginAs(ctx, 'TECHNICIAN');
+    const pmAgent = { token: agent.token, staffId: agent.staff.id };
+    // The fixture records the installation as the field agent: it waits for head office.
     const b = await activeAgreement(
       ctx,
       { ops: ops.token, finance: finance.token, pm: pm.token },
-      { installAs: { token: agent.token, staffId: agent.staff.id } },
+      { installAs: pmAgent },
     );
-    const view = await ctx.http.get(`/v1/agreements/${b.id}`).set(bearer(ops.token)).expect(200);
-    expect(view.body.state).toBe('ACTIVE');
+    const waiting = (
+      await ctx.http.get(`/v1/agreements/${b.id}`).set(bearer(ops.token)).expect(200)
+    ).body;
+    expect(waiting.state).toBe('AWAITING_INSTALLATION');
+    expect(waiting.installation).toMatchObject({ status: 'PENDING_VERIFICATION' });
+    expect(waiting.allowed).toMatchObject({ install: false, verifyInstallation: true });
+    const battery = await ctx.prisma.battery.findUniqueOrThrow({ where: { id: b.battery.id } });
+    expect(battery.status).toBe('IN_STOCK');
     const s = (await ctx.http.get('/v1/field/summary').set(bearer(agent.token)).expect(200)).body;
     expect(s.installationsWaiting).toBe(0);
+
+    // Only head office decides; a technician or the agent cannot.
+    const pending = await ctx.http
+      .get('/v1/installations/pending')
+      .set(bearer(pm.token))
+      .expect(200);
+    expect(pending.body).toHaveLength(1);
+    expect(pending.body[0]).toMatchObject({
+      agreementNumber: b.number,
+      recordedByName: expect.any(String),
+    });
+    const instId = pending.body[0].id as string;
+    for (const who of [agent, tech, finance]) {
+      await ctx.http
+        .post(`/v1/agreements/${b.id}/installation/${instId}/verify`)
+        .set(bearer(who.token))
+        .expect(403);
+    }
+
+    // Rejected: the agent records it again; then an operations manager verifies it.
+    await ctx.http
+      .post(`/v1/agreements/${b.id}/installation/${instId}/reject`)
+      .set(bearer(ops.token))
+      .send({ reason: 'Photos do not show the serial number' })
+      .expect(200);
+    const rejected = (
+      await ctx.http.get(`/v1/agreements/${b.id}`).set(bearer(ops.token)).expect(200)
+    ).body;
+    expect(rejected.installation).toMatchObject({
+      status: 'REJECTED',
+      rejectedReason: 'Photos do not show the serial number',
+    });
+    expect(rejected.allowed.install).toBe(true);
+    await ctx.http
+      .post(`/v1/agreements/${b.id}/installation`)
+      .set(bearer(agent.token))
+      .field('batteryId', b.battery.id)
+      .field('technicianId', agent.staff.id)
+      .field('installedAt', new Date().toISOString())
+      .field('location', 'Baruipur')
+      .field('voltageReading', '52.4')
+      .field('conditionNote', 'Good')
+      .field('driverConfirmed', 'true')
+      .attach('photos', PNG, 'p.png')
+      .expect(200);
+    const again = await ctx.http
+      .get('/v1/installations/pending')
+      .set(bearer(ops.token))
+      .expect(200);
+    const done = await ctx.http
+      .post(`/v1/agreements/${b.id}/installation/${again.body[0].id}/verify`)
+      .set(bearer(ops.token))
+      .expect(200);
+    expect(done.body.state).toBe('ACTIVE');
+    expect(done.body.installation).toMatchObject({
+      status: 'VERIFIED',
+      decidedByName: expect.any(String),
+    });
+    const fitted = await ctx.prisma.battery.findUniqueOrThrow({ where: { id: b.battery.id } });
+    expect(fitted.status).toBe('INSTALLED');
+    await ctx.http
+      .post(`/v1/agreements/${b.id}/installation/${again.body[0].id}/verify`)
+      .set(bearer(ops.token))
+      .expect(409);
+  });
+
+  it('puts an installation recorded by head office in force at once', async () => {
+    const view = (await ctx.http.get(`/v1/agreements/${a.id}`).set(bearer(ops.token)).expect(200))
+      .body;
+    expect(view.state).toBe('ACTIVE');
+    expect(view.installation.status).toBe('VERIFIED');
   });
 
   it("shows a field agent their cash: what they hold and today's collections", async () => {

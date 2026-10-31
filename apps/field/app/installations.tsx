@@ -10,6 +10,7 @@ interface Row {
   driver: { name: string; phone: string };
   batteryType: string;
   firstDueDate: string;
+  installationWaiting: boolean;
 }
 
 export default function Installations() {
@@ -28,7 +29,11 @@ export default function Installations() {
         <Pressable
           key={a.id}
           accessibilityRole="button"
-          onPress={() => router.push(`/agreements/${a.id}/install`)}
+          onPress={() =>
+            router.push(
+              a.installationWaiting ? `/agreements/${a.id}` : `/agreements/${a.id}/install`,
+            )
+          }
           style={{
             backgroundColor: C.card,
             borderRadius: 12,
@@ -45,6 +50,9 @@ export default function Installations() {
             {a.driver.phone} · {a.batteryType} ·{' '}
             {t('firstDue', { date: shortDate(a.firstDueDate) })}
           </Muted>
+          {a.installationWaiting && (
+            <Muted style={{ color: C.success }}>{t('installWaiting')}</Muted>
+          )}
         </Pressable>
       ))}
     </Screen>

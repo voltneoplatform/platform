@@ -69,6 +69,8 @@ export const PERMISSIONS = [
   'agreements.read',
   'agreements.manage',
   'installations.record',
+  /** Confirm an installation recorded by a field agent or technician (founder, 31 Oct 2026). */
+  'installations.verify',
   // Module 8: payments
   'payments.read',
   'payments.record',
@@ -123,6 +125,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'drivers.manage',
     'agreements.manage',
     'installations.record',
+    'installations.verify',
     'approvals.request',
     'approvals.decide',
   ],
@@ -138,6 +141,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'kyc.verify',
     'agreements.manage',
     'installations.record',
+    'installations.verify',
     'recovery.record',
     'tickets.manage',
     'tickets.resolve',

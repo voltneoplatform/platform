@@ -4,8 +4,19 @@ import Link from 'next/link';
 import { ROLE_LABELS, type Permission } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
 import type { ApprovalRow } from '@/lib/types';
-import { useLoad } from '@/components/ui';
+import { formatDate, useLoad } from '@/components/ui';
 import { Dashboard } from '@/components/Dashboard';
+
+interface PendingInstallation {
+  id: string;
+  agreementId: string;
+  agreementNumber: string;
+  driverName: string;
+  batterySerial: string;
+  installedAt: string;
+  location: string;
+  recordedByName: string | null;
+}
 
 const CARDS: { href: string; title: string; text: string; permission: Permission }[] = [
   {
@@ -61,6 +72,13 @@ export default function HomePage() {
         : Promise.resolve([] as ApprovalRow[]),
     [api],
   );
+  const installs = useLoad(
+    () =>
+      can('installations.verify')
+        ? api.get<PendingInstallation[]>('/v1/installations/pending')
+        : Promise.resolve([] as PendingInstallation[]),
+    [api],
+  );
   if (!staff) return null;
   const waitingForMe = approvals.data?.filter((a) => a.canDecide).length ?? 0;
   return (
@@ -78,6 +96,30 @@ export default function HomePage() {
             {waitingForMe} request{waitingForMe === 1 ? '' : 's'} waiting for your approval.
           </strong>{' '}
           <Link href="/approvals">Review now</Link>
+        </div>
+      )}
+
+      {(installs.data?.length ?? 0) > 0 && (
+        <div className="card">
+          <h2>Installations to verify ({installs.data!.length})</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Recorded in the Field App by a field agent or technician. Check the photos and readings,
+            then verify or reject. The agreement starts only once verified.
+          </p>
+          <ul className="timeline">
+            {installs.data!.map((i) => (
+              <li key={i.id}>
+                <Link href={`/agreements/${i.agreementId}`}>
+                  {i.agreementNumber} · {i.driverName}
+                </Link>{' '}
+                <span className="muted" style={{ fontSize: 13 }}>
+                  battery <span className="mono">{i.batterySerial}</span> · installed{' '}
+                  {formatDate(i.installedAt, true)} at {i.location} · recorded by{' '}
+                  {i.recordedByName ?? '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
