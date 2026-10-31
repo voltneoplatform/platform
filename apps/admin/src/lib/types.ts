@@ -205,6 +205,8 @@ export interface DriverDetail {
   state: string;
   pinCode: string;
   status: 'ACTIVE' | 'INACTIVE';
+  /** "Son / daughter / wife of" for the agreement; null for drivers registered earlier. */
+  relative: { relation: 'SON_OF' | 'DAUGHTER_OF' | 'WIFE_OF'; name: string } | null;
   nominee: { name: string | null; relation: string | null; phone: string | null };
   notes: string | null;
   createdAt: string;

@@ -60,6 +60,15 @@ function phone(raw: string | null | undefined, label: string): string | null {
   return p;
 }
 
+/** Son / daughter / wife of: both the relation and the name, or neither. */
+function checkRelative(relation: string | null, name: string | null): void {
+  if (!relation !== !name) {
+    throw new BadRequestException(
+      "Give both the relation (son, daughter or wife of) and the relative's name, or neither",
+    );
+  }
+}
+
 function checkAge(dob: string | null | undefined) {
   if (!dob) return;
   const today = istDate();
@@ -168,6 +177,10 @@ export class DriversService {
       state: d.state,
       pinCode: d.pinCode,
       status: d.status,
+      relative:
+        d.relativeRelation && d.relativeName
+          ? { relation: d.relativeRelation, name: d.relativeName }
+          : null,
       nominee: { name: d.nomineeName, relation: d.nomineeRelation, phone: d.nomineePhone },
       notes: d.notes,
       createdAt: d.createdAt,
@@ -370,6 +383,7 @@ export class DriversService {
     const main = phone(dto.phone, 'Phone')!;
     const alt = phone(dto.altPhone, 'Alternate phone');
     checkAge(dto.dateOfBirth);
+    checkRelative(dto.relativeRelation ?? null, dto.relativeName ?? null);
     const nomineePhone = phone(dto.nomineePhone, "Nominee's phone");
     const vehicle = dto.vehicle ? this.vehicleData(dto.vehicle) : null;
 
@@ -392,6 +406,8 @@ export class DriversService {
           district: dto.district,
           state: dto.state ?? 'West Bengal',
           pinCode: dto.pinCode,
+          relativeRelation: dto.relativeRelation ?? null,
+          relativeName: dto.relativeName ?? null,
           nomineeName: dto.nomineeName ?? null,
           nomineeRelation: dto.nomineeRelation ?? null,
           nomineePhone,
@@ -432,6 +448,10 @@ export class DriversService {
     await serializable(this.prisma, async (tx) => {
       const before = await tx.driver.findUnique({ where: { id } });
       if (!before) throw new NotFoundException('Driver not found');
+      checkRelative(
+        dto.relativeRelation === undefined ? before.relativeRelation : dto.relativeRelation,
+        dto.relativeName === undefined ? before.relativeName : dto.relativeName,
+      );
       const newPhones = [main, alt].filter(
         (p): p is string => !!p && p !== before.phone && p !== before.altPhone,
       );
@@ -457,6 +477,8 @@ export class DriversService {
           district: dto.district,
           state: dto.state,
           pinCode: dto.pinCode,
+          relativeRelation: dto.relativeRelation,
+          relativeName: dto.relativeName,
           nomineeName: dto.nomineeName,
           nomineeRelation: dto.nomineeRelation,
           nomineePhone,

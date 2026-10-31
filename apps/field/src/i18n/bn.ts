@@ -52,6 +52,8 @@ export const bn: Messages = {
   area: 'এলাকা বা গ্রাম',
   district: 'জেলা',
   pinCode: 'পিন কোড',
+  relativeRelation: 'পুত্র, কন্যা বা স্ত্রী',
+  relativeName: 'পিতা বা স্বামীর নাম',
   nomineeName: 'নমিনির নাম',
   nomineeRelation: 'নমিনির সম্পর্ক',
   nomineePhone: 'নমিনির মোবাইল',

@@ -52,6 +52,8 @@ export const hi: Messages = {
   area: 'इलाका या गाँव',
   district: 'ज़िला',
   pinCode: 'पिन कोड',
+  relativeRelation: 'पुत्र, पुत्री या पत्नी',
+  relativeName: 'पिता या पति का नाम',
   nomineeName: 'नॉमिनी का नाम',
   nomineeRelation: 'नॉमिनी से रिश्ता',
   nomineePhone: 'नॉमिनी का मोबाइल',

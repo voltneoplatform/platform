@@ -12,6 +12,18 @@ export const DRIVER_LANGUAGE_LABELS: Record<DriverLanguage, string> = {
   EN: 'English',
 };
 
+/**
+ * How the driver is described in the agreement: son of, daughter of or wife of
+ * a named relative, as is usual in Indian agreements (founder, 31 Oct 2026).
+ */
+export const RELATIVE_RELATIONS = ['SON_OF', 'DAUGHTER_OF', 'WIFE_OF'] as const;
+export type RelativeRelation = (typeof RELATIVE_RELATIONS)[number];
+export const RELATIVE_RELATION_LABELS: Record<RelativeRelation, string> = {
+  SON_OF: 'son of',
+  DAUGHTER_OF: 'daughter of',
+  WIFE_OF: 'wife of',
+};
+
 export const KYC_DOC_TYPES = [
   'AADHAAR',
   'VOTER_ID',

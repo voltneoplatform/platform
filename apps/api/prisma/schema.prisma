@@ -411,6 +411,9 @@ model Driver {
   altPhone        String?        @map("alt_phone")
   language        DriverLanguage
   dateOfBirth     DateTime?      @map("date_of_birth") @db.Date
+  /// "Son / daughter / wife of" in the agreement (both or neither)
+  relativeRelation RelativeRelation? @map("relative_relation")
+  relativeName    String?        @map("relative_name")
   addressLine     String         @map("address_line")
   area            String?
   district        String
@@ -433,6 +436,12 @@ model Driver {
 
   @@index([phone])
   @@map("drivers")
+}
+
+enum RelativeRelation {
+  SON_OF
+  DAUGHTER_OF
+  WIFE_OF
 }
 
 enum KycDocType {

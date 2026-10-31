@@ -27,6 +27,8 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
           phone: '098300 11111',
           language: 'BN',
           dateOfBirth: '1985-03-02',
+          relativeRelation: 'SON_OF',
+          relativeName: 'Haren Das',
           addressLine: '4 Ghat Road',
           area: 'Baruipur',
           district: 'South 24 Parganas',
@@ -41,6 +43,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
         phone: '+919830011111',
         state: 'West Bengal',
         nominee: { name: 'Mita Das', phone: '+919123456789' },
+        relative: { relation: 'SON_OF', name: 'Haren Das' },
         vehicle: { registration: 'WB19AB1234', type: 'TOTO', ownedByDriver: true },
       });
       expect(res.body.readiness.ready).toBe(false);
@@ -49,6 +52,40 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
           .filter((i: { done: boolean }) => i.done)
           .map((i: { item: string }) => i.item),
       ).toEqual(['ADULT', 'VEHICLE_RECORDED', 'OWNER_CONSENT', 'NOMINEE_RECORDED']);
+    });
+
+    it("needs both the relation and the father's or husband's name, or neither", async () => {
+      const send = (extra: Record<string, unknown>) =>
+        ctx.http
+          .post('/v1/drivers')
+          .set(bearer(ops.token))
+          .send({
+            name: 'Anil Roy',
+            phone: '9830022222',
+            language: 'BN',
+            dateOfBirth: '1988-05-05',
+            addressLine: '1 Bazar Road',
+            district: 'South 24 Parganas',
+            pinCode: '743610',
+            vehicle: { registration: 'WB 19 C 4321', type: 'TOTO', ownedByDriver: true },
+            ...extra,
+          });
+      await send({ relativeRelation: 'SON_OF' }).expect(400);
+      await send({ relativeName: 'Bimal Roy' }).expect(400);
+      await send({ relativeRelation: 'BROTHER_OF', relativeName: 'Bimal Roy' }).expect(400);
+      const d = (await send({}).expect(201)).body;
+      expect(d.relative).toBeNull();
+      await ctx.http
+        .patch(`/v1/drivers/${d.id}`)
+        .set(bearer(ops.token))
+        .send({ relativeName: 'Bimal Roy' })
+        .expect(400);
+      const updated = await ctx.http
+        .patch(`/v1/drivers/${d.id}`)
+        .set(bearer(ops.token))
+        .send({ relativeRelation: 'SON_OF', relativeName: 'Bimal Roy' })
+        .expect(200);
+      expect(updated.body.relative).toEqual({ relation: 'SON_OF', name: 'Bimal Roy' });
     });
 
     it('flags a phone number already on another driver, and saves only when confirmed', async () => {
