@@ -393,6 +393,33 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         .expect(404);
     });
 
+    it('prints the full PAN only for staff who may see full ID numbers, and logs it', async () => {
+      const d = await readyDriver(ctx, ops.token);
+      const a = (await draft(d.id).expect(201)).body;
+      const reveals = () =>
+        ctx.prisma.auditLog.count({
+          where: { action: 'kyc.number_revealed', after: { path: ['driverId'], equals: d.id } },
+        });
+      const support = await loginAs(ctx, 'SUPPORT');
+      await ctx.http
+        .get(`/v1/agreements/${a.id}/documents/agreement`)
+        .set(bearer(support.token))
+        .buffer(true)
+        .expect(200);
+      expect(await reveals()).toBe(0);
+      await ctx.http
+        .get(`/v1/agreements/${a.id}/documents/agreement`)
+        .set(bearer(ops.token))
+        .buffer(true)
+        .expect(200);
+      expect(await reveals()).toBe(1);
+      const log = await ctx.prisma.auditLog.findFirstOrThrow({
+        where: { action: 'kyc.number_revealed', actorId: ops.staff.id },
+        orderBy: { at: 'desc' },
+      });
+      expect(log.after).toMatchObject({ type: 'PAN', purpose: 'agreement_print' });
+    });
+
     it('cancels a signed agreement only while no money has been received', async () => {
       const a = await signed();
       await pay(finance.token, { agreementId: a.id, amountPaise: r(500), method: 'CASH' }).expect(
