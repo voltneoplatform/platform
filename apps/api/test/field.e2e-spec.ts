@@ -64,6 +64,19 @@ describe('Field App support (M5)', () => {
     await ctx.http.post('/v1/auth/refresh').send({ refreshToken: other.refreshToken }).expect(401);
   });
 
+  it('lets a field agent record an installation as the installer (founder, 31 Oct 2026)', async () => {
+    const agent = await loginAs(ctx, 'FIELD_AGENT');
+    const b = await activeAgreement(
+      ctx,
+      { ops: ops.token, finance: finance.token, pm: pm.token },
+      { installAs: { token: agent.token, staffId: agent.staff.id } },
+    );
+    const view = await ctx.http.get(`/v1/agreements/${b.id}`).set(bearer(ops.token)).expect(200);
+    expect(view.body.state).toBe('ACTIVE');
+    const s = (await ctx.http.get('/v1/field/summary').set(bearer(agent.token)).expect(200)).body;
+    expect(s.installationsWaiting).toBe(0);
+  });
+
   it("shows a field agent their cash: what they hold and today's collections", async () => {
     const agent = await loginAs(ctx, 'FIELD_AGENT');
     const tech = await loginAs(ctx, 'TECHNICIAN');

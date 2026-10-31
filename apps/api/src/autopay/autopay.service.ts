@@ -269,6 +269,15 @@ export class AutopayService {
     if (!m || (actor.type === 'DRIVER' && m.driverId !== actor.id)) {
       throw new NotFoundException('AutoPay is not on for this agreement');
     }
+    // Founder, 31 Oct 2026: once AutoPay or e-NACH is registered, the driver cannot
+    // switch it off in the Driver App; only head office can. A request not yet
+    // approved can still be withdrawn.
+    if (actor.type === 'DRIVER' && m.status === 'ACTIVE') {
+      throw new ForbiddenException({
+        message: 'AutoPay can be switched off only by Volt Neo head office',
+        code: 'AUTOPAY_LOCKED',
+      });
+    }
     for (const c of m.charges) {
       await this.gateway.cancelCharge(m.subscriptionId, c.chargeId).catch((e: Error) => {
         this.logger.warn(`Could not cancel AutoPay charge ${c.chargeId}: ${e.message}`);

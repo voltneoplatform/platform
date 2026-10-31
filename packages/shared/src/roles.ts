@@ -169,7 +169,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'messages.send',
   ],
 
-  // Cannot change any plan term (D26).
+  // Cannot change any plan term (D26). Records installations too (founder, 31 Oct 2026).
   FIELD_AGENT: [
     'field_app.access',
     'plans.read',
@@ -177,6 +177,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'drivers.manage',
     'agreements.read',
     'payments.collect_cash',
+    'batteries.read',
+    'installations.record',
   ],
 
   // Cannot collect payments (spec section 2).

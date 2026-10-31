@@ -99,8 +99,6 @@ export const bn: Messages = {
   autopayIdle: 'প্রতিটি কিস্তি তার তারিখে কাটা হয়।',
   autopayPending: 'আপনার UPI অ্যাপে মঞ্জুরির অপেক্ষায়।',
   autopayApprove: 'মঞ্জুরির পাতা খুলুন',
-  autopayStop: 'অটোপে বন্ধ করুন',
-  autopayStopConfirm: 'অটোপে বন্ধ করবেন? তখন প্রতিটি কিস্তি নিজে দিতে হবে।',
   autopayDue: 'অটোপে {date} তারিখে এটি কাটবে।',
   autopayOverdue: 'অটোপে বাকি টাকা বা বিলম্ব ফি কাটে না। এখানে দিন।',
   autopayPendingEnach: 'আপনার ব্যাংকের ই-ন্যাক নিশ্চিতকরণের অপেক্ষায়। সাধারণত ১-২ দিন লাগে।',
