@@ -227,6 +227,8 @@ export interface DriverListRow {
   status: string;
   vehicle: { registration: string | null; type: string; ownedByDriver: boolean } | null;
   ready: boolean;
+  /** The agreement still in progress, if any. */
+  agreement: { id: string; number: string; state: string } | null;
   itemsDone: number;
   itemsTotal: number;
   pendingDocuments: number;

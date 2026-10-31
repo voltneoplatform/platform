@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Stack, router } from 'expo-router';
+import type { AgreementState } from '@voltneo/shared';
 import { useSession } from '@/session';
 import { Badge, Body, Button, C, ErrorNotice, Field, Loading, Muted, Screen, useLoad } from '@/ui';
 
@@ -11,12 +12,14 @@ interface DriverRow {
   district: string;
   vehicle: { registration: string | null } | null;
   ready: boolean;
+  /** The agreement still in progress, if any. */
+  agreement: { id: string; number: string; state: AgreementState } | null;
   itemsDone: number;
   itemsTotal: number;
 }
 
 export default function Drivers() {
-  const { t, api, can } = useSession();
+  const { t, api, can, labels } = useSession();
   const [search, setSearch] = useState('');
   const q = search.trim();
   const { data, error, loading, reload } = useLoad(
@@ -64,8 +67,20 @@ export default function Drivers() {
             {d.phone}
             {d.vehicle?.registration ? ` · ${d.vehicle.registration}` : ''} · {d.district}
           </Muted>
-          <View>
-            {d.ready ? (
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {d.agreement ? (
+              <>
+                <Badge
+                  tone={
+                    d.agreement.state === 'IN_GRACE' || d.agreement.state === 'IMMOBILISED'
+                      ? 'danger'
+                      : 'info'
+                  }
+                  text={labels.state[d.agreement.state]}
+                />
+                <Muted>{d.agreement.number}</Muted>
+              </>
+            ) : d.ready ? (
               <Badge tone="success" text={t('readyToSign')} />
             ) : (
               <Badge

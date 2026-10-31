@@ -12,6 +12,7 @@ import {
 import { useSession } from '@/lib/session';
 import type { DriverDetail, DriverListRow, Paged } from '@/lib/types';
 import { Forbidden } from '@/components/AppShell';
+import { AgreementStateBadge } from '@/components/AgreementBits';
 import {
   DriverFields,
   VehicleFields,
@@ -111,10 +112,10 @@ export default function DriversPage() {
             setReadiness(e.target.value);
             setPage(1);
           }}
-          aria-label="KYC"
+          aria-label="Status"
         >
-          <option value="">Any KYC state</option>
-          <option value="ready">Ready for an agreement</option>
+          <option value="">Any status</option>
+          <option value="ready">Ready for an agreement (none yet)</option>
           <option value="not_ready">KYC incomplete</option>
         </select>
       </div>
@@ -126,7 +127,7 @@ export default function DriversPage() {
               <th>Mobile</th>
               <th>Vehicle</th>
               <th>District</th>
-              <th>KYC</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -169,11 +170,20 @@ export default function DriversPage() {
                 </td>
                 <td>{d.district}</td>
                 <td>
-                  {d.ready ? (
-                    <span className="badge active">Ready</span>
+                  {d.agreement ? (
+                    <>
+                      <AgreementStateBadge state={d.agreement.state} />
+                      <div className="muted" style={{ fontSize: 13 }}>
+                        <Link href={`/agreements/${d.agreement.id}`} className="mono">
+                          {d.agreement.number}
+                        </Link>
+                      </div>
+                    </>
+                  ) : d.ready ? (
+                    <span className="badge active">Ready to sign</span>
                   ) : (
                     <span className="badge warn">
-                      {d.itemsDone} of {d.itemsTotal}
+                      KYC {d.itemsDone} of {d.itemsTotal}
                     </span>
                   )}
                   {d.pendingDocuments > 0 && (
