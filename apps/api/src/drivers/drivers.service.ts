@@ -8,6 +8,7 @@ import {
 import {
   KYC_DOC_INFO,
   MIN_DRIVER_AGE,
+  OPEN_AGREEMENT_STATES,
   ageOn,
   docNumberProblem,
   hasPermission,
@@ -212,7 +213,16 @@ export class DriversService {
     };
     const all = await this.prisma.driver.findMany({
       where,
-      include: this.fullInclude,
+      include: {
+        ...this.fullInclude,
+        // The agreement still in progress, if any, so the list shows where it stands.
+        agreements: {
+          where: { state: { in: [...OPEN_AGREEMENT_STATES] } },
+          select: { id: true, number: true, state: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: q.readiness ? 2000 : undefined,
       skip: q.readiness ? undefined : (page - 1) * limit,
@@ -236,6 +246,7 @@ export class DriversService {
             }
           : null,
         ready: r.ready,
+        agreement: d.agreements[0] ?? null,
         itemsDone: r.items.filter((i) => i.done).length,
         itemsTotal: r.items.length,
         pendingDocuments: d.kycDocuments.filter((k) => k.status === 'PENDING').length,
@@ -244,7 +255,8 @@ export class DriversService {
     });
     let total: number;
     if (q.readiness) {
-      rows = rows.filter((r) => r.ready === (q.readiness === 'ready'));
+      // "Ready" means ready for a new agreement: paperwork done and none in progress.
+      rows = rows.filter((r) => (q.readiness === 'ready' ? r.ready && !r.agreement : !r.ready));
       total = rows.length;
       rows = rows.slice((page - 1) * limit, page * limit);
     } else {
