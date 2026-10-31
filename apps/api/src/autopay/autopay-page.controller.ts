@@ -8,41 +8,60 @@ import { AutopayService } from './autopay.service';
 
 type Lang = 'BN' | 'HI' | 'EN';
 
-const T: Record<
-  Lang,
-  Record<
-    'title' | 'opening' | 'button' | 'on' | 'wait' | 'failed' | 'gone' | 'back' | 'fake',
-    string
-  >
-> = {
+type Key =
+  | 'title'
+  | 'opening'
+  | 'openingEnach'
+  | 'button'
+  | 'on'
+  | 'wait'
+  | 'waitEnach'
+  | 'failed'
+  | 'gone'
+  | 'back'
+  | 'fake';
+
+const T: Record<Lang, Record<Key, string>> = {
   EN: {
-    title: 'Volt Neo UPI AutoPay',
+    title: 'Volt Neo AutoPay',
     opening: 'Opening the secure Cashfree page. Approve the AutoPay request in your UPI app.',
+    openingEnach:
+      'Opening the secure Cashfree page. Choose your bank and approve with net banking, debit card or Aadhaar.',
     button: 'Continue',
-    on: 'UPI AutoPay is on. Your instalment will be taken on each Due Date.',
+    on: 'AutoPay is on. Your instalment will be taken on each Due Date.',
     wait: 'Your bank is confirming the AutoPay. Go back to the Volt Neo app; it will show when it is on.',
+    waitEnach:
+      'Your bank is confirming the e-NACH mandate. This usually takes 1 to 2 days. The Volt Neo app will show when it is on.',
     failed: 'AutoPay was not set up. Go back to the Volt Neo app and try again.',
     gone: 'This AutoPay request is no longer open. Start again from the Volt Neo app.',
     back: 'You can now go back to the Volt Neo app.',
     fake: 'Test server: no real gateway. Approve this request from the admin panel (agreement → AutoPay).',
   },
   BN: {
-    title: 'Volt Neo UPI অটোপে',
+    title: 'Volt Neo অটোপে',
     opening: 'নিরাপদ Cashfree পাতা খুলছে। আপনার UPI অ্যাপে অটোপে অনুরোধ মঞ্জুর করুন।',
+    openingEnach:
+      'নিরাপদ Cashfree পাতা খুলছে। আপনার ব্যাংক বেছে নিন এবং নেট ব্যাংকিং, ডেবিট কার্ড বা আধার দিয়ে মঞ্জুর করুন।',
     button: 'এগিয়ে যান',
-    on: 'UPI অটোপে চালু হয়েছে। প্রতি কিস্তির তারিখে কিস্তি কাটা হবে।',
+    on: 'অটোপে চালু হয়েছে। প্রতি কিস্তির তারিখে কিস্তি কাটা হবে।',
     wait: 'আপনার ব্যাংক অটোপে নিশ্চিত করছে। Volt Neo অ্যাপে ফিরে যান; চালু হলে দেখাবে।',
+    waitEnach:
+      'আপনার ব্যাংক ই-ন্যাক নিশ্চিত করছে। সাধারণত ১-২ দিন লাগে। চালু হলে Volt Neo অ্যাপে দেখাবে।',
     failed: 'অটোপে চালু হয়নি। Volt Neo অ্যাপে ফিরে আবার চেষ্টা করুন।',
     gone: 'এই অটোপে অনুরোধ আর খোলা নেই। Volt Neo অ্যাপ থেকে আবার শুরু করুন।',
     back: 'এখন Volt Neo অ্যাপে ফিরে যেতে পারেন।',
     fake: 'টেস্ট সার্ভার: আসল গেটওয়ে নেই।',
   },
   HI: {
-    title: 'Volt Neo UPI ऑटोपे',
+    title: 'Volt Neo ऑटोपे',
     opening: 'सुरक्षित Cashfree पेज खुल रहा है। अपने UPI ऐप में ऑटोपे अनुरोध मंज़ूर करें।',
+    openingEnach:
+      'सुरक्षित Cashfree पेज खुल रहा है। अपना बैंक चुनें और नेट बैंकिंग, डेबिट कार्ड या आधार से मंज़ूर करें।',
     button: 'आगे बढ़ें',
-    on: 'UPI ऑटोपे चालू है। हर किस्त की तारीख पर किस्त कटेगी।',
+    on: 'ऑटोपे चालू है। हर किस्त की तारीख पर किस्त कटेगी।',
     wait: 'आपका बैंक ऑटोपे की पुष्टि कर रहा है। Volt Neo ऐप पर लौटें; चालू होने पर दिखेगा।',
+    waitEnach:
+      'आपका बैंक ई-नैक की पुष्टि कर रहा है। आमतौर पर 1-2 दिन लगते हैं। चालू होने पर Volt Neo ऐप में दिखेगा।',
     failed: 'ऑटोपे चालू नहीं हुआ। Volt Neo ऐप पर लौटकर फिर से कोशिश करें।',
     gone: 'यह ऑटोपे अनुरोध अब खुला नहीं है। Volt Neo ऐप से फिर शुरू करें।',
     back: 'अब आप Volt Neo ऐप पर लौट सकते हैं।',
@@ -121,7 +140,7 @@ document.addEventListener("DOMContentLoaded",function(){document.getElementById(
       .send(
         shell(
           lang,
-          `<p>${esc(t.opening)}</p><p><button id="go">${esc(t.button)}</button></p><p id="err" style="color:#c0262d"></p>`,
+          `<p>${esc(m.method === 'ENACH' ? t.openingEnach : t.opening)}</p><p><button id="go">${esc(t.button)}</button></p><p id="err" style="color:#c0262d"></p>`,
           script,
         ),
       );
@@ -140,7 +159,9 @@ document.addEventListener("DOMContentLoaded",function(){document.getElementById(
       : m.status === 'ACTIVE'
         ? t.on
         : m.status === 'PENDING'
-          ? t.wait
+          ? m.method === 'ENACH'
+            ? t.waitEnach
+            : t.wait
           : t.failed;
     return res
       .status(m ? 200 : 404)

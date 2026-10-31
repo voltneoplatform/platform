@@ -25,7 +25,7 @@ export const LABELS: Record<Lang, Labels> = {
       TRANSFERRED: 'Battery is yours',
       CANCELLED: 'Cancelled',
     },
-    method: { UPI: 'UPI', CARD: 'card', CASH: 'cash' },
+    method: { UPI: 'UPI', CARD: 'card', CASH: 'cash', ENACH: 'bank account (e-NACH)' },
     category: {
       NOT_WORKING: 'Battery not working',
       LOW_CAPACITY: 'Runs out too soon',
@@ -56,7 +56,7 @@ export const LABELS: Record<Lang, Labels> = {
       TRANSFERRED: 'ব্যাটারি আপনার',
       CANCELLED: 'বাতিল',
     },
-    method: { UPI: 'UPI', CARD: 'কার্ড', CASH: 'নগদ' },
+    method: { UPI: 'UPI', CARD: 'কার্ড', CASH: 'নগদ', ENACH: 'ব্যাংক অ্যাকাউন্ট (ই-ন্যাক)' },
     category: {
       NOT_WORKING: 'ব্যাটারি চলছে না',
       LOW_CAPACITY: 'তাড়াতাড়ি চার্জ শেষ হয়',
@@ -87,7 +87,7 @@ export const LABELS: Record<Lang, Labels> = {
       TRANSFERRED: 'बैटरी आपकी',
       CANCELLED: 'रद्द',
     },
-    method: { UPI: 'UPI', CARD: 'कार्ड', CASH: 'नकद' },
+    method: { UPI: 'UPI', CARD: 'कार्ड', CASH: 'नकद', ENACH: 'बैंक खाता (ई-नैक)' },
     category: {
       NOT_WORKING: 'बैटरी नहीं चल रही',
       LOW_CAPACITY: 'जल्दी खत्म हो जाती है',

@@ -398,11 +398,11 @@ export class WebhooksService {
           const result = await this.payments.apply(tx, {
             agreementId: a.id,
             amount: event.amountPaise ?? charge.amount,
-            method: 'UPI',
+            method: charge.mandate.method === 'ENACH' ? 'ENACH' : 'UPI',
             source: 'GATEWAY',
             provider,
             providerRef,
-            note: `UPI AutoPay ${event.chargeId}`,
+            note: `${charge.mandate.method === 'ENACH' ? 'e-NACH' : 'UPI'} AutoPay ${event.chargeId}`,
             receivedAt: paidAt.getTime() > Date.now() ? new Date() : paidAt,
             allowExcess: true,
             actor: { type: 'SYSTEM', id: null },

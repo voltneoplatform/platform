@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
@@ -76,7 +77,7 @@ function istDay(d: Date): string {
 }
 
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -84,6 +85,19 @@ export class PaymentsService {
     private readonly documents: DocumentsService,
     private readonly collections: CollectionsService,
   ) {}
+
+  onModuleInit() {
+    // Emailed receipts carry the receipt PDF in the driver's language.
+    this.messaging.registerEmail('payment_receipt', async (row) => {
+      const p = await this.prisma.payment.findUniqueOrThrow({ where: { id: row.paymentId! } });
+      const lang = row.language as DriverLanguage;
+      const { pdf, fileName } = await this.receipt(p.id, lang);
+      return {
+        subject: TEXTS[lang].receiptEmailSubject(p.receiptNumber),
+        attachment: { filename: fileName, contentType: 'application/pdf', content: pdf },
+      };
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // Applying a payment (shared by manual entry and gateway webhooks)
@@ -277,6 +291,26 @@ export class PaymentsService {
       paymentId: payment.id,
       agreementId: a.id,
     });
+    // The receipt also goes by email when the driver gave one (founder, 31 Oct 2026).
+    if (a.driver.email) {
+      await this.messaging.queue(tx, {
+        driverId: a.driverId,
+        toPhone: a.driver.phone,
+        toEmail: a.driver.email,
+        channel: 'EMAIL',
+        template: 'payment_receipt',
+        language: lang,
+        body: `${TEXTS[lang].receiptSms({
+          amount: formatRupees(input.amount),
+          agreement: a.number,
+          date: istDay(input.receivedAt),
+          receipt,
+          balance: formatRupees(balanceAfter),
+        })}\n\n${TEXTS[lang].receiptEmailNote}`,
+        paymentId: payment.id,
+        agreementId: a.id,
+      });
+    }
 
     await this.audit.record(
       {
@@ -439,6 +473,7 @@ export class PaymentsService {
       messages: p.messages.map((m) => ({
         id: m.id,
         channel: m.channel,
+        to: m.channel === 'EMAIL' ? m.toEmail : m.toPhone,
         status: m.status,
         error: m.error,
         createdAt: m.createdAt,
@@ -533,7 +568,10 @@ export class PaymentsService {
   async resendReceipt(id: string, actor: AuthenticatedStaff, meta: RequestMeta) {
     const p = await this.prisma.payment.findUnique({
       where: { id },
-      include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 }, driver: true },
+      include: {
+        messages: { where: { channel: { not: 'EMAIL' } }, orderBy: { createdAt: 'desc' }, take: 1 },
+        driver: true,
+      },
     });
     if (!p) throw new NotFoundException('Payment not found');
     const last = p.messages[0];

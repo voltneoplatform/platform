@@ -1,8 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   DRIVER_LANGUAGES,
+  MANUAL_PAYMENT_METHODS,
   PAYMENT_METHODS,
   type DriverLanguage,
+  type ManualPaymentMethod,
   type PaymentMethod,
 } from '@voltneo/shared';
 import { Transform, Type } from 'class-transformer';
@@ -33,7 +35,9 @@ export class RecordPaymentDto {
   @Max(MAX_PAYMENT_PAISE)
   amountPaise: number;
 
-  @ApiProperty({ enum: PAYMENT_METHODS }) @IsIn(PAYMENT_METHODS) method: PaymentMethod;
+  @ApiProperty({ enum: MANUAL_PAYMENT_METHODS })
+  @IsIn(MANUAL_PAYMENT_METHODS)
+  method: ManualPaymentMethod;
 
   @ApiPropertyOptional({ description: 'UPI transaction ID (UTR) or card approval code' })
   @IsOptional()

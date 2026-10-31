@@ -197,6 +197,7 @@ export interface DriverDetail {
   name: string;
   phone: string;
   altPhone: string | null;
+  email: string | null;
   language: 'BN' | 'HI' | 'EN';
   dateOfBirth: string | null;
   addressLine: string;

@@ -30,6 +30,8 @@ export interface CreateMandateInput {
   customer: { phone: string; name: string; email: string };
   /** The most one charge may take: the monthly instalment. */
   maxAmountPaise: number;
+  /** A UPI AutoPay mandate, or an e-NACH mandate on the driver's bank account. */
+  method: 'UPI' | 'ENACH';
   agreementNumber: string;
   expiresAt: Date;
   /** Where the gateway sends the driver after approving (our "done" page). */
@@ -265,7 +267,7 @@ export class CashfreeGateway implements PaymentGateway {
 
   /**
    * Subscriptions API (docs: api-reference/payments/latest/subscription), an
-   * ON_DEMAND plan: Volt Neo raises each charge; UPI only; ₹1 approval refunded.
+   * ON_DEMAND plan: Volt Neo raises each charge; UPI (₹1 approval refunded) or e-NACH.
    * REQUIRES VALIDATION in the sandbox once Cashfree enables Subscriptions.
    */
   async createMandate(input: CreateMandateInput) {
@@ -285,11 +287,16 @@ export class CashfreeGateway implements PaymentGateway {
           plan_max_amount: paiseToRupeeNumber(input.maxAmountPaise),
           plan_note: `Monthly instalments, agreement ${input.agreementNumber}`,
         },
-        authorization_details: {
-          authorization_amount: 1,
-          authorization_amount_refund: true,
-          payment_methods: ['upi'],
-        },
+        // UPI: a ₹1 approval payment, refunded. e-NACH: no approval amount (Cashfree docs);
+        // the driver approves with net banking, debit card or Aadhaar.
+        authorization_details:
+          input.method === 'ENACH'
+            ? { authorization_amount: 0, payment_methods: ['enach'] }
+            : {
+                authorization_amount: 1,
+                authorization_amount_refund: true,
+                payment_methods: ['upi'],
+              },
         subscription_meta: { return_url: input.returnUrl },
         subscription_expiry_time: istIso(input.expiresAt),
         subscription_tags: { agreement: input.agreementNumber },

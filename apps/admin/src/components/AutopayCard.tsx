@@ -20,6 +20,7 @@ interface AutopayView {
   unavailableReason: string | null;
   mandate: {
     id: string;
+    method: 'UPI' | 'ENACH';
     status: 'PENDING' | 'ACTIVE' | 'CANCELLED' | 'FAILED';
     gatewayStatus: string | null;
     maxAmount: number;
@@ -95,14 +96,16 @@ export function AutopayCard({
 
   return (
     <div className="card">
-      <h2>UPI AutoPay</h2>
+      <h2>AutoPay (UPI or e-NACH)</h2>
       {!m ? (
         <p className="muted" style={{ marginTop: 0 }}>
-          Off. The driver can switch it on in the Driver App (up to one instalment a month).
+          Off. The driver can switch it on in the Driver App, by UPI or e-NACH (up to one instalment
+          a month).
         </p>
       ) : (
         <>
           <p style={{ marginTop: 0 }}>
+            <strong>{m.method === 'ENACH' ? 'e-NACH (bank account)' : 'UPI AutoPay'}</strong>{' '}
             <span className={`badge ${MANDATE[m.status]!.tone}`}>{MANDATE[m.status]!.label}</span>{' '}
             <span className="muted" style={{ fontSize: 13 }}>
               up to <Money paise={m.maxAmount} /> a charge

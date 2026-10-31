@@ -29,6 +29,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
           dateOfBirth: '1985-03-02',
           relativeRelation: 'SON_OF',
           relativeName: 'Haren Das',
+          email: 'Ramesh@Example.COM',
           addressLine: '4 Ghat Road',
           area: 'Baruipur',
           district: 'South 24 Parganas',
@@ -44,6 +45,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
         state: 'West Bengal',
         nominee: { name: 'Mita Das', phone: '+919123456789' },
         relative: { relation: 'SON_OF', name: 'Haren Das' },
+        email: 'ramesh@example.com',
         vehicle: { registration: 'WB19AB1234', type: 'TOTO', ownedByDriver: true },
       });
       expect(res.body.readiness.ready).toBe(false);

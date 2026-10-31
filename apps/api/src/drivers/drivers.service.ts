@@ -170,6 +170,7 @@ export class DriversService {
       name: d.name,
       phone: d.phone,
       altPhone: d.altPhone,
+      email: d.email,
       language: d.language,
       dateOfBirth: dateOnly(d.dateOfBirth),
       addressLine: d.addressLine,
@@ -400,6 +401,7 @@ export class DriversService {
           name: dto.name,
           phone: main,
           altPhone: alt,
+          email: dto.email ?? null,
           language: dto.language,
           dateOfBirth: dto.dateOfBirth ? parseDateOnly(dto.dateOfBirth) : null,
           addressLine: dto.addressLine,
@@ -466,6 +468,7 @@ export class DriversService {
           name: dto.name,
           phone: main,
           altPhone: alt,
+          email: dto.email,
           language: dto.language,
           dateOfBirth:
             dto.dateOfBirth === undefined

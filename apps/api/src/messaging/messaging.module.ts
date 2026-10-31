@@ -8,6 +8,7 @@ import {
   SmsGatewayHubMessageSender,
 } from './message-sender';
 import { SmsGatewayHubClient } from './smsgatewayhub';
+import { EMAIL_SENDER, LogEmailSender, MemoryEmailSender, SesEmailSender } from './email-sender';
 import { MessagingService } from './messaging.service';
 
 @Global()
@@ -27,7 +28,16 @@ import { MessagingService } from './messaging.service';
         return new LogMessageSender();
       },
     },
+    {
+      provide: EMAIL_SENDER,
+      inject: [APP_CONFIG],
+      useFactory: (config: AppConfig) => {
+        if (config.messageDelivery === 'memory') return new MemoryEmailSender();
+        if (config.ses) return new SesEmailSender(config.ses, config.deployment === 'staging');
+        return new LogEmailSender();
+      },
+    },
   ],
-  exports: [MessagingService, MESSAGE_SENDER],
+  exports: [MessagingService, MESSAGE_SENDER, EMAIL_SENDER],
 })
 export class MessagingModule {}

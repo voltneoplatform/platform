@@ -8,9 +8,10 @@ import {
   type VehicleType,
 } from '@voltneo/shared';
 import { ApiError } from '@/api';
+import { dmyToIso, typeDate } from '@/dates';
 import { LANGS, LANG_NAMES } from '@/i18n';
 import { useSession } from '@/session';
-import { Button, Card, Check, Choice, ErrorNotice, Field, H2, Muted, Screen } from '@/ui';
+import { Button, Card, Check, Choice, ErrorNotice, Field, H2, Muted, Notice, Screen } from '@/ui';
 
 interface Duplicate {
   detail: string;
@@ -23,6 +24,7 @@ export default function NewDriver() {
     name: '',
     phone: '',
     dateOfBirth: '',
+    email: '',
     relativeName: '',
     addressLine: '',
     area: '',
@@ -44,6 +46,10 @@ export default function NewDriver() {
   const [dups, setDups] = useState<Duplicate[] | null>(null);
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
 
+  // Typed as DD-MM-YYYY; the API takes YYYY-MM-DD.
+  const dob = f.dateOfBirth ? dmyToIso(f.dateOfBirth) : null;
+  const dobInvalid = f.dateOfBirth !== '' && dob === null;
+
   async function save(acknowledgeDuplicates = false) {
     setBusy(true);
     setError(null);
@@ -52,7 +58,8 @@ export default function NewDriver() {
         name: f.name,
         phone: f.phone,
         language,
-        dateOfBirth: f.dateOfBirth || null,
+        dateOfBirth: dob,
+        email: f.email.trim() || null,
         relativeRelation: relation,
         relativeName: f.relativeName.trim() || null,
         addressLine: f.addressLine,
@@ -93,6 +100,13 @@ export default function NewDriver() {
           onChangeText={set('phone')}
           keyboardType="phone-pad"
         />
+        <Field
+          label={t('email')}
+          value={f.email}
+          onChangeText={set('email')}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
         <Choice
           label={t('driverLanguage')}
           value={language}
@@ -102,10 +116,14 @@ export default function NewDriver() {
         <Field
           label={t('dateOfBirth')}
           value={f.dateOfBirth}
-          onChangeText={set('dateOfBirth')}
-          keyboardType="numbers-and-punctuation"
-          placeholder="1990-01-31"
+          onChangeText={(v) => setF((x) => ({ ...x, dateOfBirth: typeDate(v) }))}
+          keyboardType="number-pad"
+          placeholder="31-01-1990"
+          maxLength={10}
         />
+        {dobInvalid && f.dateOfBirth.length === 10 && (
+          <Notice tone="danger">{t('dobInvalid')}</Notice>
+        )}
         <Choice
           label={t('relativeRelation')}
           value={relation}
@@ -193,7 +211,7 @@ export default function NewDriver() {
           title={t('saveDriver')}
           busy={busy}
           // Needed for the "son / daughter / wife of" line of the agreement.
-          disabled={!relation || f.relativeName.trim().length < 2}
+          disabled={!relation || f.relativeName.trim().length < 2 || dobInvalid}
           onPress={() => void save()}
         />
       )}
