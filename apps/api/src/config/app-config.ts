@@ -101,6 +101,11 @@ export interface AppConfig {
    * not approved), they are emailed here so the founder can try the Driver App.
    */
   driverCodeTestEmail: string | null;
+  /**
+   * Email Cashfree requires on each UPI AutoPay mandate (drivers have none):
+   * a Volt Neo mailbox chosen by the founder. Without it AutoPay stays off.
+   */
+  autopayCustomerEmail: string | null;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -275,6 +280,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('DRIVER_CODE_TEST_EMAIL must be an email address');
   }
 
+  const autopayCustomerEmail = env.AUTOPAY_CUSTOMER_EMAIL?.trim() || null;
+  if (autopayCustomerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(autopayCustomerEmail)) {
+    throw new Error('AUTOPAY_CUSTOMER_EMAIL must be an email address');
+  }
+
   const extraOrigins =
     nodeEnv === 'production'
       ? []
@@ -317,5 +327,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     driverSessionIdleDays: int(env, 'DRIVER_SESSION_IDLE_DAYS', 30),
     driverSessionMaxDays: int(env, 'DRIVER_SESSION_MAX_DAYS', 90),
     driverCodeTestEmail,
+    autopayCustomerEmail,
   };
 }

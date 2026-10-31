@@ -24,6 +24,7 @@ import { TicketsModule } from './tickets/tickets.module';
 import { FieldModule } from './field/field.module';
 import { DriverAuthModule } from './driver-auth/driver-auth.module';
 import { MeModule } from './me/me.module';
+import { AutopayModule } from './autopay/autopay.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -56,6 +57,7 @@ import { HealthController } from './health/health.controller';
     FieldModule,
     DriverAuthModule,
     MeModule,
+    AutopayModule,
   ],
   controllers: [HealthController],
   providers: [

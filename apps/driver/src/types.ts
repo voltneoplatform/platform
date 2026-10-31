@@ -34,6 +34,16 @@ export interface MyAgreement {
     dueDay: number;
   };
   due: DueNow;
+  /** UPI AutoPay will take the instalment now due: show that instead of Pay. */
+  dueByAutopay: boolean;
+  autopay: {
+    available: boolean;
+    unavailableReason: string | null;
+    status: 'OFF' | 'PENDING' | 'ACTIVE';
+    maxAmount: number;
+    approvalUrl: string | null;
+    nextCharge: { amount: number; date: string | null; status: string } | null;
+  };
   schedule: {
     sequence: number;
     dueDate: string | null;

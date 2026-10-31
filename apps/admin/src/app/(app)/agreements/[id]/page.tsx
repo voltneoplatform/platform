@@ -40,6 +40,7 @@ import {
 import { CollectionsPanel } from '@/components/CollectionsPanel';
 import { OwnershipPanel } from '@/components/OwnershipPanel';
 import { PaymentLinksCard } from '@/components/PaymentLinksCard';
+import { AutopayCard } from '@/components/AutopayCard';
 import { AgreementTickets } from '@/components/TicketBits';
 import { ErrorBox, Modal, Money, formatDate, useLoad } from '@/components/ui';
 
@@ -451,6 +452,10 @@ export default function AgreementPage() {
             void payments.reload();
           }}
         />
+      )}
+
+      {a.state !== 'DRAFT' && a.state !== 'CANCELLED' && (
+        <AutopayCard agreementId={a.id} onChange={() => void reload()} />
       )}
 
       {payments.data && (

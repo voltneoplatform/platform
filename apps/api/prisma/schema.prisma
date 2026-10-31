@@ -150,6 +150,75 @@ model DriverSession {
   @@map("driver_sessions")
 }
 
+enum AutopayStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  FAILED
+}
+
+enum AutopayChargeStatus {
+  SCHEDULED
+  NOTIFIED
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+/// UPI AutoPay mandates (M6): approved by the driver in their UPI app, used to
+/// take each instalment on its Due Date. One live mandate per agreement.
+model AutopayMandate {
+  id             String        @id @default(uuid()) @db.Uuid
+  agreementId    String        @map("agreement_id") @db.Uuid
+  driverId       String        @map("driver_id") @db.Uuid
+  subscriptionId String        @unique @map("subscription_id")
+  gateway        String
+  gatewayRef     String?       @map("gateway_ref")
+  sessionId      String?       @map("session_id")
+  /// The approval page: https://api.voltcompany.in/autopay/<shortCode>
+  shortCode      String        @unique @map("short_code")
+  maxAmount      Int           @map("max_amount")
+  status         AutopayStatus @default(PENDING)
+  gatewayStatus  String?       @map("gateway_status")
+  statusNote     String?       @map("status_note")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  activatedAt    DateTime?     @map("activated_at") @db.Timestamptz(3)
+  endedAt        DateTime?     @map("ended_at") @db.Timestamptz(3)
+  endedBy        String?       @map("ended_by")
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agreement Agreement       @relation(fields: [agreementId], references: [id])
+  driver    Driver          @relation(fields: [driverId], references: [id])
+  charges   AutopayCharge[]
+
+  @@index([agreementId])
+  @@map("autopay_mandates")
+}
+
+/// One AutoPay charge per instalment, raised a few days before the Due Date.
+model AutopayCharge {
+  id            String              @id @default(uuid()) @db.Uuid
+  mandateId     String              @map("mandate_id") @db.Uuid
+  agreementId   String              @map("agreement_id") @db.Uuid
+  instalmentId  String              @map("instalment_id") @db.Uuid
+  chargeId      String              @unique @map("charge_id")
+  gatewayRef    String?             @map("gateway_ref")
+  amount        Int
+  scheduledFor  DateTime            @map("scheduled_for") @db.Date
+  status        AutopayChargeStatus @default(SCHEDULED)
+  failureReason String?             @map("failure_reason")
+  paymentId     String?             @unique @map("payment_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  mandate    AutopayMandate @relation(fields: [mandateId], references: [id])
+  instalment Instalment     @relation(fields: [instalmentId], references: [id])
+
+  @@unique([mandateId, instalmentId])
+  @@index([status, scheduledFor])
+  @@map("autopay_charges")
+}
+
 /// audit_log: append-only record of every change to money, plans, agreement
 /// state, battery custody and staff access (spec section 3, rule 17).
 /// A database trigger blocks UPDATE and DELETE.
@@ -471,6 +540,7 @@ model Driver {
   agreements   Agreement[]
   payments     Payment[]
   appSessions  DriverSession[]
+  autopay      AutopayMandate[]
 
   @@index([phone])
   @@map("drivers")
@@ -655,6 +725,7 @@ model Agreement {
   replacements    BatteryReplacement[]
   transfer        OwnershipTransfer?
   paymentLinks    PaymentLink[]
+  autopayMandates AutopayMandate[]
 
   @@index([driverId])
   @@index([state])
@@ -685,6 +756,7 @@ model Instalment {
   agreement   Agreement           @relation(fields: [agreementId], references: [id])
   allocations PaymentAllocation[]
   lateFees    LateFeeAccrual[]
+  autopay     AutopayCharge[]
 
   @@unique([agreementId, sequence])
   @@index([dueDate, status])

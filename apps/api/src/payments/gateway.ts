@@ -23,10 +23,43 @@ export interface CreatedLink {
   url: string;
 }
 
+/** A UPI AutoPay mandate (Cashfree "subscription", on-demand plan) for one agreement. */
+export interface CreateMandateInput {
+  /** Our ID, echoed back in the gateway's webhooks. */
+  subscriptionId: string;
+  customer: { phone: string; name: string; email: string };
+  /** The most one charge may take: the monthly instalment. */
+  maxAmountPaise: number;
+  agreementNumber: string;
+  expiresAt: Date;
+  /** Where the gateway sends the driver after approving (our "done" page). */
+  returnUrl: string;
+}
+
+export interface ChargeInput {
+  subscriptionId: string;
+  /** Our charge ID, echoed back in the gateway's webhooks. */
+  chargeId: string;
+  amountPaise: number;
+  /** YYYY-MM-DD: the Due Date the money is taken on. */
+  scheduleDate: string;
+  remarks: string;
+}
+
 export interface PaymentGateway {
   readonly name: 'cashfree' | 'fake' | 'none';
   createLink(input: CreateLinkInput): Promise<CreatedLink>;
   cancelLink(linkId: string): Promise<void>;
+  /** "sandbox" or "production" for the approval page's checkout script; null without AutoPay. */
+  readonly autopayMode: 'sandbox' | 'production' | null;
+  createMandate(
+    input: CreateMandateInput,
+  ): Promise<{ gatewayRef: string | null; sessionId: string }>;
+  /** The gateway's own status word, e.g. ACTIVE or CUSTOMER_CANCELLED. */
+  mandateStatus(subscriptionId: string): Promise<string>;
+  cancelMandate(subscriptionId: string): Promise<void>;
+  charge(input: ChargeInput): Promise<{ gatewayRef: string | null; status: string }>;
+  cancelCharge(subscriptionId: string, chargeId: string): Promise<void>;
 }
 
 export const PAYMENT_GATEWAY = Symbol('PAYMENT_GATEWAY');
@@ -56,8 +89,12 @@ export function istIso(d: Date): string {
   return `${t.toISOString().slice(0, 19)}+05:30`;
 }
 
+const NO_AUTOPAY =
+  'UPI AutoPay is not set up yet: the Cashfree keys still need to be added to the server settings';
+
 export class NoGateway implements PaymentGateway {
   readonly name = 'none' as const;
+  readonly autopayMode = null;
   createLink(): Promise<CreatedLink> {
     throw new ServiceUnavailableException(
       'UPI payment links are not set up yet: the Cashfree keys still need to be added to the server settings',
@@ -66,13 +103,56 @@ export class NoGateway implements PaymentGateway {
   cancelLink(): Promise<void> {
     return Promise.resolve();
   }
+  createMandate(): Promise<{ gatewayRef: string | null; sessionId: string }> {
+    throw new ServiceUnavailableException(NO_AUTOPAY);
+  }
+  mandateStatus(): Promise<string> {
+    throw new ServiceUnavailableException(NO_AUTOPAY);
+  }
+  cancelMandate(): Promise<void> {
+    return Promise.resolve();
+  }
+  charge(): Promise<{ gatewayRef: string | null; status: string }> {
+    throw new ServiceUnavailableException(NO_AUTOPAY);
+  }
+  cancelCharge(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /** Development and tests: makes a pretend link; payment is simulated from the admin panel. */
 export class FakeGateway implements PaymentGateway {
   readonly name = 'fake' as const;
+  readonly autopayMode = 'sandbox' as const;
   readonly created: CreateLinkInput[] = [];
   readonly cancelled: string[] = [];
+  /** Pretend mandates: their status, set by tests or the development approval page. */
+  readonly mandates = new Map<string, { input: CreateMandateInput; status: string }>();
+  readonly charges: ChargeInput[] = [];
+  readonly cancelledCharges: string[] = [];
+  createMandate(input: CreateMandateInput) {
+    this.mandates.set(input.subscriptionId, { input, status: 'INITIALIZED' });
+    return Promise.resolve({
+      gatewayRef: `fake_sub_${this.mandates.size}`,
+      sessionId: `sess_${input.subscriptionId}`,
+    });
+  }
+  mandateStatus(subscriptionId: string) {
+    return Promise.resolve(this.mandates.get(subscriptionId)?.status ?? 'INITIALIZED');
+  }
+  cancelMandate(subscriptionId: string) {
+    const m = this.mandates.get(subscriptionId);
+    if (m) m.status = 'CANCELLED';
+    return Promise.resolve();
+  }
+  charge(input: ChargeInput) {
+    this.charges.push(input);
+    return Promise.resolve({ gatewayRef: `fake_pay_${this.charges.length}`, status: 'PENDING' });
+  }
+  cancelCharge(_subscriptionId: string, chargeId: string) {
+    this.cancelledCharges.push(chargeId);
+    return Promise.resolve();
+  }
   createLink(input: CreateLinkInput): Promise<CreatedLink> {
     this.created.push(input);
     return Promise.resolve({
@@ -108,11 +188,19 @@ export class CashfreeGateway implements PaymentGateway {
       cfg.env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
   }
 
-  private async call(path: string, body: unknown): Promise<Record<string, unknown>> {
+  get autopayMode(): 'sandbox' | 'production' {
+    return this.cfg.env;
+  }
+
+  private async call(
+    path: string,
+    body: unknown,
+    opts: { method?: 'GET' | 'POST'; idempotencyKey?: string } = {},
+  ): Promise<Record<string, unknown>> {
     let res: Response;
     try {
       res = await this.fetchImpl(`${this.base}${path}`, {
-        method: 'POST',
+        method: opts.method ?? 'POST',
         headers: {
           'content-type': 'application/json',
           accept: 'application/json',
@@ -120,9 +208,9 @@ export class CashfreeGateway implements PaymentGateway {
           'x-client-secret': this.cfg.secretKey,
           'x-api-version': this.cfg.apiVersion,
           'x-request-id': randomUUID(),
-          'x-idempotency-key': randomUUID(),
+          'x-idempotency-key': opts.idempotencyKey ?? randomUUID(),
         },
-        body: JSON.stringify(body ?? {}),
+        body: opts.method === 'GET' ? undefined : JSON.stringify(body ?? {}),
         signal: AbortSignal.timeout(15_000),
       });
     } catch (err) {
@@ -173,6 +261,89 @@ export class CashfreeGateway implements PaymentGateway {
 
   async cancelLink(linkId: string): Promise<void> {
     await this.call(`/links/${encodeURIComponent(linkId)}/cancel`, {});
+  }
+
+  /**
+   * Subscriptions API (docs: api-reference/payments/latest/subscription), an
+   * ON_DEMAND plan: Volt Neo raises each charge; UPI only; ₹1 approval refunded.
+   * REQUIRES VALIDATION in the sandbox once Cashfree enables Subscriptions.
+   */
+  async createMandate(input: CreateMandateInput) {
+    const json = await this.call(
+      '/subscriptions',
+      {
+        subscription_id: input.subscriptionId,
+        customer_details: {
+          customer_name: input.customer.name.slice(0, 100),
+          customer_email: input.customer.email,
+          customer_phone: localPhone(input.customer.phone),
+        },
+        plan_details: {
+          plan_name: `Volt Neo ${input.agreementNumber}`.slice(0, 40),
+          plan_type: 'ON_DEMAND',
+          plan_currency: 'INR',
+          plan_max_amount: paiseToRupeeNumber(input.maxAmountPaise),
+          plan_note: `Monthly instalments, agreement ${input.agreementNumber}`,
+        },
+        authorization_details: {
+          authorization_amount: 1,
+          authorization_amount_refund: true,
+          payment_methods: ['upi'],
+        },
+        subscription_meta: { return_url: input.returnUrl },
+        subscription_expiry_time: istIso(input.expiresAt),
+        subscription_tags: { agreement: input.agreementNumber },
+      },
+      { idempotencyKey: input.subscriptionId },
+    );
+    const sessionId = json.subscription_session_id;
+    if (typeof sessionId !== 'string' || !sessionId) {
+      throw new BadGatewayException('Cashfree did not return an AutoPay session');
+    }
+    return {
+      gatewayRef: json.cf_subscription_id === undefined ? null : String(json.cf_subscription_id),
+      sessionId,
+    };
+  }
+
+  async mandateStatus(subscriptionId: string): Promise<string> {
+    const json = await this.call(`/subscriptions/${encodeURIComponent(subscriptionId)}`, null, {
+      method: 'GET',
+    });
+    return typeof json.subscription_status === 'string' ? json.subscription_status : 'UNKNOWN';
+  }
+
+  async cancelMandate(subscriptionId: string): Promise<void> {
+    await this.call(`/subscriptions/${encodeURIComponent(subscriptionId)}/manage`, {
+      subscription_id: subscriptionId,
+      action: 'CANCEL',
+    });
+  }
+
+  async charge(input: ChargeInput) {
+    const json = await this.call(
+      '/subscriptions/pay',
+      {
+        subscription_id: input.subscriptionId,
+        payment_id: input.chargeId,
+        payment_type: 'CHARGE',
+        payment_amount: paiseToRupeeNumber(input.amountPaise),
+        payment_schedule_date: `${input.scheduleDate}T10:00:00+05:30`,
+        payment_remarks: input.remarks.slice(0, 100),
+      },
+      { idempotencyKey: input.chargeId },
+    );
+    return {
+      gatewayRef: json.cf_payment_id === undefined ? null : String(json.cf_payment_id),
+      status: typeof json.payment_status === 'string' ? json.payment_status : 'PENDING',
+    };
+  }
+
+  async cancelCharge(subscriptionId: string, chargeId: string): Promise<void> {
+    await this.call(
+      `/subscriptions/${encodeURIComponent(subscriptionId)}/payments/${encodeURIComponent(chargeId)}/manage`,
+      { subscription_id: subscriptionId, payment_id: chargeId, action: 'CANCEL' },
+    );
   }
 }
 

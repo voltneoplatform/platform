@@ -134,7 +134,11 @@ export function PaymentLinksCard({
               <span className={`badge ${STATUS[l.status].tone}`}>{STATUS[l.status].label}</span>{' '}
               <span className="muted" style={{ fontSize: 13 }}>
                 sent {formatDate(l.createdAt, true)}
-                {l.createdByName && ` by ${l.createdByName}`}
+                {l.createdByName
+                  ? ` by ${l.createdByName}`
+                  : l.linkId.startsWith('VNA_')
+                    ? ' from the Driver App'
+                    : ''}
                 {l.status === 'ACTIVE' && ` · open until ${formatDate(l.expiresAt, true)}`}
                 {l.closedNote && l.status !== 'PAID' && ` · ${l.closedNote}`}
               </span>

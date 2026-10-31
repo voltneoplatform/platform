@@ -20,6 +20,7 @@ import { AgreementsService } from '../agreements/agreements.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PaymentLinksService } from '../payments/payment-links.service';
 import { TicketsService } from '../tickets/tickets.service';
+import { AutopayService } from '../autopay/autopay.service';
 import type { AuthenticatedDriver, RequestMeta } from '../common/decorators';
 import { CLOCK, type Clock } from '../common/clock';
 import { dateOnly } from '../common/util';
@@ -52,6 +53,7 @@ export class MeService {
     private readonly paymentsService: PaymentsService,
     private readonly paymentLinks: PaymentLinksService,
     private readonly tickets: TicketsService,
+    private readonly autopay: AutopayService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -130,8 +132,37 @@ export class MeService {
     });
   }
 
+  /** AutoPay as the driver sees it, and the charge waiting for the instalment now due, if any. */
+  private async autopayFor(a: Loaded) {
+    const v = await this.autopay.view(a.id);
+    const waiting = await this.autopay.scheduledFor(a.id);
+    const m = v.mandate && ['PENDING', 'ACTIVE'].includes(v.mandate.status) ? v.mandate : null;
+    return {
+      available: v.available,
+      unavailableReason: v.unavailableReason,
+      status: m?.status ?? 'OFF',
+      maxAmount: m?.maxAmount ?? a.instalment,
+      approvalUrl: m?.approvalUrl ?? null,
+      nextCharge: waiting
+        ? { amount: waiting.amount, date: dateOnly(waiting.scheduledFor), status: waiting.status }
+        : null,
+    };
+  }
+
+  /** True when AutoPay will take the instalment the driver would otherwise pay now. */
+  private coveredByAutopay(
+    due: ReturnType<MeService['due']>,
+    next: { date: string | null } | null,
+  ) {
+    return (
+      !!next && (due.kind === 'UPCOMING' || due.kind === 'DUE_TODAY') && next.date === due.dueDate
+    );
+  }
+
   async agreement(me: AuthenticatedDriver, id?: string) {
     const a = await this.load(me, id);
+    const autopay = await this.autopayFor(a);
+    const due = this.due(a);
     const lang = me.language;
     const plan = a.planVersion.plan;
     const paid = a.instalments.reduce((s, i) => s + i.amountPaid, 0);
@@ -162,7 +193,10 @@ export class MeService {
         instalmentsPaid: a.instalments.filter((i) => i.sequence > 0 && i.status === 'PAID').length,
         dueDay: a.dueDay,
       },
-      due: this.due(a),
+      due,
+      /** AutoPay takes this instalment on its Due Date: the app shows that instead of Pay. */
+      dueByAutopay: this.coveredByAutopay(due, autopay.nextCharge),
+      autopay,
       schedule: a.instalments.map((i) => ({
         sequence: i.sequence,
         dueDate: dateOnly(i.dueDate),
@@ -185,8 +219,26 @@ export class MeService {
         due,
       });
     }
+    const waiting = await this.autopay.scheduledFor(a.id);
+    if (this.coveredByAutopay(due, waiting ? { date: dateOnly(waiting.scheduledFor) } : null)) {
+      throw new ConflictException({
+        message: 'UPI AutoPay will take this instalment on its Due Date',
+        code: 'AUTOPAY_SCHEDULED',
+      });
+    }
     const link = await this.paymentLinks.forDriver(a.id, me.id, due.amount, meta);
     return { url: link.url, amount: link.amount, expiresAt: link.expiresAt, due };
+  }
+
+  async startAutopay(me: AuthenticatedDriver, agreementId: string, meta: RequestMeta) {
+    const a = await this.load(me, agreementId);
+    return this.autopay.start(a.id, { type: 'DRIVER', id: me.id }, meta);
+  }
+
+  async stopAutopay(me: AuthenticatedDriver, agreementId: string, meta: RequestMeta) {
+    const a = await this.load(me, agreementId);
+    await this.autopay.cancel(a.id, { type: 'DRIVER', id: me.id }, meta);
+    return this.agreement(me, a.id);
   }
 
   async payments(me: AuthenticatedDriver) {

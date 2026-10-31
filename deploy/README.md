@@ -31,14 +31,16 @@ Actions tab, or on a push to the `hosting-test` branch):
 
 ## GitHub settings it reads
 
-| Kind     | Name                                         | Notes                                                      |
-| -------- | -------------------------------------------- | ---------------------------------------------------------- |
-| Secret   | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | IAM user `github-deploy` (Lightsail and SES only)          |
-| Secret   | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | IAM user `voltneo-mailer` (send email only)                |
-| Secret   | `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`     | Optional; sandbox keys turn on UPI links                   |
-| Variable | `AWS_REGION`                                 | `ap-south-1`                                               |
-| Variable | `FIRST_ADMIN_EMAIL`, `FIRST_ADMIN_NAME`      | First super admin, created only while there are no staff   |
-| Variable | `SES_TEST_RECIPIENTS`                        | Comma-separated addresses AWS should confirm (SES sandbox) |
+| Kind     | Name                                         | Notes                                                                                     |
+| -------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Secret   | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | IAM user `github-deploy` (Lightsail and SES only)                                         |
+| Secret   | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | IAM user `voltneo-mailer` (send email only)                                               |
+| Secret   | `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`     | Optional; sandbox keys turn on UPI links                                                  |
+| Variable | `AWS_REGION`                                 | `ap-south-1`                                                                              |
+| Variable | `FIRST_ADMIN_EMAIL`, `FIRST_ADMIN_NAME`      | First super admin, created only while there are no staff                                  |
+| Variable | `SES_TEST_RECIPIENTS`                        | Comma-separated addresses AWS should confirm (SES sandbox)                                |
+| Variable | `AUTOPAY_CUSTOMER_EMAIL`                     | Optional; email Cashfree needs on each UPI AutoPay mandate (default: `FIRST_ADMIN_EMAIL`) |
+| Variable | `DRIVER_API_URL`, `DRIVER_DEPLOYMENT`        | Optional; API address and banner for the Driver App build (default: test site)            |
 
 ## On the server
 

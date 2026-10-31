@@ -62,6 +62,28 @@ export class MeController {
     return this.me.pay(d, id, meta);
   }
 
+  /** Starts UPI AutoPay: returns the approval page to open. */
+  @Post('agreements/:id/autopay')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  startAutopay(
+    @CurrentDriver() d: AuthenticatedDriver,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.me.startAutopay(d, id, meta);
+  }
+
+  @Post('agreements/:id/autopay/cancel')
+  @HttpCode(200)
+  stopAutopay(
+    @CurrentDriver() d: AuthenticatedDriver,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.me.stopAutopay(d, id, meta);
+  }
+
   @Get('agreements/:id/signed-copy')
   signedCopy(
     @CurrentDriver() d: AuthenticatedDriver,

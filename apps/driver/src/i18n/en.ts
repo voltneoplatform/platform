@@ -92,6 +92,21 @@ export const en = {
   reported: 'Reported {date}',
   requestOpen: 'Your request {number} is still open. A technician will contact you.',
   serviceEnded: 'The battery is yours now, so Volt Neo service has ended.',
+
+  autopayTitle: 'UPI AutoPay',
+  autopayIntro:
+    'Pay each instalment automatically on its Due Date. You approve it once in your UPI app. Up to {amount} a month.',
+  autopayOn: 'AutoPay is on.',
+  autopayNext: '{amount} will be taken on {date}. Your UPI app tells you the day before.',
+  autopayIdle: 'Each instalment is taken on its Due Date.',
+  autopayPending: 'Waiting for your approval in your UPI app.',
+  autopayStart: 'Switch on AutoPay',
+  autopayApprove: 'Open the approval page',
+  autopayStop: 'Switch off AutoPay',
+  autopayStopConfirm: 'Switch off AutoPay? You will then pay each instalment yourself.',
+  autopayDue: 'AutoPay will take this on {date}.',
+  autopayOverdue: 'AutoPay does not take overdue amounts or late fees. Pay them here.',
+  yes: 'Yes',
 } as const;
 
 export type MessageKey = keyof typeof en;

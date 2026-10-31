@@ -90,4 +90,19 @@ export const bn: Messages = {
   reported: '{date} তারিখে জানানো',
   requestOpen: 'আপনার অনুরোধ {number} এখনও খোলা আছে। একজন টেকনিশিয়ান যোগাযোগ করবেন।',
   serviceEnded: 'ব্যাটারি এখন আপনার, তাই Volt Neo-র পরিষেবা শেষ হয়েছে।',
+
+  autopayTitle: 'UPI অটোপে',
+  autopayIntro:
+    'প্রতিটি কিস্তি তার তারিখে নিজে থেকে কাটা হবে। UPI অ্যাপে একবার মঞ্জুর করুন। মাসে সর্বোচ্চ {amount}।',
+  autopayOn: 'অটোপে চালু আছে।',
+  autopayNext: '{date} তারিখে {amount} কাটা হবে। আগের দিন আপনার UPI অ্যাপ জানাবে।',
+  autopayIdle: 'প্রতিটি কিস্তি তার তারিখে কাটা হয়।',
+  autopayPending: 'আপনার UPI অ্যাপে মঞ্জুরির অপেক্ষায়।',
+  autopayStart: 'অটোপে চালু করুন',
+  autopayApprove: 'মঞ্জুরির পাতা খুলুন',
+  autopayStop: 'অটোপে বন্ধ করুন',
+  autopayStopConfirm: 'অটোপে বন্ধ করবেন? তখন প্রতিটি কিস্তি নিজে দিতে হবে।',
+  autopayDue: 'অটোপে {date} তারিখে এটি কাটবে।',
+  autopayOverdue: 'অটোপে বাকি টাকা বা বিলম্ব ফি কাটে না। এখানে দিন।',
+  yes: 'হ্যাঁ',
 };
