@@ -1,6 +1,14 @@
 import request from 'supertest';
 import { bearer, createTestApp, loginAs, resetData, type TestContext } from './helpers';
-import { NOT_A_DOC, PDF, PNG, makeDriver, uploadKyc } from './fixtures';
+import {
+  NOT_A_DOC,
+  PDF,
+  PNG,
+  activeAgreement,
+  makeDriver,
+  readyDriver,
+  uploadKyc,
+} from './fixtures';
 
 describe('Drivers, vehicles and KYC (module 5)', () => {
   let ctx: TestContext;
@@ -395,6 +403,31 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
   });
 
   describe('readiness for an agreement', () => {
+    it('shows the agreement in progress instead of "ready", and leaves those drivers out of the ready filter', async () => {
+      const pm = await loginAs(ctx, 'PLAN_MANAGER');
+      const finance = await loginAs(ctx, 'FINANCE');
+      const a = await activeAgreement(ctx, {
+        ops: ops.token,
+        finance: finance.token,
+        pm: pm.token,
+      });
+      const waiting = await readyDriver(ctx, ops.token);
+
+      const list = await ctx.http.get('/v1/drivers').set(bearer(ops.token)).expect(200);
+      const signed = list.body.items.find((x: { phone: string }) => x.phone === a.driverPhone);
+      expect(signed).toMatchObject({
+        ready: true,
+        agreement: { id: a.id, number: a.number, state: 'ACTIVE' },
+      });
+      expect(list.body.items.find((x: { id: string }) => x.id === waiting.id).agreement).toBeNull();
+
+      const ready = await ctx.http
+        .get('/v1/drivers?readiness=ready')
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(ready.body.items.map((x: { id: string }) => x.id)).toEqual([waiting.id]);
+    });
+
     it('becomes ready once identity, PAN, address and photo are verified and the renter has owner consent', async () => {
       const d = await makeDriver(ctx, ops.token, {
         vehicle: {
