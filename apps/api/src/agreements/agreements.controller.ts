@@ -32,6 +32,7 @@ import {
   DocumentQuery,
   InstallationDto,
   ListAgreementsQuery,
+  RejectInstallationDto,
   RescheduleDto,
   SignAgreementDto,
   UpdateAgreementDto,
@@ -189,6 +190,38 @@ export class AgreementsController {
     @ReqMeta() meta: RequestMeta,
   ) {
     return this.agreements.recordInstallation(id, dto, files, staff, meta);
+  }
+
+  /** Field installations waiting for head office (founder, 31 Oct 2026). */
+  @Get('installations/pending')
+  @RequirePermissions('installations.verify')
+  pendingInstallations() {
+    return this.agreements.pendingInstallations();
+  }
+
+  @Post('agreements/:id/installation/:installationId/verify')
+  @HttpCode(200)
+  @RequirePermissions('installations.verify')
+  verifyInstallation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('installationId', ParseUUIDPipe) installationId: string,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.agreements.verifyInstallation(id, installationId, staff, meta);
+  }
+
+  @Post('agreements/:id/installation/:installationId/reject')
+  @HttpCode(200)
+  @RequirePermissions('installations.verify')
+  rejectInstallation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('installationId', ParseUUIDPipe) installationId: string,
+    @Body() dto: RejectInstallationDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.agreements.rejectInstallation(id, installationId, dto.reason, staff, meta);
   }
 
   @Post('agreements/:id/installation/photos/:photoId/link')

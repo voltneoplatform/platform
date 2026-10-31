@@ -825,14 +825,39 @@ model Installation {
   driverConfirmed Boolean  @map("driver_confirmed")
   recordedById    String   @map("recorded_by_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Recorded by a field agent or technician: head office verifies it (founder, 31 Oct 2026).
+  needsVerification Boolean @default(false) @map("needs_verification")
 
-  agreement Agreement           @relation(fields: [agreementId], references: [id])
-  battery   Battery             @relation(fields: [batteryId], references: [id])
-  vehicle   Vehicle             @relation(fields: [vehicleId], references: [id])
+  agreement Agreement             @relation(fields: [agreementId], references: [id])
+  battery   Battery               @relation(fields: [batteryId], references: [id])
+  vehicle   Vehicle               @relation(fields: [vehicleId], references: [id])
   photos    InstallationPhoto[]
+  decision  InstallationDecision?
 
   @@index([agreementId])
   @@map("installations")
+}
+
+enum InstallationDecisionKind {
+  VERIFIED
+  REJECTED
+
+  @@map("InstallationDecision")
+}
+
+/// installation_decisions: head office verifies or rejects an installation a
+/// field agent or technician recorded. Append-only.
+model InstallationDecision {
+  id             String                   @id @default(uuid()) @db.Uuid
+  installationId String                   @unique @map("installation_id") @db.Uuid
+  decision       InstallationDecisionKind
+  reason         String?
+  decidedById    String                   @map("decided_by_id") @db.Uuid
+  decidedAt      DateTime                 @default(now()) @map("decided_at") @db.Timestamptz(3)
+
+  installation Installation @relation(fields: [installationId], references: [id])
+
+  @@map("installation_decisions")
 }
 
 model InstallationPhoto {

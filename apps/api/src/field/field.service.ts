@@ -47,7 +47,13 @@ export class FieldService {
           })
         : null,
       can('installations.record')
-        ? this.prisma.agreement.count({ where: { state: 'AWAITING_INSTALLATION' } })
+        ? this.prisma.agreement.count({
+            where: {
+              state: 'AWAITING_INSTALLATION',
+              // Not those already installed and waiting for head office to verify.
+              installations: { none: { needsVerification: true, decision: { is: null } } },
+            },
+          })
         : null,
       can('tickets.resolve')
         ? this.prisma.serviceTicket.count({ where: { technicianId: me.id, status: 'ASSIGNED' } })

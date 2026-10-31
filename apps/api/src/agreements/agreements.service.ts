@@ -22,7 +22,7 @@ import {
   type DueDay,
   RELATIVE_RELATION_LABELS,
 } from '@voltneo/shared';
-import type { Agreement, ApprovalRequest, Prisma } from '../generated/prisma/client';
+import type { Agreement, ApprovalRequest, Battery, Prisma } from '../generated/prisma/client';
 import type { DriverLanguage } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -106,7 +106,7 @@ const fullInclude = {
   instalments: { orderBy: { sequence: 'asc' } },
   lateFees: { orderBy: { accrualDate: 'asc' } },
   events: { orderBy: { at: 'asc' } },
-  installations: { include: { photos: true }, orderBy: { createdAt: 'desc' } },
+  installations: { include: { photos: true, decision: true }, orderBy: { createdAt: 'desc' } },
 } satisfies Prisma.AgreementInclude;
 
 type AgreementFull = Prisma.AgreementGetPayload<{ include: typeof fullInclude }>;
@@ -212,13 +212,14 @@ export class AgreementsService implements OnModuleInit {
     };
   }
 
-  private allowed(a: Agreement, hasPayments: boolean) {
+  private allowed(a: Agreement, hasPayments: boolean, installWaiting = false) {
     return {
       edit: a.state === 'DRAFT',
       sign: a.state === 'DRAFT',
       cancel: a.state === 'DRAFT' || (a.state === 'AWAITING_DOWN_PAYMENT' && !hasPayments),
       reschedule: a.state === 'AWAITING_DOWN_PAYMENT' || a.state === 'AWAITING_INSTALLATION',
-      install: a.state === 'AWAITING_INSTALLATION',
+      install: a.state === 'AWAITING_INSTALLATION' && !installWaiting,
+      verifyInstallation: a.state === 'AWAITING_INSTALLATION' && installWaiting,
       pay: (PAYABLE_STATES as readonly string[]).includes(a.state),
     };
   }
@@ -252,6 +253,10 @@ export class AgreementsService implements OnModuleInit {
           batteryType: { select: { name: true } },
           battery: { select: { serial: true } },
           instalments: { select: { amountPaid: true } },
+          installations: {
+            where: { needsVerification: true, decision: { is: null } },
+            select: { id: true },
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
@@ -279,6 +284,8 @@ export class AgreementsService implements OnModuleInit {
           dueDay: a.dueDay,
           firstDueDate: dateOnly(a.firstDueDate),
           createdAt: a.createdAt,
+          /** A field installation is waiting for head office to verify it. */
+          installationWaiting: a.installations.length > 0,
         };
       }),
     };
@@ -301,6 +308,7 @@ export class AgreementsService implements OnModuleInit {
         ...a.events.map((e) => e.actorId),
         installation?.technicianId,
         installation?.recordedById,
+        installation?.decision?.decidedById,
       ]),
       this.prisma.payment.count({ where: { agreementId: id } }),
       this.prisma.approvalRequest.findFirst({
@@ -422,6 +430,17 @@ export class AgreementsService implements OnModuleInit {
             driverConfirmed: installation.driverConfirmed,
             technicianName: names.get(installation.technicianId) ?? null,
             recordedByName: names.get(installation.recordedById) ?? null,
+            /** Field installations wait for head office (founder, 31 Oct 2026). */
+            status: !installation.needsVerification
+              ? 'VERIFIED'
+              : !installation.decision
+                ? 'PENDING_VERIFICATION'
+                : installation.decision.decision,
+            decidedByName: installation.decision
+              ? (names.get(installation.decision.decidedById) ?? null)
+              : null,
+            decidedAt: installation.decision?.decidedAt ?? null,
+            rejectedReason: installation.decision?.reason ?? null,
             photos: installation.photos.map((p) => ({ id: p.id, fileName: p.fileName })),
           }
         : null,
@@ -434,7 +453,11 @@ export class AgreementsService implements OnModuleInit {
             requestedById: pendingVariation.requestedById,
           }
         : null,
-      allowed: this.allowed(a, paymentCount > 0),
+      allowed: this.allowed(
+        a,
+        paymentCount > 0,
+        !!installation?.needsVerification && !installation.decision,
+      ),
     };
   }
 
@@ -1077,6 +1100,151 @@ export class AgreementsService implements OnModuleInit {
   // Installation (spec module 7, Schedule 3)
   // ---------------------------------------------------------------------------
 
+  /**
+   * The checks every installation passes, when recorded and again when head
+   * office verifies it: state, dates, vehicle, battery in stock of the right
+   * type with its GPS device, and an installer who may install.
+   */
+  private async installChecks(
+    tx: Tx,
+    before: Agreement,
+    input: { batteryId: string; technicianId: string; installedAt: Date },
+  ) {
+    if (before.state !== 'AWAITING_INSTALLATION') {
+      throw new ConflictException(
+        before.state === 'AWAITING_DOWN_PAYMENT'
+          ? 'The down payment must be received before installation (clause C2)'
+          : 'This agreement is not waiting for installation',
+      );
+    }
+    if (before.signedAt && input.installedAt.getTime() < before.signedAt.getTime() - MINUTE) {
+      throw new BadRequestException('Installation cannot be before the agreement was signed');
+    }
+    const problem = installationDateProblem(
+      istDate(input.installedAt),
+      dateOnly(before.firstDueDate)!,
+    );
+    if (problem) throw new UnprocessableEntityException(problem);
+
+    const vehicle = await this.currentVehicle(tx, before.driverId);
+    if (vehicle.id !== before.vehicleId) {
+      throw new ConflictException(
+        "The driver's vehicle changed after signing. Changing vehicle needs head office (clause C5).",
+      );
+    }
+    const battery = await tx.battery.findUnique({ where: { id: input.batteryId } });
+    if (!battery) throw new NotFoundException('Battery not found');
+    if (battery.status !== 'IN_STOCK') {
+      throw new ConflictException(`Battery ${battery.serial} is not in stock`);
+    }
+    if (battery.batteryTypeId !== before.batteryTypeId) {
+      throw new UnprocessableEntityException(
+        `Battery ${battery.serial} is not the battery type in this agreement`,
+      );
+    }
+    if (!battery.gpsDeviceId) {
+      throw new UnprocessableEntityException(
+        `Battery ${battery.serial} has no GPS device recorded (D13)`,
+      );
+    }
+    const technician = await tx.staffUser.findUnique({ where: { id: input.technicianId } });
+    if (
+      !technician ||
+      technician.status !== 'ACTIVE' ||
+      !hasPermission(technician.role, 'installations.record')
+    ) {
+      throw new BadRequestException('Choose an active technician who may install batteries');
+    }
+    return { vehicle, battery, technician };
+  }
+
+  /** An installation still waiting for head office, if any (not yet verified or rejected). */
+  private pendingInstallation(tx: Tx | PrismaService, where: Prisma.InstallationWhereInput) {
+    return tx.installation.findFirst({
+      where: { ...where, needsVerification: true, decision: { is: null } },
+    });
+  }
+
+  /** The battery goes to the driver and the agreement becomes active from the installation time. */
+  private async activate(
+    tx: Tx,
+    before: Agreement,
+    installation: { id: string; installedAt: Date },
+    battery: Battery,
+    vehicle: { registration: string | null; chassisNumber: string | null },
+    actorId: string,
+    meta: RequestMeta,
+    action: string,
+  ) {
+    // The battery is now with the driver (custody log, spec rule 17).
+    const where = vehicle.registration ?? vehicle.chassisNumber ?? null;
+    await tx.battery.update({
+      where: { id: battery.id },
+      data: {
+        status: 'INSTALLED',
+        holder: 'DRIVER',
+        holderDriverId: before.driverId,
+        holderStaffId: null,
+        location: where ? `Vehicle ${where}` : null,
+      },
+    });
+    await tx.batteryCustody.create({
+      data: {
+        batteryId: battery.id,
+        event: 'INSTALLED',
+        fromStatus: battery.status,
+        toStatus: 'INSTALLED',
+        fromHolder: battery.holder,
+        toHolder: 'DRIVER',
+        toLocation: where ? `Vehicle ${where}` : null,
+        toDriverId: before.driverId,
+        note: `Agreement ${before.number}`,
+        byId: actorId,
+      },
+    });
+
+    let after: Agreement;
+    try {
+      after = await tx.agreement.update({
+        where: { id: before.id },
+        data: { state: 'ACTIVE', batteryId: battery.id, activatedAt: installation.installedAt },
+      });
+    } catch (err) {
+      openConflict(err);
+    }
+    await this.event(
+      tx,
+      before.id,
+      {
+        event: 'INSTALLED',
+        from: before.state,
+        to: 'ACTIVE',
+        reason: `Battery ${battery.serial} installed`,
+      },
+      actorId,
+    );
+    await this.audit.record(
+      {
+        actorType: 'STAFF',
+        actorId,
+        action,
+        tableName: 'agreements',
+        recordId: before.id,
+        before,
+        after: { ...after, installationId: installation.id },
+        ip: meta.ip,
+        requestId: meta.requestId,
+      },
+      tx,
+    );
+  }
+
+  /**
+   * Records an installation (Schedule 3). Head office (super admin, operations
+   * manager, plan manager) records it in force at once. A field agent's or
+   * technician's record waits for head office to verify it; the agreement stays
+   * "awaiting installation" until then (founder, 31 Oct 2026).
+   */
   async recordInstallation(
     id: string,
     dto: InstallationDto,
@@ -1096,53 +1264,27 @@ export class AgreementsService implements OnModuleInit {
     if (installedAt.getTime() > Date.now() + 60_000) {
       throw new BadRequestException('The installation time cannot be in the future');
     }
+    const verifiedNow = hasPermission(actor.role, 'installations.verify');
     const keys = photos.map((p) => newFileKey('installations', id, p.upload.ext));
     let stored = false;
 
     await serializable(this.prisma, async (tx) => {
       const before = await tx.agreement.findUnique({ where: { id } });
       if (!before) throw new NotFoundException('Agreement not found');
-      if (before.state !== 'AWAITING_INSTALLATION') {
+      const { vehicle, battery, technician } = await this.installChecks(tx, before, {
+        batteryId: dto.batteryId,
+        technicianId: dto.technicianId,
+        installedAt,
+      });
+      if (await this.pendingInstallation(tx, { agreementId: id })) {
         throw new ConflictException(
-          before.state === 'AWAITING_DOWN_PAYMENT'
-            ? 'The down payment must be received before installation (clause C2)'
-            : 'This agreement is not waiting for installation',
+          'An installation for this agreement is already waiting for head office to verify',
         );
       }
-      if (before.signedAt && installedAt.getTime() < before.signedAt.getTime() - MINUTE) {
-        throw new BadRequestException('Installation cannot be before the agreement was signed');
-      }
-      const problem = installationDateProblem(istDate(installedAt), dateOnly(before.firstDueDate)!);
-      if (problem) throw new UnprocessableEntityException(problem);
-
-      const vehicle = await this.currentVehicle(tx, before.driverId);
-      if (vehicle.id !== before.vehicleId) {
+      if (await this.pendingInstallation(tx, { batteryId: battery.id })) {
         throw new ConflictException(
-          "The driver's vehicle changed after signing. Changing vehicle needs head office (clause C5).",
+          `Battery ${battery.serial} is in another installation waiting for verification`,
         );
-      }
-      const battery = await tx.battery.findUnique({ where: { id: dto.batteryId } });
-      if (!battery) throw new NotFoundException('Battery not found');
-      if (battery.status !== 'IN_STOCK') {
-        throw new ConflictException(`Battery ${battery.serial} is not in stock`);
-      }
-      if (battery.batteryTypeId !== before.batteryTypeId) {
-        throw new UnprocessableEntityException(
-          `Battery ${battery.serial} is not the battery type in this agreement`,
-        );
-      }
-      if (!battery.gpsDeviceId) {
-        throw new UnprocessableEntityException(
-          `Battery ${battery.serial} has no GPS device recorded (D13)`,
-        );
-      }
-      const technician = await tx.staffUser.findUnique({ where: { id: dto.technicianId } });
-      if (
-        !technician ||
-        technician.status !== 'ACTIVE' ||
-        !hasPermission(technician.role, 'installations.record')
-      ) {
-        throw new BadRequestException('Choose an active technician who may install batteries');
       }
 
       if (!stored) {
@@ -1165,6 +1307,7 @@ export class AgreementsService implements OnModuleInit {
           conditionNote: dto.conditionNote,
           driverConfirmed: true,
           recordedById: actor.id,
+          needsVerification: !verifiedNow,
           photos: {
             create: photos.map((p, i) => ({
               fileKey: keys[i]!,
@@ -1176,62 +1319,27 @@ export class AgreementsService implements OnModuleInit {
         },
       });
 
-      // The battery is now with the driver (custody log, spec rule 17).
-      const where = vehicle.registration ?? vehicle.chassisNumber ?? null;
-      await tx.battery.update({
-        where: { id: battery.id },
-        data: {
-          status: 'INSTALLED',
-          holder: 'DRIVER',
-          holderDriverId: before.driverId,
-          holderStaffId: null,
-          location: where ? `Vehicle ${where}` : null,
-        },
-      });
-      await tx.batteryCustody.create({
-        data: {
-          batteryId: battery.id,
-          event: 'INSTALLED',
-          fromStatus: battery.status,
-          toStatus: 'INSTALLED',
-          fromHolder: battery.holder,
-          toHolder: 'DRIVER',
-          toLocation: where ? `Vehicle ${where}` : null,
-          toDriverId: before.driverId,
-          note: `Agreement ${before.number}`,
-          byId: actor.id,
-        },
-      });
-
-      let after: Agreement;
-      try {
-        after = await tx.agreement.update({
-          where: { id },
-          data: { state: 'ACTIVE', batteryId: battery.id, activatedAt: installedAt },
-        });
-      } catch (err) {
-        openConflict(err);
+      if (verifiedNow) {
+        await this.activate(
+          tx,
+          before,
+          installation,
+          battery,
+          vehicle,
+          actor.id,
+          meta,
+          'agreement.install',
+        );
+        return;
       }
-      await this.event(
-        tx,
-        id,
-        {
-          event: 'INSTALLED',
-          from: before.state,
-          to: 'ACTIVE',
-          reason: `Battery ${battery.serial} installed`,
-        },
-        actor.id,
-      );
       await this.audit.record(
         {
           actorType: 'STAFF',
           actorId: actor.id,
-          action: 'agreement.install',
-          tableName: 'agreements',
-          recordId: id,
-          before,
-          after: { ...after, installationId: installation.id },
+          action: 'agreement.install.recorded',
+          tableName: 'installations',
+          recordId: installation.id,
+          after: { agreementId: id, batteryId: battery.id, awaiting: 'head office verification' },
           ip: meta.ip,
           requestId: meta.requestId,
         },
@@ -1239,6 +1347,107 @@ export class AgreementsService implements OnModuleInit {
       );
     });
     return this.get(id);
+  }
+
+  /** Head office confirms a field installation: the agreement becomes active from its installation time. */
+  async verifyInstallation(
+    id: string,
+    installationId: string,
+    actor: AuthenticatedStaff,
+    meta: RequestMeta,
+  ) {
+    await serializable(this.prisma, async (tx) => {
+      const inst = await tx.installation.findUnique({
+        where: { id: installationId },
+        include: { decision: true },
+      });
+      if (!inst || inst.agreementId !== id) throw new NotFoundException('Installation not found');
+      if (!inst.needsVerification || inst.decision) {
+        throw new ConflictException('This installation is not waiting for verification');
+      }
+      const before = await tx.agreement.findUniqueOrThrow({ where: { id } });
+      const { vehicle, battery } = await this.installChecks(tx, before, {
+        batteryId: inst.batteryId,
+        technicianId: inst.technicianId,
+        installedAt: inst.installedAt,
+      });
+      await tx.installationDecision.create({
+        data: { installationId: inst.id, decision: 'VERIFIED', decidedById: actor.id },
+      });
+      await this.activate(
+        tx,
+        before,
+        inst,
+        battery,
+        vehicle,
+        actor.id,
+        meta,
+        'agreement.install.verify',
+      );
+    });
+    return this.get(id);
+  }
+
+  /** Head office sends a field installation back; it can be recorded again. */
+  async rejectInstallation(
+    id: string,
+    installationId: string,
+    reason: string,
+    actor: AuthenticatedStaff,
+    meta: RequestMeta,
+  ) {
+    await serializable(this.prisma, async (tx) => {
+      const inst = await tx.installation.findUnique({
+        where: { id: installationId },
+        include: { decision: true },
+      });
+      if (!inst || inst.agreementId !== id) throw new NotFoundException('Installation not found');
+      if (!inst.needsVerification || inst.decision) {
+        throw new ConflictException('This installation is not waiting for verification');
+      }
+      await tx.installationDecision.create({
+        data: { installationId: inst.id, decision: 'REJECTED', reason, decidedById: actor.id },
+      });
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'agreement.install.reject',
+          tableName: 'installations',
+          recordId: inst.id,
+          after: { agreementId: id, reason },
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  /** Installations recorded in the field and waiting for head office. */
+  async pendingInstallations() {
+    const rows = await this.prisma.installation.findMany({
+      where: { needsVerification: true, decision: { is: null } },
+      include: {
+        agreement: { select: { id: true, number: true, driver: { select: { name: true } } } },
+        battery: { select: { serial: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const names = await this.staffNames(rows.flatMap((r) => [r.recordedById, r.technicianId]));
+    return rows.map((r) => ({
+      id: r.id,
+      agreementId: r.agreement.id,
+      agreementNumber: r.agreement.number,
+      driverName: r.agreement.driver.name,
+      batterySerial: r.battery.serial,
+      installedAt: r.installedAt,
+      location: r.location,
+      recordedAt: r.createdAt,
+      recordedByName: names.get(r.recordedById) ?? null,
+      technicianName: names.get(r.technicianId) ?? null,
+    }));
   }
 
   async installationPhotoLink(agreementId: string, photoId: string) {

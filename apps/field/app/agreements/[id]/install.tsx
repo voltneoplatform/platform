@@ -116,8 +116,14 @@ export default function Install() {
               form.append('conditionNote', condition.trim());
               form.append('driverConfirmed', 'true');
               await appendPhotos(form, 'photos', photos);
-              await api.upload(`/v1/agreements/${a.id}/installation`, form);
-              router.replace(`/agreements/${a.id}?done=installed`);
+              const res = await api.upload<{ state: string }>(
+                `/v1/agreements/${a.id}/installation`,
+                form,
+              );
+              // Head office verifies installations recorded in the field (founder, 31 Oct 2026).
+              router.replace(
+                `/agreements/${a.id}?done=${res.state === 'ACTIVE' ? 'installed' : 'installRecorded'}`,
+              );
             } catch (err) {
               setError(err);
               setBusy(false);

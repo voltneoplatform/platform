@@ -141,6 +141,10 @@ export const en = {
   photoNeeded: 'Add at least one photo.',
   driverConfirmed: 'The driver saw the battery working',
   installed: 'Installed. The agreement is now active.',
+  installRecorded:
+    'Installation recorded. Head office will check and verify it; the agreement starts then.',
+  installWaiting: 'Installed and recorded. Waiting for head office to verify it.',
+  installRejected: 'Head office sent the installation back: {reason}. Record it again.',
   firstDue: 'First due date {date}',
   noInstallations: 'No installation is waiting.',
 

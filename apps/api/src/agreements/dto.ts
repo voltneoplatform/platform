@@ -108,6 +108,14 @@ export class DocumentQuery {
 }
 
 /** Multipart form fields sent with the installation photos (Schedule 3). */
+export class RejectInstallationDto {
+  @ApiProperty({ description: 'What is wrong, so the installer can record it again' })
+  @Transform(trim)
+  @IsString()
+  @Length(5, 300)
+  reason: string;
+}
+
 export class InstallationDto {
   @ApiProperty() @IsUUID() batteryId: string;
   @ApiProperty({ description: 'Technician who installed it' }) @IsUUID() technicianId: string;
