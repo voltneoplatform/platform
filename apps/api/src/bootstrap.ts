@@ -18,7 +18,14 @@ export function configureApp(app: INestApplication): void {
   app.use(cookieParser());
   app.enableCors({ origin: [config.adminOrigin, ...config.extraOrigins], credentials: true });
   // Short payment links (/p/<code>) stay outside /v1 so the SMS address is short.
-  app.setGlobalPrefix('v1', { exclude: [{ path: 'p/:code', method: RequestMethod.GET }] });
+  // So is the UPI AutoPay approval page (/autopay/<code>) the Driver App opens.
+  app.setGlobalPrefix('v1', {
+    exclude: [
+      { path: 'p/:code', method: RequestMethod.GET },
+      { path: 'autopay/:code', method: RequestMethod.GET },
+      { path: 'autopay/:code/done', method: RequestMethod.GET },
+    ],
+  });
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );

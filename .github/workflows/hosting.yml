@@ -102,4 +102,5 @@ jobs:
           SMSGATEWAYHUB_API_KEY: ${{ secrets.SMSGATEWAYHUB_API_KEY }}
           FIRST_ADMIN_EMAIL: ${{ vars.FIRST_ADMIN_EMAIL }}
           FIRST_ADMIN_NAME: ${{ vars.FIRST_ADMIN_NAME }}
+          AUTOPAY_CUSTOMER_EMAIL: ${{ vars.AUTOPAY_CUSTOMER_EMAIL }}
         run: deploy/aws/deploy.sh

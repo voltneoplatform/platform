@@ -86,6 +86,8 @@ payment=none
   fi
   # Test site: Driver App sign-in codes go to the first admin's email until SMS works.
   [ "$ENV_NAME" = staging ] && put DRIVER_CODE_TEST_EMAIL "${FIRST_ADMIN_EMAIL:-}"
+  # UPI AutoPay: Cashfree needs an email on each mandate; drivers have none (T118).
+  put AUTOPAY_CUSTOMER_EMAIL "${AUTOPAY_CUSTOMER_EMAIL:-${FIRST_ADMIN_EMAIL:-}}"
   # Used only while the database has no staff: creates the first super admin.
   put BOOTSTRAP_SUPER_ADMIN_NAME "${FIRST_ADMIN_NAME:-Volt Neo Admin}"
   put BOOTSTRAP_SUPER_ADMIN_EMAIL "${FIRST_ADMIN_EMAIL:-}"

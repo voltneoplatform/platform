@@ -90,4 +90,19 @@ export const hi: Messages = {
   reported: '{date} को बताया',
   requestOpen: 'आपका अनुरोध {number} अभी खुला है। तकनीशियन संपर्क करेगा।',
   serviceEnded: 'बैटरी अब आपकी है, इसलिए Volt Neo की सेवा समाप्त हो गई है।',
+
+  autopayTitle: 'UPI ऑटोपे',
+  autopayIntro:
+    'हर किस्त अपनी तारीख पर अपने-आप कटेगी। UPI ऐप में एक बार मंज़ूर करें। महीने में अधिकतम {amount}।',
+  autopayOn: 'ऑटोपे चालू है।',
+  autopayNext: '{date} को {amount} कटेंगे। एक दिन पहले आपका UPI ऐप बताएगा।',
+  autopayIdle: 'हर किस्त अपनी तारीख पर कटती है।',
+  autopayPending: 'आपके UPI ऐप में मंज़ूरी का इंतज़ार।',
+  autopayStart: 'ऑटोपे चालू करें',
+  autopayApprove: 'मंज़ूरी का पेज खोलें',
+  autopayStop: 'ऑटोपे बंद करें',
+  autopayStopConfirm: 'ऑटोपे बंद करें? फिर हर किस्त आपको खुद चुकानी होगी।',
+  autopayDue: 'ऑटोपे इसे {date} को काटेगा।',
+  autopayOverdue: 'ऑटोपे बकाया या विलंब शुल्क नहीं काटता। इन्हें यहाँ चुकाएँ।',
+  yes: 'हाँ',
 };

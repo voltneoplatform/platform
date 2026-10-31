@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { Queue, Worker, type ConnectionOptions } from 'bullmq';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { CollectionsService } from '../collections/collections.service';
+import { AutopayService } from '../autopay/autopay.service';
 
 export const QUEUE_NAME = 'voltneo-scheduled';
 
@@ -22,6 +23,12 @@ export const SCHEDULES = [
     tz: 'Asia/Kolkata',
     what: 'Send payment reminders and final notices',
   },
+  {
+    id: 'autopay-daily',
+    pattern: '0 10 * * *',
+    tz: 'Asia/Kolkata',
+    what: 'UPI AutoPay: raise charges for instalments due in the next days; cancel charges already paid',
+  },
 ] as const;
 
 @Injectable()
@@ -33,6 +40,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly collections: CollectionsService,
+    private readonly autopay: AutopayService,
   ) {}
 
   async onModuleInit() {
@@ -65,6 +73,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         return this.collections.runDaily();
       case 'collections-notices':
         return this.collections.runNotices();
+      case 'autopay-daily':
+        return this.autopay.runDaily();
       default:
         throw new Error(`Unknown job ${name}`);
     }

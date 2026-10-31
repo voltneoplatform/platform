@@ -13,6 +13,7 @@ import {
   Card,
   ErrorNotice,
   H1,
+  H2,
   KV,
   Loading,
   Muted,
@@ -84,7 +85,15 @@ function DueCard({ a, onPaid }: { a: MyAgreement; onPaid: () => void }) {
       )}
       <Text style={{ fontSize: 17, fontWeight: '700', color }}>{headline}</Text>
       {detail && <Muted>{detail}</Muted>}
-      {due.amount > 0 && (
+      {a.dueByAutopay && (
+        <Notice tone="info">
+          {t('autopayDue', { date: shortDate(a.autopay.nextCharge?.date ?? null) })}
+        </Notice>
+      )}
+      {due.kind === 'OVERDUE' && a.autopay.status === 'ACTIVE' && (
+        <Muted>{t('autopayOverdue')}</Muted>
+      )}
+      {due.amount > 0 && !a.dueByAutopay && (
         <>
           <Button
             testID="pay"
@@ -96,6 +105,96 @@ function DueCard({ a, onPaid }: { a: MyAgreement; onPaid: () => void }) {
           <Muted>{t('payBack')}</Muted>
         </>
       )}
+      <ErrorNotice error={error} />
+    </Card>
+  );
+}
+
+function AutopayCard({ a, onChange }: { a: MyAgreement; onChange: () => void }) {
+  const { t, api } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const ap = a.autopay;
+  if (ap.status === 'OFF' && !ap.available) return null;
+
+  async function run(fn: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      onChange();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+      setConfirm(false);
+    }
+  }
+
+  const start = () =>
+    run(async () => {
+      const r = await api.post<{ url: string }>(`/v1/me/agreements/${a.id}/autopay`);
+      await openPage(r.url);
+    });
+  const stop = () =>
+    run(async () => {
+      await api.post(`/v1/me/agreements/${a.id}/autopay/cancel`);
+    });
+
+  return (
+    <Card>
+      <H2>{t('autopayTitle')}</H2>
+      {ap.status === 'OFF' && (
+        <>
+          <Muted>{t('autopayIntro', { amount: rupees(ap.maxAmount) })}</Muted>
+          <Button
+            testID="autopay-start"
+            title={t('autopayStart')}
+            variant="secondary"
+            busy={busy}
+            onPress={() => void start()}
+          />
+        </>
+      )}
+      {ap.status === 'PENDING' && (
+        <>
+          <Notice tone="warn">{t('autopayPending')}</Notice>
+          <Button
+            title={t('autopayApprove')}
+            busy={busy}
+            onPress={() => void (ap.approvalUrl ? openPage(ap.approvalUrl) : start())}
+          />
+        </>
+      )}
+      {ap.status === 'ACTIVE' && (
+        <>
+          <Badge text={t('autopayOn')} tone="success" />
+          <Muted>
+            {ap.nextCharge
+              ? t('autopayNext', {
+                  amount: rupees(ap.nextCharge.amount),
+                  date: shortDate(ap.nextCharge.date),
+                })
+              : t('autopayIdle')}
+          </Muted>
+        </>
+      )}
+      {ap.status !== 'OFF' &&
+        (confirm ? (
+          <>
+            <Notice tone="warn">{t('autopayStopConfirm')}</Notice>
+            <Button title={t('yes')} variant="danger" busy={busy} onPress={() => void stop()} />
+            <Button title={t('cancel')} variant="secondary" onPress={() => setConfirm(false)} />
+          </>
+        ) : (
+          <Button
+            testID="autopay-stop"
+            title={ap.status === 'PENDING' ? t('cancel') : t('autopayStop')}
+            variant="secondary"
+            onPress={() => setConfirm(true)}
+          />
+        ))}
       <ErrorNotice error={error} />
     </Card>
   );
@@ -140,6 +239,7 @@ export default function Home() {
           </View>
           {a.state === 'IMMOBILISED' && <Notice tone="danger">{t('immobilised')}</Notice>}
           <DueCard a={a} onPaid={() => void reload()} />
+          <AutopayCard a={a} onChange={() => void reload()} />
           {instalments > 0 && (
             <Card>
               <KV k={t('progress', { paid: a.money.instalmentsPaid, total: instalments })} v="" />
