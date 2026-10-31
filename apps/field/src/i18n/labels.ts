@@ -7,6 +7,7 @@ import type {
   TicketOutcome,
   TicketStatus,
   TicketTiming,
+  RelativeRelation,
   VehicleType,
 } from '@voltneo/shared';
 import type { Lang } from './index';
@@ -16,6 +17,7 @@ export interface Labels {
   doc: Record<KycDocType, string>;
   readiness: Record<ReadinessItem, string>;
   vehicle: Record<VehicleType, string>;
+  relative: Record<RelativeRelation, string>;
   ticketCategory: Record<TicketCategory, string>;
   ticketStatus: Record<TicketStatus, string>;
   ticketTiming: Record<TicketTiming, string>;
@@ -61,6 +63,7 @@ export const LABELS: Record<Lang, Labels> = {
       NOMINEE_RECORDED: 'Nominee recorded',
     },
     vehicle: { TOTO: 'Toto', E_RICKSHAW: 'E-rickshaw', E_THREE_WHEELER: 'E-three-wheeler' },
+    relative: { SON_OF: 'Son of', DAUGHTER_OF: 'Daughter of', WIFE_OF: 'Wife of' },
     ticketCategory: {
       NOT_WORKING: 'Battery not working',
       LOW_CAPACITY: 'Runs out too soon',
@@ -135,6 +138,7 @@ export const LABELS: Record<Lang, Labels> = {
       NOMINEE_RECORDED: 'নমিনি নথিভুক্ত',
     },
     vehicle: { TOTO: 'টোটো', E_RICKSHAW: 'ই-রিকশা', E_THREE_WHEELER: 'ই-থ্রি-হুইলার' },
+    relative: { SON_OF: 'পুত্র', DAUGHTER_OF: 'কন্যা', WIFE_OF: 'স্ত্রী' },
     ticketCategory: {
       NOT_WORKING: 'ব্যাটারি চলছে না',
       LOW_CAPACITY: 'তাড়াতাড়ি চার্জ শেষ হয়ে যায়',
@@ -209,6 +213,7 @@ export const LABELS: Record<Lang, Labels> = {
       NOMINEE_RECORDED: 'नॉमिनी दर्ज',
     },
     vehicle: { TOTO: 'टोटो', E_RICKSHAW: 'ई-रिक्शा', E_THREE_WHEELER: 'ई-थ्री-व्हीलर' },
+    relative: { SON_OF: 'पुत्र', DAUGHTER_OF: 'पुत्री', WIFE_OF: 'पत्नी' },
     ticketCategory: {
       NOT_WORKING: 'बैटरी काम नहीं कर रही',
       LOW_CAPACITY: 'जल्दी चार्ज खत्म हो जाता है',

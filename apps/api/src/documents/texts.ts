@@ -34,8 +34,6 @@ export interface Texts {
   lastDueDate: string;
   lateFee: string;
   lateFeeValue: (fee: string, grace: number, cap: number, max: string) => string;
-  gst: string;
-  gstValue: string;
   nominee: string;
   paymentTable: string;
   colNumber: string;
@@ -165,8 +163,6 @@ const EN: Texts = {
   lateFee: 'Late Fee',
   lateFeeValue: (fee, grace, cap, max) =>
     `${fee} per day after the ${grace}-day Grace Period, for at most ${cap} days each time you are late (at most ${max}), however many instalments are overdue`,
-  gst: 'GST',
-  gstValue: 'To be confirmed before launch',
   nominee: 'Nominee',
   paymentTable: 'Payment table',
   colNumber: 'No.',
@@ -275,8 +271,6 @@ const BN: Texts = {
   lateFee: 'বিলম্ব ফি',
   lateFeeValue: (fee, grace, cap, max) =>
     `${grace} দিনের ছাড়ের পরে প্রতিদিন ${fee}, প্রতিবার দেরিতে সর্বোচ্চ ${cap} দিন (সর্বোচ্চ ${max}); একাধিক কিস্তি বাকি থাকলেও দিনে ${fee}-এর বেশি নয়`,
-  gst: 'জিএসটি',
-  gstValue: 'চালু হওয়ার আগে নিশ্চিত করা হবে',
   nominee: 'নমিনি',
   paymentTable: 'পেমেন্টের তালিকা',
   colNumber: 'ক্রম',
@@ -384,8 +378,6 @@ const HI: Texts = {
   lateFee: 'विलंब शुल्क',
   lateFeeValue: (fee, grace, cap, max) =>
     `${grace} दिन की छूट के बाद ${fee} प्रति दिन, हर बार देरी होने पर अधिकतम ${cap} दिन (अधिकतम ${max}); कई किस्तें बाकी हों तब भी दिन में ${fee} से ज़्यादा नहीं`,
-  gst: 'जीएसटी',
-  gstValue: 'शुरू होने से पहले तय किया जाएगा',
   nominee: 'नॉमिनी',
   paymentTable: 'भुगतान तालिका',
   colNumber: 'क्रम',

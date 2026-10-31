@@ -20,6 +20,7 @@ import {
   isDueDay,
   type AgreementState,
   type DueDay,
+  RELATIVE_RELATION_LABELS,
 } from '@voltneo/shared';
 import type { Agreement, ApprovalRequest, Prisma } from '../generated/prisma/client';
 import type { DriverLanguage } from '../generated/prisma/enums';
@@ -1026,6 +1027,10 @@ export class AgreementsService implements OnModuleInit {
       party: {
         name: d.name,
         age: dob ? ageOn(dob, today) : null,
+        relative:
+          d.relativeRelation && d.relativeName
+            ? { relation: RELATIVE_RELATION_LABELS[d.relativeRelation], name: d.relativeName }
+            : null,
         address: [d.addressLine, d.area, d.district, `${d.state} ${d.pinCode}`]
           .filter(Boolean)
           .join(', '),

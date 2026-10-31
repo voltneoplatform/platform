@@ -5,10 +5,12 @@
  * missed. REQUIRES VALIDATION: none of this has been reviewed by a lawyer (L1–L17);
  * every page carries the draft banner until it has.
  *
- * Changes from Draft V1, all PROPOSED: A1 becomes the formal parties block
- * (agreement-pdf.ts); "Late Spell" is added to the definitions; B12 points to
- * Schedule 1; F8 says the signed text is English (founder, 31 Oct 2026); F11
- * describes signing on stamp paper.
+ * Changes from Draft V1: A1 becomes the formal parties block; "Late Spell" is
+ * added to the definitions; F8 says the signed text is English and F11 describes
+ * signing on stamp paper (PROPOSED, T103). Founder decisions of 31 Oct 2026 (T106):
+ * C6 fault level 60%; C9 no replacement of a stolen Battery; E3 disable at once
+ * and 7 days to explain; F4 without numbers or response times; F5 mediation then
+ * the Kolkata courts; F11 Volt Neo pays the stamp duty; B12 (GST) removed.
  */
 
 export type Block = string | { ol: string[] } | { ul: string[] };
@@ -210,11 +212,6 @@ export function agreementParts(v: AgreementTextValues): Part[] {
             'You can see what you have paid, what is due and what remains in the App at any time. You can also ask Volt Neo for a printed statement.',
           ],
         },
-        {
-          no: 'B12',
-          title: 'Taxes',
-          blocks: ['Schedule 1 states whether its amounts include GST.'],
-        },
       ],
     },
     {
@@ -278,7 +275,7 @@ export function agreementParts(v: AgreementTextValues): Part[] {
           blocks: [
             {
               ol: [
-                `If the Battery stops working, or its capacity falls below ${tbc('capacity level set by Head Office')}, in normal use, Volt Neo will repair or replace it at no cost to you.`,
+                'If the Battery stops working, or its capacity falls below 60% of its rated capacity (as measured by a Volt Neo technician with a capacity test), in normal use, Volt Neo will repair or replace it at no cost to you.',
                 `After you report a fault, a technician will respond within ${v.serviceHours} hours.`,
                 'Volt Neo does not carry out scheduled inspections. Service is provided when you report a problem.',
               ],
@@ -303,7 +300,7 @@ export function agreementParts(v: AgreementTextValues): Part[] {
           no: 'C9',
           title: 'Loss or theft',
           blocks: [
-            `If the Battery is stolen, lost or destroyed while Volt Neo owns it, you must report it to Volt Neo and to the police at once. You must continue to pay your Instalments. ${tbc('whether Volt Neo supplies a replacement Battery, and on what terms')}`,
+            'If the Battery is stolen, lost or destroyed while Volt Neo owns it, you must report it to Volt Neo and to the police at once. You must continue to pay your Instalments. Volt Neo does not replace a Battery that is stolen, lost or destroyed.',
           ],
         },
       ],
@@ -421,7 +418,7 @@ export function agreementParts(v: AgreementTextValues): Part[] {
                 'giving Volt Neo false information in your KYC documents or application.',
               ],
             },
-            `If you commit a serious breach in points 2 to 4, Volt Neo may disable and recover the Battery after giving you ${tbc('notice period')} written notice.`,
+            "If you commit a serious breach in points 2 to 4, Volt Neo may disable the Battery at once, when the vehicle is stationary, and will give you written notice. If you do not explain or put right the breach to Volt Neo's reasonable satisfaction within 7 days of the notice, Volt Neo may collect the Battery, and clauses E5 and E6 apply.",
           ],
         },
         {
@@ -540,8 +537,8 @@ export function agreementParts(v: AgreementTextValues): Part[] {
           blocks: [
             {
               ol: [
-                `Contact Volt Neo's support desk by phone at ${tbc('number')}, WhatsApp at ${tbc('number')}, or through the App. Volt Neo will respond within ${tbc('time')}.`,
-                `If you are not satisfied, you can ask for your complaint to be reviewed by ${tbc('title of head-office officer')}, who will respond within ${tbc('time')}.`,
+                "You can make a complaint to Volt Neo through the App, to Volt Neo's support desk, or to any Volt Neo staff member, who will pass it to Head Office.",
+                'If you are not satisfied with the answer, you can ask for your complaint to be reviewed by Head Office.',
               ],
             },
           ],
@@ -550,7 +547,7 @@ export function agreementParts(v: AgreementTextValues): Part[] {
           no: 'F5',
           title: 'Disputes',
           blocks: [
-            `If a dispute cannot be resolved under F4, it will be decided by the courts at Kolkata. ${tbc('whether arbitration or conciliation comes first')}`,
+            'If a dispute is not resolved under clause F4, either party may propose mediation by a mediator both agree on. If it is still not resolved, it will be decided by the courts at Kolkata, West Bengal. Nothing in this clause takes away any right you have under consumer protection law.',
           ],
         },
         {
@@ -592,7 +589,7 @@ export function agreementParts(v: AgreementTextValues): Part[] {
           no: 'F11',
           title: 'Signing and stamp duty',
           blocks: [
-            `This agreement is signed on paper, with its first page on non-judicial stamp paper, and every page is initialled by both parties. Stamp duty is paid by ${tbc('Volt Neo or the driver')}. You receive a copy on paper and in the App.`,
+            `This agreement is signed on paper, with its first page on non-judicial stamp paper, and every page is initialled by both parties. Volt Neo pays the stamp duty. You receive a copy on paper and in the App.`,
           ],
         },
       ],

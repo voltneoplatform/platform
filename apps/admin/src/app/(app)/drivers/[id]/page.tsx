@@ -12,6 +12,7 @@ import {
   type KycDocType,
   type ReadinessItem,
   type VehicleType,
+  RELATIVE_RELATION_LABELS,
 } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
 import type { AgreementListRow, DriverDetail, KycDoc, Paged } from '@/lib/types';
@@ -215,6 +216,14 @@ export default function DriverPage() {
                 <dd className="mono">{d.altPhone}</dd>
               </>
             )}
+            <dt>Son / daughter / wife of</dt>
+            <dd>
+              {d.relative ? (
+                `${RELATIVE_RELATION_LABELS[d.relative.relation]} ${d.relative.name}`
+              ) : (
+                <span className="muted">Not recorded: written by hand on the agreement</span>
+              )}
+            </dd>
             <dt>Nominee</dt>
             <dd>
               {d.nominee.name ? (

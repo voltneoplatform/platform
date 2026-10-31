@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   DRIVER_LANGUAGES,
+  RELATIVE_RELATIONS,
+  type RelativeRelation,
   KYC_DOC_TYPES,
   VEHICLE_TYPES,
   type DriverLanguage,
@@ -94,6 +96,18 @@ class DriverFields {
   @Matches(PIN, { message: 'pinCode must be 6 digits' })
   pinCode: string;
 
+  @ApiPropertyOptional({ enum: RELATIVE_RELATIONS, description: 'Son, daughter or wife of' })
+  @IsOptional()
+  @Transform(emptyToNull)
+  @IsIn(RELATIVE_RELATIONS)
+  relativeRelation?: RelativeRelation | null;
+  @ApiPropertyOptional({ description: "Father's or husband's name, for the agreement" })
+  @IsOptional()
+  @Transform(emptyToNull)
+  @IsString()
+  @Length(2, 100)
+  relativeName?: string | null;
+
   @IsOptional() @Transform(emptyToNull) @IsString() @Length(2, 100) nomineeName?: string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @Length(2, 40) nomineeRelation?: string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(20) nomineePhone?: string | null;
@@ -127,6 +141,11 @@ export class UpdateDriverDto {
   @IsOptional() @Transform(trim) @IsString() @Length(2, 60) district?: string;
   @IsOptional() @Transform(trim) @IsString() @Length(2, 60) state?: string;
   @IsOptional() @Transform(trim) @Matches(PIN) pinCode?: string;
+  @IsOptional()
+  @Transform(emptyToNull)
+  @IsIn(RELATIVE_RELATIONS)
+  relativeRelation?: RelativeRelation | null;
+  @IsOptional() @Transform(emptyToNull) @IsString() @Length(2, 100) relativeName?: string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @Length(2, 100) nomineeName?: string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @Length(2, 40) nomineeRelation?: string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(20) nomineePhone?: string | null;

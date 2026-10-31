@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { Stack, router } from 'expo-router';
-import { VEHICLE_TYPES, type DriverLanguage, type VehicleType } from '@voltneo/shared';
+import {
+  RELATIVE_RELATIONS,
+  VEHICLE_TYPES,
+  type DriverLanguage,
+  type RelativeRelation,
+  type VehicleType,
+} from '@voltneo/shared';
 import { ApiError } from '@/api';
 import { LANGS, LANG_NAMES } from '@/i18n';
 import { useSession } from '@/session';
@@ -17,6 +23,7 @@ export default function NewDriver() {
     name: '',
     phone: '',
     dateOfBirth: '',
+    relativeName: '',
     addressLine: '',
     area: '',
     district: 'South 24 Parganas',
@@ -30,6 +37,7 @@ export default function NewDriver() {
   });
   const [language, setLanguage] = useState<DriverLanguage>(lang);
   const [vehicleType, setVehicleType] = useState<VehicleType>('TOTO');
+  const [relation, setRelation] = useState<RelativeRelation | null>(null);
   const [owns, setOwns] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -45,6 +53,8 @@ export default function NewDriver() {
         phone: f.phone,
         language,
         dateOfBirth: f.dateOfBirth || null,
+        relativeRelation: relation,
+        relativeName: f.relativeName.trim() || null,
         addressLine: f.addressLine,
         area: f.area || null,
         district: f.district,
@@ -95,6 +105,17 @@ export default function NewDriver() {
           onChangeText={set('dateOfBirth')}
           keyboardType="numbers-and-punctuation"
           placeholder="1990-01-31"
+        />
+        <Choice
+          label={t('relativeRelation')}
+          value={relation}
+          onChange={setRelation}
+          options={RELATIVE_RELATIONS.map((r) => ({ value: r, label: labels.relative[r] }))}
+        />
+        <Field
+          label={t('relativeName')}
+          value={f.relativeName}
+          onChangeText={set('relativeName')}
         />
       </Card>
       <Card>
@@ -171,6 +192,8 @@ export default function NewDriver() {
           testID="save-driver"
           title={t('saveDriver')}
           busy={busy}
+          // Needed for the "son / daughter / wife of" line of the agreement.
+          disabled={!relation || f.relativeName.trim().length < 2}
           onPress={() => void save()}
         />
       )}

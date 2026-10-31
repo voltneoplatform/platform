@@ -45,6 +45,8 @@ export interface AgreementPackData extends AgreementDocData {
     age: number | null;
     address: string;
     phone: string;
+    /** "son of", "daughter of" or "wife of" and the name; null leaves a blank to fill in. */
+    relative: { relation: string; name: string } | null;
     /** Identity document, with only its last four characters (UIDAI masking rules). */
     id: { label: string; last4: string } | null;
   };
@@ -201,7 +203,6 @@ export class DocumentsService {
           rupees(data.lateFeePerDayPaise * data.lateFeeCapDays),
         ),
       ],
-      [t.gst, t.gstValue],
       [t.nominee, nominee],
     ]);
 
@@ -307,7 +308,7 @@ export class DocumentsService {
       { text: p.name.toUpperCase(), bold: true },
       {
         text:
-          `, son / daughter / wife of ${blank(24)}, aged ${p.age === null ? `${blank(4)}` : `about ${p.age}`} years, ` +
+          `, ${p.relative ? `${p.relative.relation} ${p.relative.name}` : `son / daughter / wife of ${blank(24)}`}, aged ${p.age === null ? `${blank(4)}` : `about ${p.age}`} years, ` +
           `residing at ${p.address}, mobile ${p.phone}, ` +
           (p.id
             ? `holding ${p.id.label} number ending ${p.id.last4} `
@@ -386,7 +387,6 @@ export class DocumentsService {
           rupees(data.lateFeePerDayPaise * data.lateFeeCapDays),
         ),
       ],
-      [t.gst, t.gstValue],
       [`${t.nominee} (clause E11)`, nominee],
     ]);
     pdf.table(

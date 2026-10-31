@@ -57,6 +57,8 @@ export const en = {
   area: 'Area or village',
   district: 'District',
   pinCode: 'PIN code',
+  relativeRelation: 'Son, daughter or wife of',
+  relativeName: "Father's or husband's name",
   nomineeName: 'Nominee name',
   nomineeRelation: 'Nominee relation',
   nomineePhone: 'Nominee mobile',

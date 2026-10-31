@@ -3,6 +3,8 @@
 import {
   DRIVER_LANGUAGES,
   DRIVER_LANGUAGE_LABELS,
+  RELATIVE_RELATIONS,
+  RELATIVE_RELATION_LABELS,
   VEHICLE_TYPES,
   VEHICLE_TYPE_LABELS,
 } from '@voltneo/shared';
@@ -14,6 +16,8 @@ export interface DriverDraft {
   altPhone: string;
   language: string;
   dateOfBirth: string;
+  relativeRelation: string;
+  relativeName: string;
   addressLine: string;
   area: string;
   district: string;
@@ -31,6 +35,8 @@ export function driverDraft(d?: DriverDetail): DriverDraft {
     altPhone: d?.altPhone?.replace(/^\+91/, '') ?? '',
     language: d?.language ?? 'BN',
     dateOfBirth: d?.dateOfBirth ?? '',
+    relativeRelation: d?.relative?.relation ?? '',
+    relativeName: d?.relative?.name ?? '',
     addressLine: d?.addressLine ?? '',
     area: d?.area ?? '',
     district: d?.district ?? '',
@@ -50,6 +56,8 @@ export function driverPayload(d: DriverDraft) {
     altPhone: n(d.altPhone),
     language: d.language,
     dateOfBirth: n(d.dateOfBirth),
+    relativeRelation: n(d.relativeRelation),
+    relativeName: n(d.relativeName),
     addressLine: d.addressLine,
     area: n(d.area),
     district: d.district,
@@ -108,6 +116,29 @@ export function DriverFields({
           </select>
         </div>
         {f('dateOfBirth', 'Date of birth', { type: 'date' })}
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor="d-relativeRelation">Son / daughter / wife of</label>
+          <select
+            id="d-relativeRelation"
+            required
+            value={value.relativeRelation}
+            onChange={(e) => onChange({ ...value, relativeRelation: e.target.value })}
+          >
+            <option value="">Choose…</option>
+            {RELATIVE_RELATIONS.map((r) => (
+              <option key={r} value={r}>
+                {RELATIVE_RELATION_LABELS[r][0]!.toUpperCase() +
+                  RELATIVE_RELATION_LABELS[r].slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {f('relativeName', "Father's or husband's name (for the agreement)", {
+          required: true,
+          minLength: 2,
+        })}
       </div>
       <div className="form-grid">
         {f('addressLine', 'Address', { required: true, minLength: 3 })}
