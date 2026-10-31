@@ -21,6 +21,6 @@ import { WebhooksService } from './webhooks.service';
     PaymentLinksService,
     { provide: PAYMENT_GATEWAY, inject: [APP_CONFIG], useFactory: (c: AppConfig) => gatewayFor(c) },
   ],
-  exports: [PaymentsService],
+  exports: [PaymentsService, PaymentLinksService, PAYMENT_GATEWAY],
 })
 export class PaymentsModule {}

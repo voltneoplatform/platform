@@ -113,6 +113,43 @@ model StaffSession {
   @@map("staff_sessions")
 }
 
+/// Driver App sign-in codes, kept per phone number: a shared phone may serve
+/// more than one driver, who then picks their name after the code (M6).
+model DriverOtpChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  phone      String
+  codeHash   String    @map("code_hash")
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  requestIp  String?   @map("request_ip")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([phone, createdAt])
+  @@map("driver_otp_challenges")
+}
+
+/// Driver App sessions: rotating refresh tokens, as for staff (M6).
+model DriverSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  driverId         String    @map("driver_id") @db.Uuid
+  familyId         String    @map("family_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  userAgent        String?   @map("user_agent")
+  ip               String?
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  rotatedAt        DateTime? @map("rotated_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedReason    String?   @map("revoked_reason")
+
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+  @@index([familyId])
+  @@map("driver_sessions")
+}
+
 /// audit_log: append-only record of every change to money, plans, agreement
 /// state, battery custody and staff access (spec section 3, rule 17).
 /// A database trigger blocks UPDATE and DELETE.
@@ -433,6 +470,7 @@ model Driver {
   batteries    Battery[]
   agreements   Agreement[]
   payments     Payment[]
+  appSessions  DriverSession[]
 
   @@index([phone])
   @@map("drivers")

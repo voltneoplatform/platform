@@ -10,4 +10,6 @@
 .git
 apps/field/*
 !apps/field/package.json
+apps/driver/*
+!apps/driver/package.json
 docs

@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Volt Neo",
+    "slug": "voltneo-driver",
+    "scheme": "voltneodriver",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.voltneo.driver",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0F2A44",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [],
+      "blockedPermissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"]
+  }
+}

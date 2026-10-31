@@ -10,12 +10,14 @@ import { JwtService } from '@nestjs/jwt';
 import { hasPermission, type Permission } from '@voltneo/shared';
 import {
   ANY_PERMISSIONS,
+  DRIVER_ROUTE,
   IS_PUBLIC,
   REQUIRED_PERMISSIONS,
   type RequestWithContext,
 } from '../common/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AccessTokenClaims } from './auth.service';
+import { DRIVER_AUDIENCE, type DriverAccessClaims } from '../driver-auth/driver-auth.service';
 
 /**
  * Global guard: every route needs a valid staff login unless marked @Public().
@@ -41,6 +43,12 @@ export class AuthGuard implements CanActivate {
     const header = req.get('authorization') ?? '';
     const [scheme, token] = header.split(' ');
     if (scheme !== 'Bearer' || !token) throw new UnauthorizedException('Login required');
+
+    const driverRoute = this.reflector.getAllAndOverride<boolean>(DRIVER_ROUTE, [
+      ctx.getHandler(),
+      ctx.getClass(),
+    ]);
+    if (driverRoute) return this.driver(req, token);
 
     let claims: AccessTokenClaims;
     try {
@@ -90,6 +98,40 @@ export class AuthGuard implements CanActivate {
     if (anyOf?.length && !anyOf.some((p) => hasPermission(session.staff.role, p))) {
       throw new ForbiddenException('Your role does not allow this action');
     }
+    return true;
+  }
+
+  /** Driver App routes: a driver token (other audience), a live session and an active driver. */
+  private async driver(req: RequestWithContext, token: string): Promise<boolean> {
+    let claims: DriverAccessClaims;
+    try {
+      claims = await this.jwt.verifyAsync<DriverAccessClaims>(token, { audience: DRIVER_AUDIENCE });
+    } catch {
+      throw new UnauthorizedException('Login required');
+    }
+    if (claims.typ !== 'driver') throw new UnauthorizedException('Login required');
+    const session = await this.prisma.driverSession.findUnique({
+      where: { id: claims.sid },
+      select: {
+        revokedAt: true,
+        driverId: true,
+        driver: { select: { id: true, name: true, language: true, status: true } },
+      },
+    });
+    if (
+      !session ||
+      session.revokedAt ||
+      session.driverId !== claims.sub ||
+      session.driver.status !== 'ACTIVE'
+    ) {
+      throw new UnauthorizedException('Login required');
+    }
+    req.driver = {
+      id: session.driver.id,
+      name: session.driver.name,
+      language: session.driver.language,
+      sessionId: claims.sid,
+    };
     return true;
   }
 }

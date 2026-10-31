@@ -8,6 +8,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/admin/package.json apps/admin/
 COPY apps/field/package.json apps/field/
+COPY apps/driver/package.json apps/driver/
 COPY packages/shared/package.json packages/shared/
 RUN pnpm install --frozen-lockfile --filter "@voltneo/admin..."
 COPY packages/shared packages/shared

@@ -92,6 +92,15 @@ export interface AppConfig {
   /** Run scheduled jobs (BullMQ on Redis) in this process. */
   jobsEnabled: boolean;
   redisUrl: string;
+  /** Driver App sessions end after this many days without use (ASSUMED 30). */
+  driverSessionIdleDays: number;
+  /** Driver App sessions end this many days after sign-in at the latest (ASSUMED 90). */
+  driverSessionMaxDays: number;
+  /**
+   * Test site only: while driver sign-in codes cannot go by SMS (DLT templates
+   * not approved), they are emailed here so the founder can try the Driver App.
+   */
+  driverCodeTestEmail: string | null;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -258,6 +267,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('PUBLIC_API_URL (https) is needed so Cashfree can report payments');
   }
 
+  const driverCodeTestEmail = env.DRIVER_CODE_TEST_EMAIL?.trim() || null;
+  if (driverCodeTestEmail && deployment === 'production') {
+    throw new Error('DRIVER_CODE_TEST_EMAIL is for the test site only');
+  }
+  if (driverCodeTestEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(driverCodeTestEmail)) {
+    throw new Error('DRIVER_CODE_TEST_EMAIL must be an email address');
+  }
+
   const extraOrigins =
     nodeEnv === 'production'
       ? []
@@ -297,5 +314,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     paymentLinkDays: int(env, 'PAYMENT_LINK_DAYS', 7),
     jobsEnabled: env.JOBS_ENABLED === 'true',
     redisUrl: env.REDIS_URL || 'redis://localhost:6379',
+    driverSessionIdleDays: int(env, 'DRIVER_SESSION_IDLE_DAYS', 30),
+    driverSessionMaxDays: int(env, 'DRIVER_SESSION_MAX_DAYS', 90),
+    driverCodeTestEmail,
   };
 }

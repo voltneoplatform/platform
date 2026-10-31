@@ -15,7 +15,9 @@ storage/
 # Expo (Field App)
 .expo/
 apps/field/android/
+apps/driver/android/
 apps/field/ios/
 apps/field/expo-env.d.ts
+apps/driver/expo-env.d.ts
 *.apk
 *.aab
