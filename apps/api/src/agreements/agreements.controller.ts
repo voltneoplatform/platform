@@ -10,11 +10,10 @@ import {
   Post,
   Query,
   Res,
-  UploadedFile,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import {
@@ -25,7 +24,7 @@ import {
   type RequestMeta,
 } from '../common/decorators';
 import { MAX_UPLOAD_BYTES } from '../files/file-storage';
-import { SCHEDULE_DOCS, type ScheduleDoc } from '../documents/documents.service';
+import { AGREEMENT_DOC, SCHEDULE_DOCS, type ScheduleDoc } from '../documents/documents.service';
 import type { UploadedFile as File } from '../drivers/drivers.service';
 import {
   CancelAgreementDto,
@@ -38,6 +37,7 @@ import {
   UpdateAgreementDto,
 } from './dto';
 import { AgreementsService } from './agreements.service';
+import { MAX_SIGNED_PDF_BYTES, MAX_SIGNED_PHOTOS } from './signed-copy';
 
 export function sendPdf(res: Response, pdf: Buffer, fileName: string) {
   res.setHeader('Content-Type', 'application/pdf');
@@ -115,16 +115,19 @@ export class AgreementsController {
   @RequirePermissions('agreements.manage')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10 } }),
+    // One scanned PDF, or photos of every page (joined into one PDF).
+    FilesInterceptor('files', MAX_SIGNED_PHOTOS, {
+      limits: { fileSize: MAX_SIGNED_PDF_BYTES, files: MAX_SIGNED_PHOTOS, fields: 12 },
+    }),
   )
   sign(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SignAgreementDto,
-    @UploadedFile() file: File | undefined,
+    @UploadedFiles() files: File[] | undefined,
     @CurrentStaff() staff: AuthenticatedStaff,
     @ReqMeta() meta: RequestMeta,
   ) {
-    return this.agreements.sign(id, dto, file, staff, meta);
+    return this.agreements.sign(id, dto, files, staff, meta);
   }
 
   @Post('agreements/:id/signed-copy/link')
@@ -158,8 +161,12 @@ export class AgreementsController {
     @Query() q: DocumentQuery,
     @Res() res: Response,
   ) {
+    if (schedule === AGREEMENT_DOC) {
+      const { pdf, fileName } = await this.agreements.agreementDocument(id);
+      return sendPdf(res, pdf, fileName);
+    }
     if (!(SCHEDULE_DOCS as readonly string[]).includes(schedule)) {
-      throw new NotFoundException('Available documents: schedule-1 and schedule-5');
+      throw new NotFoundException('Available documents: agreement, schedule-1 and schedule-5');
     }
     const { pdf, fileName } = await this.agreements.document(id, schedule as ScheduleDoc, q.lang);
     sendPdf(res, pdf, fileName);

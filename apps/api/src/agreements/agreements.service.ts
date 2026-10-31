@@ -41,6 +41,7 @@ import {
 } from '../files/file-storage';
 import type { AuthenticatedStaff, RequestMeta } from '../common/decorators';
 import { nextCounter } from '../common/counters';
+import { assembleSignedCopy } from './signed-copy';
 import {
   dateOnly,
   istDate,
@@ -62,6 +63,38 @@ import type {
 const MAX_PHOTOS = 6;
 /** Times typed into forms are to the minute, so ordering checks allow one minute. */
 const MINUTE = 60_000;
+
+/** Identity documents in the order the printed agreement prefers them. */
+const ID_PREFERENCE = [
+  'AADHAAR',
+  'VOTER_ID',
+  'DRIVING_LICENCE',
+  'PASSPORT',
+  'PAN',
+  'RATION_CARD',
+  'OTHER_ID',
+] as const;
+const ID_LABELS: Record<(typeof ID_PREFERENCE)[number], string> = {
+  AADHAAR: 'Aadhaar',
+  VOTER_ID: 'Voter ID (EPIC)',
+  DRIVING_LICENCE: 'Driving Licence',
+  PASSPORT: 'Passport',
+  PAN: 'PAN',
+  RATION_CARD: 'Ration Card',
+  OTHER_ID: 'ID document',
+};
+const VEHICLE_LABELS: Record<'TOTO' | 'E_RICKSHAW' | 'E_THREE_WHEELER', string> = {
+  TOTO: 'Toto',
+  E_RICKSHAW: 'E-rickshaw',
+  E_THREE_WHEELER: 'E-three-wheeler',
+};
+
+/** Whole years between a date of birth and a date (both YYYY-MM-DD). */
+export function ageOn(dob: string, on: string): number {
+  const [y1, m1, d1] = dob.split('-').map(Number) as [number, number, number];
+  const [y2, m2, d2] = on.split('-').map(Number) as [number, number, number];
+  return y2 - y1 - (m2 < m1 || (m2 === m1 && d2 < d1) ? 1 : 0);
+}
 
 const fullInclude = {
   driver: true,
@@ -343,6 +376,13 @@ export class AgreementsService implements OnModuleInit {
             explainedInLanguage: a.explainedInLanguage,
             explainedByName: names.get(a.explainedById ?? '') ?? null,
             recordedByName: names.get(a.signRecordedById ?? '') ?? null,
+            stamp: a.stampPaperNumber
+              ? {
+                  number: a.stampPaperNumber,
+                  value: a.stampValue,
+                  purchasedOn: dateOnly(a.stampPurchasedOn),
+                }
+              : null,
           }
         : null,
       activatedAt: a.activatedAt,
@@ -659,16 +699,23 @@ export class AgreementsService implements OnModuleInit {
   async sign(
     id: string,
     dto: SignAgreementDto,
-    file: UploadedFile | undefined,
+    files: UploadedFile[] | undefined,
     actor: AuthenticatedStaff,
     meta: RequestMeta,
   ) {
-    const upload = checkUpload(file);
     const signedAt = new Date(dto.signedAt);
     if (signedAt.getTime() > Date.now() + 60_000) {
       throw new BadRequestException('The signing time cannot be in the future');
     }
-    const key = newFileKey('agreements', id, upload.ext);
+    if (dto.stampPurchasedOn > istDate(signedAt)) {
+      throw new BadRequestException('The stamp paper must be bought on or before the signing date');
+    }
+    const number = (
+      await this.prisma.agreement.findUnique({ where: { id }, select: { number: true } })
+    )?.number;
+    if (!number) throw new NotFoundException('Agreement not found');
+    const copy = await assembleSignedCopy(files, number);
+    const key = newFileKey('agreements', id, 'pdf');
     let stored = false;
 
     await serializable(this.prisma, async (tx) => {
@@ -718,7 +765,7 @@ export class AgreementsService implements OnModuleInit {
       }
 
       if (!stored) {
-        await this.storage.put(key, file!.buffer, upload.mime);
+        await this.storage.put(key, copy.buffer, 'application/pdf');
         stored = true;
       }
 
@@ -748,8 +795,11 @@ export class AgreementsService implements OnModuleInit {
           signedAt,
           signatureMethod: 'PAPER',
           signedFileKey: key,
-          signedFileName: upload.originalName,
-          signedFileType: upload.mime,
+          signedFileName: copy.name,
+          signedFileType: 'application/pdf',
+          stampPaperNumber: dto.stampPaperNumber,
+          stampValue: dto.stampValueRupees * 100,
+          stampPurchasedOn: parseDateOnly(dto.stampPurchasedOn),
           explainedInLanguage: dto.explainedInLanguage,
           explainedById: explainer.id,
           signRecordedById: actor.id,
@@ -957,6 +1007,48 @@ export class AgreementsService implements OnModuleInit {
         amount: l.amount,
       })),
     };
+  }
+
+  /** The whole agreement for printing on stamp paper (English, founder 31 Oct 2026). */
+  async agreementDocument(id: string) {
+    const a = await this.loadFull(id);
+    if (a.state === 'CANCELLED') throw new ConflictException('This agreement was cancelled');
+    const ids = await this.prisma.kycDocument.findMany({
+      where: { driverId: a.driverId, status: 'VERIFIED', numberLast4: { not: null } },
+      select: { type: true, numberLast4: true },
+    });
+    const id0 = ID_PREFERENCE.map((t) => ids.find((d) => d.type === t)).find(Boolean);
+    const d = a.driver;
+    const today = istDate(new Date());
+    const dob = dateOnly(d.dateOfBirth);
+    const pdf = await this.documents.agreement({
+      ...this.docData(a),
+      party: {
+        name: d.name,
+        age: dob ? ageOn(dob, today) : null,
+        address: [d.addressLine, d.area, d.district, `${d.state} ${d.pinCode}`]
+          .filter(Boolean)
+          .join(', '),
+        phone: d.phone,
+        id: id0
+          ? {
+              label: ID_LABELS[id0.type as (typeof ID_PREFERENCE)[number]],
+              last4: id0.numberLast4!,
+            }
+          : null,
+      },
+      vehicleDetail: {
+        type: VEHICLE_LABELS[a.vehicle.type],
+        registration: a.vehicle.registration,
+        chassis: a.vehicle.chassisNumber,
+        ownedByDriver: a.vehicle.ownedByDriver,
+        ownerName: a.vehicle.ownerName,
+        ownerPhone: a.vehicle.ownerPhone,
+      },
+      batteryDetail: { chemistry: a.batteryType.chemistry, serial: a.battery?.serial ?? null },
+      driverLanguage: a.language,
+    });
+    return { pdf, fileName: `${a.number}-agreement.pdf` };
   }
 
   async document(id: string, doc: ScheduleDoc, lang: DriverLanguage | undefined) {

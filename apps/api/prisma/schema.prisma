@@ -569,6 +569,10 @@ model Agreement {
   signedFileKey       String?         @map("signed_file_key")
   signedFileName      String?         @map("signed_file_name")
   signedFileType      String?         @map("signed_file_type")
+  /// Stamp paper (or e-stamp certificate) used at signing; value in paise
+  stampPaperNumber    String?         @map("stamp_paper_number")
+  stampValue          Int?            @map("stamp_value")
+  stampPurchasedOn    DateTime?       @map("stamp_purchased_on") @db.Date
   explainedInLanguage DriverLanguage? @map("explained_in_language")
   explainedById       String?         @map("explained_by_id") @db.Uuid
   signRecordedById    String?         @map("sign_recorded_by_id") @db.Uuid

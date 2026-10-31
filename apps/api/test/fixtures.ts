@@ -1,3 +1,4 @@
+import zlib from 'node:zlib';
 import { rupeesToPaise as r } from '@voltneo/shared';
 import { bearer, type TestContext } from './helpers';
 
@@ -7,6 +8,31 @@ export const PNG = Buffer.concat([
 ]);
 export const PDF = Buffer.from('%PDF-1.4\n% test consent form\n');
 export const NOT_A_DOC = Buffer.from('MZ this is not an image');
+
+/** A real, decodable PNG (a white page of the given size), for code that reads images. */
+export function realPng(width = 40, height = 56): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0xff)]);
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 let n = 0;
 
@@ -202,7 +228,10 @@ export async function activeAgreement(
     .set(bearer(t.ops))
     .field('signedAt', new Date().toISOString())
     .field('explainedInLanguage', 'BN')
-    .attach('file', PDF, 'signed.pdf')
+    .field('stampPaperNumber', 'WB-NJ-123456')
+    .field('stampValueRupees', '100')
+    .field('stampPurchasedOn', '2026-10-01')
+    .attach('files', PDF, 'signed.pdf')
     .expect(200);
   await ctx.http
     .post('/v1/payments')

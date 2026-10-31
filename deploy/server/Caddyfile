@@ -10,10 +10,11 @@
 	# The panel calls the API on its own address, so the sign-in cookie stays first-party.
 	handle /v1/* {
 		reverse_proxy api:4000 {
-			# Take the whole upload before passing it on, so an early refusal
+			# Take the whole upload (up to 48 MiB, enough for a scanned agreement)
+			# before passing it on, so an early refusal
 			# (for example an expired sign-in) reaches the user as a message
 			# instead of breaking the connection mid-upload.
-			request_buffers 12MiB
+			request_buffers 48MiB
 		}
 	}
 	handle {
@@ -29,7 +30,7 @@
 	log
 	encode zstd gzip
 	reverse_proxy api:4000 {
-		request_buffers 12MiB
+		request_buffers 48MiB
 	}
 	header {
 		Strict-Transport-Security "max-age=31536000"

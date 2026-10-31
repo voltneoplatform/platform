@@ -25,6 +25,12 @@ const FONT_FILES: Record<Lang, { regular: string; bold: string }> = {
 };
 
 const resolved = new Map<string, string>();
+/** Registers the language's regular and bold fonts on a pdfkit document. */
+export function registerFonts(doc: PDFKit.PDFDocument, lang: Lang): void {
+  doc.registerFont('regular', fontPath(FONT_FILES[lang].regular));
+  doc.registerFont('bold', fontPath(FONT_FILES[lang].bold));
+}
+
 function fontPath(spec: string): string {
   let p = resolved.get(spec);
   if (!p) {

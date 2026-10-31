@@ -334,6 +334,8 @@ export interface AgreementDetail {
     explainedInLanguage: Lang;
     explainedByName: string | null;
     recordedByName: string | null;
+    /** Stamp paper used (agreements signed from 31 Oct 2026). */
+    stamp: { number: string; value: number; purchasedOn: string } | null;
   } | null;
   activatedAt: string | null;
   completedAt: string | null;

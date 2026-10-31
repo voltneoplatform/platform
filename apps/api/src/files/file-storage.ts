@@ -148,9 +148,12 @@ export interface CheckedUpload {
 
 export function checkUpload(
   file: { buffer: Buffer; size: number; originalname: string } | undefined,
+  maxBytes = MAX_UPLOAD_BYTES,
 ): CheckedUpload {
   if (!file || !file.buffer?.length) throw new BadRequestException('Attach a file (photo or PDF)');
-  if (file.size > MAX_UPLOAD_BYTES) throw new BadRequestException('File is larger than 10 MB');
+  if (file.size > maxBytes) {
+    throw new BadRequestException(`File is larger than ${Math.round(maxBytes / 1024 / 1024)} MB`);
+  }
   const sig = SIGNATURES.find((s) => s.test(file.buffer));
   if (!sig) throw new BadRequestException('Only JPEG, PNG, WebP photos or PDF files are accepted');
   const originalName =

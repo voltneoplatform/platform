@@ -75,6 +75,23 @@ export class SignAgreementDto {
   @Transform(emptyToNull)
   @IsUUID()
   explainedById?: string | null;
+
+  @ApiProperty({ description: 'Stamp paper serial number, or e-stamp certificate number' })
+  @Transform(trim)
+  @IsString()
+  @Length(3, 60)
+  stampPaperNumber: string;
+
+  @ApiProperty({ description: 'Value of the stamp paper, in whole rupees' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_00_000)
+  stampValueRupees: number;
+
+  @ApiProperty({ example: '2026-10-30', description: 'Date the stamp paper was bought' })
+  @Matches(DATE)
+  stampPurchasedOn: string;
 }
 
 export class CancelAgreementDto {
