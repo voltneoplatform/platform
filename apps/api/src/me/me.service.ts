@@ -69,25 +69,41 @@ export class MeService {
       },
     });
     return {
-      driver: { id: d.id, name: d.name, phone: d.phone, language: d.language as DriverLanguage },
+      driver: {
+        id: d.id,
+        name: d.name,
+        phone: d.phone,
+        email: d.email,
+        language: d.language as DriverLanguage,
+      },
       agreements: d.agreements,
     };
   }
 
-  async setLanguage(me: AuthenticatedDriver, language: DriverLanguage, meta: RequestMeta) {
+  /** The driver changes their language or email in the app. */
+  async update(
+    me: AuthenticatedDriver,
+    dto: { language?: DriverLanguage; email?: string | null },
+    meta: RequestMeta,
+  ) {
     const before = await this.prisma.driver.findUniqueOrThrow({ where: { id: me.id } });
-    if (before.language !== language) {
+    const data: { language?: DriverLanguage; email?: string | null } = {};
+    if (dto.language && dto.language !== before.language) data.language = dto.language;
+    if (dto.email !== undefined && dto.email !== before.email) data.email = dto.email;
+    if (Object.keys(data).length) {
       await this.prisma.$transaction(async (tx) => {
-        await tx.driver.update({ where: { id: me.id }, data: { language } });
+        await tx.driver.update({ where: { id: me.id }, data });
         await this.audit.record(
           {
             actorType: 'DRIVER',
             actorId: me.id,
-            action: 'driver.language',
+            action: 'driver.update',
             tableName: 'drivers',
             recordId: me.id,
-            before: { language: before.language },
-            after: { language, via: 'driver_app' },
+            before: Object.fromEntries(
+              Object.keys(data).map((k) => [k, before[k as keyof typeof data]]),
+            ),
+            after: { ...data, via: 'driver_app' },
             ip: meta.ip,
             requestId: meta.requestId,
           },
@@ -140,6 +156,8 @@ export class MeService {
     return {
       available: v.available,
       unavailableReason: v.unavailableReason,
+      methods: v.methods,
+      method: m?.method ?? null,
       status: m?.status ?? 'OFF',
       maxAmount: m?.maxAmount ?? a.instalment,
       approvalUrl: m?.approvalUrl ?? null,
@@ -230,9 +248,14 @@ export class MeService {
     return { url: link.url, amount: link.amount, expiresAt: link.expiresAt, due };
   }
 
-  async startAutopay(me: AuthenticatedDriver, agreementId: string, meta: RequestMeta) {
+  async startAutopay(
+    me: AuthenticatedDriver,
+    agreementId: string,
+    meta: RequestMeta,
+    method: 'UPI' | 'ENACH',
+  ) {
     const a = await this.load(me, agreementId);
-    return this.autopay.start(a.id, { type: 'DRIVER', id: me.id }, meta);
+    return this.autopay.start(a.id, { type: 'DRIVER', id: me.id }, meta, method);
   }
 
   async stopAutopay(me: AuthenticatedDriver, agreementId: string, meta: RequestMeta) {

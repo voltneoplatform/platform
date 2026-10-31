@@ -9,13 +9,18 @@
 
 import type { Paise } from './money';
 
-export const PAYMENT_METHODS = ['UPI', 'CARD', 'CASH'] as const;
+export const PAYMENT_METHODS = ['UPI', 'CARD', 'CASH', 'ENACH'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   UPI: 'UPI',
   CARD: 'Card',
   CASH: 'Cash',
+  ENACH: 'e-NACH (bank)',
 };
+
+/** Methods staff can record by hand. e-NACH money arrives only through the gateway (AutoPay). */
+export const MANUAL_PAYMENT_METHODS = ['UPI', 'CARD', 'CASH'] as const;
+export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
 
 /** Manual: entered by staff. Gateway: arrived through a payment provider webhook. */
 export const PAYMENT_SOURCES = ['MANUAL', 'GATEWAY'] as const;

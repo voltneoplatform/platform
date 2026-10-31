@@ -8,7 +8,13 @@ import type {
 
 /** GET /v1/me */
 export interface Me {
-  driver: { id: string; name: string; phone: string; language: 'BN' | 'HI' | 'EN' };
+  driver: {
+    id: string;
+    name: string;
+    phone: string;
+    email: string | null;
+    language: 'BN' | 'HI' | 'EN';
+  };
   agreements: { id: string; number: string; state: AgreementState }[];
 }
 
@@ -39,6 +45,8 @@ export interface MyAgreement {
   autopay: {
     available: boolean;
     unavailableReason: string | null;
+    methods: Record<'UPI' | 'ENACH', { available: boolean; reason: string | null }>;
+    method: 'UPI' | 'ENACH' | null;
     status: 'OFF' | 'PENDING' | 'ACTIVE';
     maxAmount: number;
     approvalUrl: string | null;

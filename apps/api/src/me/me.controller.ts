@@ -21,7 +21,7 @@ import {
   type RequestMeta,
 } from '../common/decorators';
 import { sendPdf } from '../agreements/agreements.controller';
-import { AgreementQuery, ReportFaultDto, SetLanguageDto } from './dto';
+import { AgreementQuery, ReportFaultDto, StartAutopayDto, UpdateMeDto } from './dto';
 import { MeService } from './me.service';
 
 /** Driver App routes (M6): every route needs a driver's sign-in. */
@@ -40,10 +40,10 @@ export class MeController {
   @Patch()
   language(
     @CurrentDriver() d: AuthenticatedDriver,
-    @Body() dto: SetLanguageDto,
+    @Body() dto: UpdateMeDto,
     @ReqMeta() meta: RequestMeta,
   ) {
-    return this.me.setLanguage(d, dto.language, meta);
+    return this.me.update(d, dto, meta);
   }
 
   @Get('agreement')
@@ -69,9 +69,10 @@ export class MeController {
   startAutopay(
     @CurrentDriver() d: AuthenticatedDriver,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: StartAutopayDto,
     @ReqMeta() meta: RequestMeta,
   ) {
-    return this.me.startAutopay(d, id, meta);
+    return this.me.startAutopay(d, id, meta, dto.method ?? 'UPI');
   }
 
   @Post('agreements/:id/autopay/cancel')

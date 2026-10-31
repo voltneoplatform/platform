@@ -216,6 +216,8 @@ export default function DriverPage() {
                 <dd className="mono">{d.altPhone}</dd>
               </>
             )}
+            <dt>Email</dt>
+            <dd>{d.email ?? '—'}</dd>
             <dt>Son / daughter / wife of</dt>
             <dd>
               {d.relative ? (

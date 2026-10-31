@@ -150,6 +150,12 @@ model DriverSession {
   @@map("driver_sessions")
 }
 
+/// How AutoPay takes the money: a UPI mandate or an e-NACH bank mandate.
+enum AutopayMethod {
+  UPI
+  ENACH
+}
+
 enum AutopayStatus {
   PENDING
   ACTIVE
@@ -178,6 +184,7 @@ model AutopayMandate {
   /// The approval page: https://api.voltcompany.in/autopay/<shortCode>
   shortCode      String        @unique @map("short_code")
   maxAmount      Int           @map("max_amount")
+  method         AutopayMethod @default(UPI)
   status         AutopayStatus @default(PENDING)
   gatewayStatus  String?       @map("gateway_status")
   statusNote     String?       @map("status_note")
@@ -515,6 +522,8 @@ model Driver {
   name            String
   phone           String
   altPhone        String?        @map("alt_phone")
+  /// Optional (founder, 31 Oct 2026): used on AutoPay mandates and for emailed receipts.
+  email           String?
   language        DriverLanguage
   dateOfBirth     DateTime?      @map("date_of_birth") @db.Date
   /// "Son / daughter / wife of" in the agreement (both or neither)
@@ -845,6 +854,7 @@ enum PaymentMethod {
   UPI
   CARD
   CASH
+  ENACH
 }
 
 enum PaymentSource {
@@ -992,6 +1002,7 @@ model CashDeposit {
 enum MessageChannel {
   SMS
   WHATSAPP
+  EMAIL
 }
 
 enum MessageStatus {
@@ -1005,6 +1016,8 @@ model OutboundMessage {
   id          String         @id @default(uuid()) @db.Uuid
   driverId    String?        @map("driver_id") @db.Uuid
   toPhone     String         @map("to_phone")
+  /// Email messages only (receipts with the PDF attached).
+  toEmail     String?        @map("to_email")
   channel     MessageChannel
   template    String
   language    DriverLanguage

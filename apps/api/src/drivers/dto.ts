@@ -12,6 +12,7 @@ import {
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -71,10 +72,20 @@ export class VehicleDto {
   acknowledgeDuplicates?: boolean;
 }
 
+/** Optional email, stored lower-case. */
+const lowerEmail = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? (value.trim() ? value.trim().toLowerCase() : null) : value;
+
 class DriverFields {
   @ApiProperty() @Transform(trim) @IsString() @Length(2, 100) name: string;
   @ApiProperty({ example: '9830012345' }) @Transform(trim) @IsString() @MaxLength(20) phone: string;
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(20) altPhone?: string | null;
+  @ApiPropertyOptional({ description: 'Optional: AutoPay mandates and emailed receipts' })
+  @IsOptional()
+  @Transform(lowerEmail)
+  @IsEmail({}, { message: 'Enter a valid email address' })
+  @MaxLength(254)
+  email?: string | null;
   @ApiProperty({ enum: DRIVER_LANGUAGES }) @IsIn(DRIVER_LANGUAGES) language: DriverLanguage;
 
   @ApiPropertyOptional({ example: '1988-04-12' })
@@ -134,6 +145,11 @@ export class UpdateDriverDto {
   @IsOptional() @Transform(trim) @IsString() @Length(2, 100) name?: string;
   @IsOptional() @Transform(trim) @IsString() @MaxLength(20) phone?: string;
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(20) altPhone?: string | null;
+  @IsOptional()
+  @Transform(lowerEmail)
+  @IsEmail({}, { message: 'Enter a valid email address' })
+  @MaxLength(254)
+  email?: string | null;
   @IsOptional() @IsIn(DRIVER_LANGUAGES) language?: DriverLanguage;
   @IsOptional() @Transform(emptyToNull) @Matches(DATE) dateOfBirth?: string | null;
   @IsOptional() @Transform(trim) @IsString() @Length(3, 200) addressLine?: string;

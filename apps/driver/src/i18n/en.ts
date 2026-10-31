@@ -93,19 +93,34 @@ export const en = {
   requestOpen: 'Your request {number} is still open. A technician will contact you.',
   serviceEnded: 'The battery is yours now, so Volt Neo service has ended.',
 
-  autopayTitle: 'UPI AutoPay',
+  autopayTitle: 'AutoPay',
   autopayIntro:
-    'Pay each instalment automatically on its Due Date. You approve it once in your UPI app. Up to {amount} a month.',
+    'Pay each instalment automatically on its Due Date. Up to {amount} a month. Choose how:',
   autopayOn: 'AutoPay is on.',
   autopayNext: '{amount} will be taken on {date}. Your UPI app tells you the day before.',
   autopayIdle: 'Each instalment is taken on its Due Date.',
   autopayPending: 'Waiting for your approval in your UPI app.',
-  autopayStart: 'Switch on AutoPay',
   autopayApprove: 'Open the approval page',
   autopayStop: 'Switch off AutoPay',
   autopayStopConfirm: 'Switch off AutoPay? You will then pay each instalment yourself.',
   autopayDue: 'AutoPay will take this on {date}.',
   autopayOverdue: 'AutoPay does not take overdue amounts or late fees. Pay them here.',
+  autopayPendingEnach:
+    'Waiting for your bank to confirm the e-NACH mandate. This usually takes 1 to 2 days.',
+  autopayUpi: 'UPI AutoPay',
+  autopayUpiHint: 'Approve once in any UPI app. For instalments up to ₹15,000.',
+  autopayEnach: 'From my bank account (e-NACH)',
+  autopayEnachHint:
+    'Approve with net banking, debit card or Aadhaar. Your bank confirms in 1 to 2 days.',
+  autopayNextEnach: '{amount} will be taken from your bank account on {date}.',
+  autopayVia: 'Paid by: {method}',
+  emailTitle: 'Email for receipts',
+  emailNone: 'Not added. Add one to get each receipt by email as well.',
+  emailLabel: 'Email address',
+  emailSave: 'Save',
+  emailSaved: 'Saved.',
+  change: 'Change',
+  add: 'Add',
   yes: 'Yes',
 } as const;
 

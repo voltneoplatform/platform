@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   DRIVER_LANGUAGES,
   TICKET_CATEGORIES,
@@ -6,11 +6,31 @@ import {
   type TicketCategory,
 } from '@voltneo/shared';
 import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, IsUUID, Length, MaxLength } from 'class-validator';
 import { trim } from '../battery-types/dto';
 
-export class SetLanguageDto {
-  @ApiProperty({ enum: DRIVER_LANGUAGES }) @IsIn(DRIVER_LANGUAGES) language: DriverLanguage;
+/** The driver's own details they can change in the app: language and email. */
+export class UpdateMeDto {
+  @ApiPropertyOptional({ enum: DRIVER_LANGUAGES })
+  @IsOptional()
+  @IsIn(DRIVER_LANGUAGES)
+  language?: DriverLanguage;
+
+  @ApiPropertyOptional({ description: 'Empty removes it' })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? (value.trim() ? value.trim().toLowerCase() : null) : value,
+  )
+  @IsEmail({}, { message: 'Enter a valid email address' })
+  @MaxLength(254)
+  email?: string | null;
+}
+
+export class StartAutopayDto {
+  @ApiPropertyOptional({ enum: ['UPI', 'ENACH'], default: 'UPI' })
+  @IsOptional()
+  @IsIn(['UPI', 'ENACH'])
+  method?: 'UPI' | 'ENACH';
 }
 
 export class AgreementQuery {

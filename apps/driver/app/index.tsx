@@ -5,13 +5,14 @@ import type { DueNow } from '@voltneo/shared';
 import { rupees, shortDate } from '@/i18n';
 import { openPage } from '@/pdf';
 import { useSession } from '@/session';
-import type { MyAgreement } from '@/types';
+import type { Me, MyAgreement } from '@/types';
 import {
   Badge,
   Button,
   C,
   Card,
   ErrorNotice,
+  Field,
   H1,
   H2,
   KV,
@@ -132,11 +133,12 @@ function AutopayCard({ a, onChange }: { a: MyAgreement; onChange: () => void }) 
     }
   }
 
-  const start = () =>
+  const start = (method: 'UPI' | 'ENACH') =>
     run(async () => {
-      const r = await api.post<{ url: string }>(`/v1/me/agreements/${a.id}/autopay`);
+      const r = await api.post<{ url: string }>(`/v1/me/agreements/${a.id}/autopay`, { method });
       await openPage(r.url);
     });
+  const enach = ap.method === 'ENACH';
   const stop = () =>
     run(async () => {
       await api.post(`/v1/me/agreements/${a.id}/autopay/cancel`);
@@ -148,31 +150,51 @@ function AutopayCard({ a, onChange }: { a: MyAgreement; onChange: () => void }) 
       {ap.status === 'OFF' && (
         <>
           <Muted>{t('autopayIntro', { amount: rupees(ap.maxAmount) })}</Muted>
-          <Button
-            testID="autopay-start"
-            title={t('autopayStart')}
-            variant="secondary"
-            busy={busy}
-            onPress={() => void start()}
-          />
+          {ap.methods.UPI.available && (
+            <>
+              <Button
+                testID="autopay-upi"
+                title={t('autopayUpi')}
+                variant="secondary"
+                busy={busy}
+                onPress={() => void start('UPI')}
+              />
+              <Muted>{t('autopayUpiHint')}</Muted>
+            </>
+          )}
+          {ap.methods.ENACH.available && (
+            <>
+              <Button
+                testID="autopay-enach"
+                title={t('autopayEnach')}
+                variant="secondary"
+                busy={busy}
+                onPress={() => void start('ENACH')}
+              />
+              <Muted>{t('autopayEnachHint')}</Muted>
+            </>
+          )}
         </>
       )}
       {ap.status === 'PENDING' && (
         <>
-          <Notice tone="warn">{t('autopayPending')}</Notice>
+          <Notice tone="warn">{enach ? t('autopayPendingEnach') : t('autopayPending')}</Notice>
           <Button
             title={t('autopayApprove')}
             busy={busy}
-            onPress={() => void (ap.approvalUrl ? openPage(ap.approvalUrl) : start())}
+            onPress={() =>
+              void (ap.approvalUrl ? openPage(ap.approvalUrl) : start(ap.method ?? 'UPI'))
+            }
           />
         </>
       )}
       {ap.status === 'ACTIVE' && (
         <>
           <Badge text={t('autopayOn')} tone="success" />
+          <Muted>{t('autopayVia', { method: enach ? t('autopayEnach') : t('autopayUpi') })}</Muted>
           <Muted>
             {ap.nextCharge
-              ? t('autopayNext', {
+              ? t(enach ? 'autopayNextEnach' : 'autopayNext', {
                   amount: rupees(ap.nextCharge.amount),
                   date: shortDate(ap.nextCharge.date),
                 })
@@ -196,6 +218,75 @@ function AutopayCard({ a, onChange }: { a: MyAgreement; onChange: () => void }) 
           />
         ))}
       <ErrorNotice error={error} />
+    </Card>
+  );
+}
+
+/** The driver's email for receipts (optional; founder, 31 Oct 2026). */
+function EmailCard() {
+  const { t, api } = useSession();
+  const { data, setData } = useLoad(() => api.get<Me>('/v1/me'), [api]);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [saved, setSaved] = useState(false);
+  if (!data) return null;
+  const email = data.driver.email;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      setData(await api.patch<Me>('/v1/me', { email: value.trim() || null }));
+      setEditing(false);
+      setSaved(true);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <H2>{t('emailTitle')}</H2>
+      {editing ? (
+        <>
+          <Field
+            testID="email"
+            label={t('emailLabel')}
+            value={value}
+            onChangeText={setValue}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            maxLength={254}
+          />
+          <ErrorNotice error={error} />
+          <Button
+            testID="email-save"
+            title={t('emailSave')}
+            busy={busy}
+            onPress={() => void save()}
+          />
+          <Button title={t('cancel')} variant="secondary" onPress={() => setEditing(false)} />
+        </>
+      ) : (
+        <>
+          <Muted>{email ?? t('emailNone')}</Muted>
+          {saved && <Notice tone="success">{t('emailSaved')}</Notice>}
+          <Button
+            testID="email-edit"
+            title={email ? t('change') : t('add')}
+            variant="secondary"
+            onPress={() => {
+              setValue(email ?? '');
+              setSaved(false);
+              setEditing(true);
+            }}
+          />
+        </>
+      )}
     </Card>
   );
 }
@@ -270,6 +361,7 @@ export default function Home() {
         subtitle={t('helpSub')}
         onPress={() => router.push('/help')}
       />
+      <EmailCard />
       <Button title={t('signOut')} variant="secondary" onPress={() => void signOut()} />
     </Screen>
   );

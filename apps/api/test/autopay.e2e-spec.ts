@@ -4,6 +4,7 @@ import {
   type MemoryDriverCodeSender,
 } from '../src/driver-auth/driver-code-sender';
 import { PAYMENT_GATEWAY, type FakeGateway } from '../src/payments/gateway';
+import { EMAIL_SENDER, type MemoryEmailSender } from '../src/messaging/email-sender';
 import { bearer, createTestApp, loginAs, resetData, type TestContext } from './helpers';
 import { activeAgreement } from './fixtures';
 
@@ -52,10 +53,11 @@ describe('UPI AutoPay (M6)', () => {
   const run = (date: string) =>
     ctx.http.post('/v1/autopay/run').set(bearer(ops.token)).send({ date }).expect(200);
 
-  async function switchOn() {
+  async function switchOn(method: 'UPI' | 'ENACH' = 'UPI') {
     const start = await ctx.http
       .post(`/v1/me/agreements/${a.id}/autopay`)
       .set(bearer(driver))
+      .send({ method })
       .expect(200);
     const view = await staffView();
     await ctx.http
@@ -193,5 +195,49 @@ describe('UPI AutoPay (M6)', () => {
       status: 'CANCELLED',
       endedBy: 'DRIVER_UPI',
     });
+  });
+
+  it("offers e-NACH on the bank account, taken and receipted as e-NACH, with the driver's email", async () => {
+    const emails = ctx.app.get<MemoryEmailSender>(EMAIL_SENDER);
+    emails.sent.length = 0;
+    await ctx.http
+      .patch('/v1/me')
+      .set(bearer(driver))
+      .send({ email: ' Ramesh.Das@Example.com ' })
+      .expect(200);
+    const before = await mine();
+    expect(before.autopay.methods).toMatchObject({
+      UPI: { available: true },
+      ENACH: { available: true },
+    });
+    await switchOn('ENACH');
+    const sub = [...gateway.mandates.values()].at(-1)!;
+    expect(sub.input).toMatchObject({
+      method: 'ENACH',
+      customer: { email: 'ramesh.das@example.com' },
+    });
+    expect((await mine()).autopay).toMatchObject({ status: 'ACTIVE', method: 'ENACH' });
+    await run(addDays(a.firstDueDate, -3));
+    const charge = (await staffView()).mandate.charges[0];
+    await ctx.http
+      .post(`/v1/autopay/charges/${charge.id}/simulate`)
+      .set(bearer(ops.token))
+      .send({ status: 'SUCCESS' })
+      .expect(200);
+    const receipts = await ctx.http.get('/v1/me/payments').set(bearer(driver)).expect(200);
+    expect(receipts.body[0]).toMatchObject({ amount: r(3000), method: 'ENACH' });
+    // The receipt also went by email, with the PDF.
+    const mail = emails.sent.at(-1)!;
+    expect(mail.to).toBe('ramesh.das@example.com');
+    expect(mail.attachment?.contentType).toBe('application/pdf');
+    expect(mail.attachment?.content.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('does not let head office record e-NACH money by hand', async () => {
+    await ctx.http
+      .post('/v1/payments')
+      .set(bearer(finance.token))
+      .send({ agreementId: a.id, amountPaise: r(3000), method: 'ENACH' })
+      .expect(400);
   });
 });

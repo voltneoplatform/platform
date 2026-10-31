@@ -65,11 +65,15 @@ export class AutopayService {
 
   /** Why AutoPay cannot be offered on this server, or null. */
   unavailable(): string | null {
-    if (!this.gateway.autopayMode) return 'UPI AutoPay is not set up on this server yet';
-    if (this.gateway.name === 'cashfree' && !this.config.autopayCustomerEmail) {
-      return 'UPI AutoPay needs the AUTOPAY_CUSTOMER_EMAIL setting';
-    }
+    if (!this.gateway.autopayMode) return 'AutoPay is not set up on this server yet';
     return null;
+  }
+
+  /** Cashfree needs an email on each mandate: the driver's, else Volt Neo's (T118). */
+  private mandateEmail(driverEmail: string | null): string | null {
+    if (driverEmail) return driverEmail;
+    if (this.config.autopayCustomerEmail) return this.config.autopayCustomerEmail;
+    return this.gateway.name === 'fake' ? 'autopay@voltneo.test' : null;
   }
 
   private chargeView(c: AutopayCharge) {
@@ -104,17 +108,25 @@ export class AutopayService {
       this.unavailable() ??
       (!AUTOPAY_STATES.includes(a.state)
         ? 'AutoPay is available only while instalments are being paid'
-        : a.instalment > UPI_AUTOPAY_LIMIT_PAISE
-          ? `UPI AutoPay works for instalments up to ${formatRupees(UPI_AUTOPAY_LIMIT_PAISE)}`
-          : null);
+        : null);
+    const upiWhy =
+      a.instalment > UPI_AUTOPAY_LIMIT_PAISE
+        ? `UPI AutoPay works for instalments up to ${formatRupees(UPI_AUTOPAY_LIMIT_PAISE)}; use e-NACH`
+        : null;
     return {
       available: why === null,
       unavailableReason: why,
+      /** Which ways of AutoPay this agreement can use: UPI (up to ₹15,000) and e-NACH. */
+      methods: {
+        UPI: { available: why === null && upiWhy === null, reason: why ?? upiWhy },
+        ENACH: { available: why === null, reason: why },
+      },
       /** The pretend gateway: head office can simulate approval and charges. */
       canSimulate: this.gateway.name === 'fake',
       mandate: m
         ? {
             id: m.id,
+            method: m.method,
             status: m.status,
             gatewayStatus: m.gatewayStatus,
             maxAmount: m.maxAmount,
@@ -146,7 +158,12 @@ export class AutopayService {
    * Starts a mandate for the agreement and returns the approval page. A mandate
    * still waiting for approval is replaced, so the driver always gets a fresh page.
    */
-  async start(agreementId: string, actor: Actor, meta: RequestMeta) {
+  async start(
+    agreementId: string,
+    actor: Actor,
+    meta: RequestMeta,
+    method: 'UPI' | 'ENACH' = 'UPI',
+  ) {
     const why = this.unavailable();
     if (why) throw new ServiceUnavailableException(why);
     const a = await this.prisma.agreement.findUnique({
@@ -160,9 +177,15 @@ export class AutopayService {
     if (!AUTOPAY_STATES.includes(a.state)) {
       throw new ConflictException('AutoPay is available only while instalments are being paid');
     }
-    if (a.instalment > UPI_AUTOPAY_LIMIT_PAISE) {
+    if (method === 'UPI' && a.instalment > UPI_AUTOPAY_LIMIT_PAISE) {
       throw new UnprocessableEntityException(
-        `UPI AutoPay works for instalments up to ${formatRupees(UPI_AUTOPAY_LIMIT_PAISE)}`,
+        `UPI AutoPay works for instalments up to ${formatRupees(UPI_AUTOPAY_LIMIT_PAISE)}; use e-NACH`,
+      );
+    }
+    const email = this.mandateEmail(a.driver.email);
+    if (!email) {
+      throw new ServiceUnavailableException(
+        "AutoPay needs an email address: add the driver's email, or set AUTOPAY_CUSTOMER_EMAIL",
       );
     }
     const live = await this.prisma.autopayMandate.findFirst({
@@ -196,9 +219,10 @@ export class AutopayService {
       customer: {
         phone: a.driver.phone,
         name: a.driver.name,
-        email: this.config.autopayCustomerEmail ?? 'autopay@voltneo.test',
+        email,
       },
       maxAmountPaise: a.instalment,
+      method,
       agreementNumber: a.number,
       expiresAt,
       returnUrl: `${this.base()}/autopay/${shortCode}/done`,
@@ -214,6 +238,7 @@ export class AutopayService {
           sessionId: created.sessionId,
           shortCode,
           maxAmount: a.instalment,
+          method,
           gatewayStatus: 'INITIALIZED',
         },
       });
@@ -224,7 +249,7 @@ export class AutopayService {
           action: 'autopay.start',
           tableName: 'autopay_mandates',
           recordId: row.id,
-          after: { agreementId: a.id, subscriptionId, maxAmount: a.instalment },
+          after: { agreementId: a.id, subscriptionId, maxAmount: a.instalment, method },
           ip: meta.ip,
           requestId: meta.requestId,
         },

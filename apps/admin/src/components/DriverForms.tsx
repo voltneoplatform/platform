@@ -14,6 +14,7 @@ export interface DriverDraft {
   name: string;
   phone: string;
   altPhone: string;
+  email: string;
   language: string;
   dateOfBirth: string;
   relativeRelation: string;
@@ -33,6 +34,7 @@ export function driverDraft(d?: DriverDetail): DriverDraft {
     name: d?.name ?? '',
     phone: d?.phone.replace(/^\+91/, '') ?? '',
     altPhone: d?.altPhone?.replace(/^\+91/, '') ?? '',
+    email: d?.email ?? '',
     language: d?.language ?? 'BN',
     dateOfBirth: d?.dateOfBirth ?? '',
     relativeRelation: d?.relative?.relation ?? '',
@@ -54,6 +56,7 @@ export function driverPayload(d: DriverDraft) {
     name: d.name,
     phone: d.phone,
     altPhone: n(d.altPhone),
+    email: n(d.email),
     language: d.language,
     dateOfBirth: n(d.dateOfBirth),
     relativeRelation: n(d.relativeRelation),
@@ -101,6 +104,11 @@ export function DriverFields({
           placeholder: '98300 12345',
         })}
         {f('altPhone', 'Other number (optional)', { inputMode: 'tel' })}
+        {f('email', 'Email (optional: AutoPay and emailed receipts)', {
+          type: 'email',
+          inputMode: 'email',
+          autoComplete: 'off',
+        })}
         <div className="field">
           <label htmlFor="d-language">Language</label>
           <select
