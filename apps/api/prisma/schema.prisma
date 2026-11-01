@@ -353,6 +353,8 @@ model Battery {
   custody      BatteryCustody[]
   agreements    Agreement[]
   installations Installation[]
+  changedFrom   AgreementBatteryChange[] @relation("BatteryChangeFrom")
+  changedTo     AgreementBatteryChange[] @relation("BatteryChangeTo")
 
   @@index([batteryTypeId])
   @@index([status])
@@ -560,7 +562,7 @@ model Driver {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  plan         Plan?          @relation(fields: [planId], references: [id])
+  plan         Plan?          @relation(fields: [planId], references: [id], onDelete: Restrict)
   decisions    DriverApprovalDecision[]
   kycDocuments KycDocument[]
   vehicles     Vehicle[]
@@ -597,7 +599,7 @@ model DriverApprovalDecision {
   decidedAt   DateTime       @default(now()) @map("decided_at") @db.Timestamptz(3)
 
   driver Driver @relation(fields: [driverId], references: [id])
-  plan   Plan?  @relation(fields: [planId], references: [id])
+  plan   Plan?  @relation(fields: [planId], references: [id], onDelete: Restrict)
 
   @@index([driverId, decidedAt])
   @@map("driver_approval_decisions")
@@ -1482,8 +1484,10 @@ model AgreementBatteryChange {
   changedById   String   @map("changed_by_id") @db.Uuid
   changedAt     DateTime @default(now()) @map("changed_at") @db.Timestamptz(3)
 
-  agreement Agreement            @relation(fields: [agreementId], references: [id])
-  resigning AgreementResigning?
+  agreement   Agreement           @relation(fields: [agreementId], references: [id])
+  fromBattery Battery             @relation("BatteryChangeFrom", fields: [fromBatteryId], references: [id])
+  toBattery   Battery             @relation("BatteryChangeTo", fields: [toBatteryId], references: [id])
+  resigning   AgreementResigning?
 
   @@index([agreementId, changedAt])
   @@map("agreement_battery_changes")

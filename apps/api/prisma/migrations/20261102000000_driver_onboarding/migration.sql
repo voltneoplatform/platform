@@ -73,7 +73,7 @@ CREATE TABLE "driver_approval_decisions" (
         OR ("decision" = 'REJECTED' AND "reason" IS NOT NULL AND length(trim("reason")) > 0)
     )
 );
-CREATE INDEX "driver_approval_decisions_driver_id_idx" ON "driver_approval_decisions"("driver_id", "decided_at");
+CREATE INDEX "driver_approval_decisions_driver_id_decided_at_idx" ON "driver_approval_decisions"("driver_id", "decided_at");
 ALTER TABLE "driver_approval_decisions" ADD CONSTRAINT "driver_approval_decisions_driver_id_fkey"
     FOREIGN KEY ("driver_id") REFERENCES "drivers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "driver_approval_decisions" ADD CONSTRAINT "driver_approval_decisions_plan_id_fkey"
@@ -102,7 +102,7 @@ CREATE TABLE "agreement_battery_changes" (
     CONSTRAINT "agreement_battery_changes_reason" CHECK (length(trim("reason")) > 0),
     CONSTRAINT "agreement_battery_changes_different" CHECK ("from_battery_id" <> "to_battery_id")
 );
-CREATE INDEX "agreement_battery_changes_agreement_id_idx" ON "agreement_battery_changes"("agreement_id", "changed_at");
+CREATE INDEX "agreement_battery_changes_agreement_id_changed_at_idx" ON "agreement_battery_changes"("agreement_id", "changed_at");
 ALTER TABLE "agreement_battery_changes" ADD CONSTRAINT "agreement_battery_changes_agreement_id_fkey"
     FOREIGN KEY ("agreement_id") REFERENCES "agreements"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "agreement_battery_changes" ADD CONSTRAINT "agreement_battery_changes_from_battery_id_fkey"
@@ -128,7 +128,7 @@ CREATE TABLE "agreement_resignings" (
     CONSTRAINT "agreement_resignings_pkey" PRIMARY KEY ("id")
 );
 CREATE UNIQUE INDEX "agreement_resignings_battery_change_id_key" ON "agreement_resignings"("battery_change_id");
-CREATE INDEX "agreement_resignings_agreement_id_idx" ON "agreement_resignings"("agreement_id", "recorded_at");
+CREATE INDEX "agreement_resignings_agreement_id_recorded_at_idx" ON "agreement_resignings"("agreement_id", "recorded_at");
 ALTER TABLE "agreement_resignings" ADD CONSTRAINT "agreement_resignings_agreement_id_fkey"
     FOREIGN KEY ("agreement_id") REFERENCES "agreements"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "agreement_resignings" ADD CONSTRAINT "agreement_resignings_battery_change_id_fkey"
