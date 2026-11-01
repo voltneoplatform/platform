@@ -318,7 +318,7 @@ function TransferForm({
           {o.battery?.gpsDeviceId && (
             <>
               {' '}
-              (GPS <span className="mono">{o.battery.gpsDeviceId}</span>)
+              (IMEI <span className="mono">{o.battery.gpsDeviceId}</span>)
             </>
           )}{' '}
           is switched off in the supplier portal

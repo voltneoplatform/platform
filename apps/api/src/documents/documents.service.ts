@@ -548,6 +548,7 @@ export class DocumentsService {
     ]);
     pdf.doc.moveDown(0.8);
     pdf.note(t.receiptValidity);
+    pdf.note(t.receiptComputerGenerated);
     return pdf.finish((page, of) => ({
       left: `Volt Neo · ${data.receiptNumber}`,
       right: t.page(page, of),

@@ -59,6 +59,18 @@ export function canMoveBattery(from: BatteryStatus, to: BatteryStatus): boolean 
   return MANUAL_BATTERY_MOVES[from].includes(to);
 }
 
+/**
+ * The GPS device is identified by its IMEI: exactly 15 digits (founder,
+ * 1 Nov 2026). Spaces and dashes typed in are ignored.
+ */
+export const IMEI_PATTERN = /^\d{15}$/;
+export function normaliseImei(raw: string): string {
+  return raw.replace(/[\s-]+/g, '');
+}
+export function isImei(raw: string): boolean {
+  return IMEI_PATTERN.test(normaliseImei(raw));
+}
+
 /** Serial numbers and GPS IDs are compared without spaces and in capitals. */
 export function normaliseSerial(raw: string): string {
   return raw.replace(/\s+/g, '').toUpperCase();

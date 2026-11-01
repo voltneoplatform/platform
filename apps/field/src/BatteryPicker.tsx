@@ -39,7 +39,7 @@ export function BatteryPicker({
         <Body style={{ fontWeight: '700' }}>
           {t('battery')}: {value.serial}
         </Body>
-        <Muted>GPS {value.gpsDeviceId}</Muted>
+        <Muted>IMEI {value.gpsDeviceId}</Muted>
         <Button title={t('changeBattery')} variant="secondary" onPress={() => onChange(null)} />
       </View>
     );
@@ -65,7 +65,7 @@ export function BatteryPicker({
         >
           <Body style={{ fontWeight: '700' }}>{b.serial}</Body>
           <Muted>
-            GPS {b.gpsDeviceId}
+            IMEI {b.gpsDeviceId}
             {b.location ? ` · ${b.location}` : ''}
           </Muted>
         </Pressable>

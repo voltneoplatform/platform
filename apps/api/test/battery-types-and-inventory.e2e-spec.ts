@@ -157,7 +157,7 @@ describe('Battery types (module 2) and inventory (module 3)', () => {
         .set(bearer(ops.token))
         .send({
           serial: 'neo51 000123',
-          gpsDeviceId: 'gps-77',
+          gpsDeviceId: '3569 3803-5643 809',
           batteryTypeId: t.id,
           purchaseDate: '2026-10-20',
           location: 'Head office store',
@@ -165,7 +165,7 @@ describe('Battery types (module 2) and inventory (module 3)', () => {
         .expect(201);
       expect(res.body).toMatchObject({
         serial: 'NEO51000123',
-        gpsDeviceId: 'GPS-77',
+        gpsDeviceId: '356938035643809',
         status: 'IN_STOCK',
         holder: 'STOCK',
       });
@@ -175,13 +175,13 @@ describe('Battery types (module 2) and inventory (module 3)', () => {
       expect(res.body.custody[0]).toMatchObject({ event: 'REGISTERED', toStatus: 'IN_STOCK' });
     });
 
-    it('refuses a repeated serial or GPS ID, and archived battery types', async () => {
+    it('refuses a repeated serial or IMEI, a malformed IMEI, and archived battery types', async () => {
       const t = await makeBatteryType(ctx, plan);
       const base = { batteryTypeId: t.id, purchaseDate: '2026-10-20' };
       await ctx.http
         .post('/v1/batteries')
         .set(bearer(ops.token))
-        .send({ ...base, serial: 'A-001', gpsDeviceId: 'G-01' })
+        .send({ ...base, serial: 'A-001', gpsDeviceId: '356938035643801' })
         .expect(201);
       const s = await ctx.http
         .post('/v1/batteries')
@@ -192,9 +192,17 @@ describe('Battery types (module 2) and inventory (module 3)', () => {
       const g = await ctx.http
         .post('/v1/batteries')
         .set(bearer(ops.token))
-        .send({ ...base, serial: 'A-002', gpsDeviceId: 'g-01' })
+        .send({ ...base, serial: 'A-002', gpsDeviceId: '356938035643801' })
         .expect(409);
-      expect(g.body.message).toMatch(/GPS/);
+      expect(g.body.message).toMatch(/IMEI/);
+      for (const bad of ['GPS-77', '35693803564380', '3569380356438012']) {
+        const res = await ctx.http
+          .post('/v1/batteries')
+          .set(bearer(ops.token))
+          .send({ ...base, serial: 'A-004', gpsDeviceId: bad })
+          .expect(400);
+        expect(JSON.stringify(res.body)).toMatch(/15 digits/);
+      }
       await ctx.http
         .patch(`/v1/battery-types/${t.id}`)
         .set(bearer(plan))
@@ -222,10 +230,10 @@ describe('Battery types (module 2) and inventory (module 3)', () => {
           purchaseDate: '2026-10-21',
           supplierRef: 'INV-77',
           items: [
-            { serial: 'B-101', gpsDeviceId: 'G-1' },
+            { serial: 'B-101', gpsDeviceId: '356938035643801' },
             { serial: 'B-100' },
             { serial: 'B-101' },
-            { serial: 'B-103', gpsDeviceId: 'G-1' },
+            { serial: 'B-103', gpsDeviceId: '356938035643801' },
           ],
         })
         .expect(422);
@@ -240,7 +248,7 @@ describe('Battery types (module 2) and inventory (module 3)', () => {
           purchaseDate: '2026-10-21',
           items: Array.from({ length: 25 }, (_, i) => ({
             serial: `C-${i}`,
-            gpsDeviceId: `GC-${i}`,
+            gpsDeviceId: String(356938035643800 + i),
           })),
         })
         .expect(201);
@@ -252,7 +260,7 @@ describe('Battery types (module 2) and inventory (module 3)', () => {
       expect(list.body.total).toBe(26);
       expect(list.body.items).toHaveLength(10);
       const search = await ctx.http
-        .get('/v1/batteries?search=gc-7')
+        .get('/v1/batteries?search=643807')
         .set(bearer(ops.token))
         .expect(200);
       expect(search.body.items.map((b: { serial: string }) => b.serial)).toEqual(['C-7']);

@@ -282,7 +282,7 @@ export default function AgreementPage() {
                 <span className="muted">Assigned at installation</span>
               )}
               {a.battery?.gpsDeviceId && (
-                <span className="muted mono"> · GPS {a.battery.gpsDeviceId}</span>
+                <span className="muted mono"> · IMEI {a.battery.gpsDeviceId}</span>
               )}
             </dd>
             <dt>Down payment</dt>
@@ -961,7 +961,7 @@ function InstallForm({
     >
       <p className="muted">
         The technician&apos;s record for Schedule 3. The battery must be in stock, of type{' '}
-        {a.batteryType.name}, with its GPS device recorded.
+        {a.batteryType.name}, with its IMEI recorded.
       </p>
       <ErrorBox error={batteries.error} />
       <div className="form-grid">
@@ -976,7 +976,7 @@ function InstallForm({
             <option value="">{usable.length ? 'Choose a battery' : 'None in stock'}</option>
             {usable.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.serial} · GPS {b.gpsDeviceId}
+                {b.serial} · IMEI {b.gpsDeviceId}
                 {b.location ? ` · ${b.location}` : ''}
               </option>
             ))}

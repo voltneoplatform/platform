@@ -181,7 +181,7 @@ export default function InventoryPage() {
         <div>
           <h1>Battery inventory</h1>
           <p className="muted">
-            Every battery by serial number and GPS device ID, with where it is and who holds it.
+            Every battery by serial number and IMEI, with where it is and who holds it.
           </p>
         </div>
         {can('batteries.manage') && (
@@ -254,7 +254,7 @@ export default function InventoryPage() {
           <thead>
             <tr>
               <th>Serial</th>
-              <th>GPS device</th>
+              <th>IMEI</th>
               <th>Type</th>
               <th>Status</th>
               <th>Where</th>
@@ -314,14 +314,19 @@ export default function InventoryPage() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="b-gps">GPS device ID</label>
+                <label htmlFor="b-gps">IMEI</label>
                 <input
                   id="b-gps"
                   className="mono"
+                  inputMode="numeric"
+                  maxLength={20}
                   value={gps}
                   onChange={(e) => setGps(e.target.value)}
                 />
-                <div className="hint">Leave blank if the GPS module is not fitted yet.</div>
+                <div className="hint">
+                  The GPS device&apos;s 15-digit IMEI. Leave blank if the GPS device is not fitted
+                  yet.
+                </div>
               </div>
             </div>
           ) : (
@@ -333,10 +338,10 @@ export default function InventoryPage() {
                 rows={8}
                 value={lines}
                 onChange={(e) => setLines(e.target.value)}
-                placeholder={'NEO51-000101, GPS-8800101\nNEO51-000102, GPS-8800102'}
+                placeholder={'NEO51-000101, 356938035643809\nNEO51-000102, 356938035643817'}
               />
               <div className="hint">
-                Add the GPS device ID after a comma or tab (you can paste two columns from a
+                Add the 15-digit IMEI after a comma or tab (you can paste two columns from a
                 spreadsheet). {parsed.length} batteries. If any line has a problem, nothing is saved
                 and every problem is listed.
               </div>
