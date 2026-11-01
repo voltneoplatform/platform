@@ -225,6 +225,10 @@ export const en = {
   serialChecked: 'I checked the serial number on the battery: {serial}',
   resignNeeded:
     'The battery was changed after signing. Head office must record the corrected agreement before installation.',
+  closeTicket: 'Close ticket',
+  closeSent: 'Sent to head office. The ticket closes once they approve it.',
+  closeWaiting: 'You closed this ticket. Waiting for head office to approve.',
+  closeSentBack: 'Head office sent the close back: {reason}',
 } as const;
 
 export type MessageKey = keyof typeof en;

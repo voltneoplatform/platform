@@ -667,7 +667,7 @@ export interface TicketList {
   total: number;
   page: number;
   limit: number;
-  counts: { open: number; assigned: number; missed: number };
+  counts: { open: number; assigned: number; missed: number; closeRequested: number };
   items: TicketRow[];
 }
 
@@ -706,8 +706,20 @@ export interface TicketDetail extends Omit<TicketRow, 'agreement'> {
     visit: boolean;
     replace: boolean;
     resolve: boolean;
+    /** Founder, 1 Nov 2026: field closes wait for head office; head office closes directly. */
+    resolveNeedsApproval: boolean;
+    decideClose: boolean;
     cancel: boolean;
   };
+  closeRequest: {
+    id: string;
+    outcome: TicketOutcome;
+    resolution: string;
+    requestedByName: string | null;
+    requestedAt: string;
+  } | null;
+  closeRejected: { reason: string; decidedByName: string | null; decidedAt: string } | null;
+  closeApprovedByName: string | null;
 }
 
 export interface ServiceHistoryRow {

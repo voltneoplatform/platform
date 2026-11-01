@@ -90,6 +90,11 @@ export const PERMISSIONS = [
   'tickets.manage',
   /** Record a technician's visit and how the fault was resolved. */
   'tickets.resolve',
+  /**
+   * Close a ticket directly, and approve or send back a close by a field agent
+   * or technician (founder, 1 Nov 2026).
+   */
+  'tickets.close',
   'messages.send',
   // Ownership transfer (rule 14): GPS switch-off and certificate
   'transfers.record',
@@ -129,6 +134,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agreements.manage',
     'installations.record',
     'installations.verify',
+    'tickets.close',
     'approvals.request',
     'approvals.decide',
   ],
@@ -149,6 +155,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'recovery.record',
     'tickets.manage',
     'tickets.resolve',
+    'tickets.close',
     'transfers.record',
     'messages.send',
     'approvals.request',
@@ -187,6 +194,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'payments.collect_cash',
     'batteries.read',
     'installations.record',
+    // Founder, 1 Nov 2026: field agents work tickets too; closing needs head office approval.
+    'tickets.read',
+    'tickets.resolve',
   ],
 
   // Cannot collect payments (spec section 2).

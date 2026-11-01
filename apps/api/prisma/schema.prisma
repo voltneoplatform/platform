@@ -1303,6 +1303,8 @@ enum TicketStatus {
   ASSIGNED
   RESOLVED
   CANCELLED
+  /// A field agent or technician closed it; head office approves (founder, 1 Nov 2026)
+  CLOSE_REQUESTED
 }
 
 enum TicketOutcome {
@@ -1339,9 +1341,10 @@ model ServiceTicket {
   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  agreement    Agreement            @relation(fields: [agreementId], references: [id])
-  visits       TicketVisit[]
-  replacements BatteryReplacement[]
+  agreement     Agreement            @relation(fields: [agreementId], references: [id])
+  visits        TicketVisit[]
+  replacements  BatteryReplacement[]
+  closeRequests TicketCloseRequest[]
 
   @@index([agreementId])
   @@index([status, dueBy])
@@ -1510,4 +1513,41 @@ model AgreementResigning {
 
   @@index([agreementId, recordedAt])
   @@map("agreement_resignings")
+}
+
+/// ticket_close_requests: a field agent or technician closing a ticket (append-only).
+model TicketCloseRequest {
+  id            String        @id @default(uuid()) @db.Uuid
+  ticketId      String        @map("ticket_id") @db.Uuid
+  outcome       TicketOutcome
+  resolution    String
+  requestedById String        @map("requested_by_id") @db.Uuid
+  requestedAt   DateTime      @default(now()) @map("requested_at") @db.Timestamptz(3)
+
+  ticket   ServiceTicket        @relation(fields: [ticketId], references: [id])
+  decision TicketCloseDecision?
+
+  @@index([ticketId, requestedAt])
+  @@map("ticket_close_requests")
+}
+
+enum TicketCloseDecisionKind {
+  APPROVED
+  REJECTED
+
+  @@map("TicketCloseDecision")
+}
+
+/// ticket_close_decisions: head office approving or sending back a close request (append-only).
+model TicketCloseDecision {
+  id          String                  @id @default(uuid()) @db.Uuid
+  requestId   String                  @unique @map("request_id") @db.Uuid
+  decision    TicketCloseDecisionKind
+  reason      String?
+  decidedById String                  @map("decided_by_id") @db.Uuid
+  decidedAt   DateTime                @default(now()) @map("decided_at") @db.Timestamptz(3)
+
+  request TicketCloseRequest @relation(fields: [requestId], references: [id])
+
+  @@map("ticket_close_decisions")
 }

@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import {
   CurrentStaff,
   ReqMeta,
+  RequireAnyPermission,
   RequirePermissions,
   type AuthenticatedStaff,
   type RequestMeta,
@@ -25,6 +26,7 @@ import type { UploadedFile as File } from '../drivers/drivers.service';
 import {
   AssignTicketDto,
   CancelTicketDto,
+  RejectCloseDto,
   CreateTicketDto,
   ListTicketsQuery,
   ReplaceBatteryDto,
@@ -108,7 +110,7 @@ export class TicketsController {
 
   @Post('tickets/:id/resolve')
   @HttpCode(200)
-  @RequirePermissions('tickets.resolve')
+  @RequireAnyPermission('tickets.resolve', 'tickets.close')
   resolve(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ResolveTicketDto,
@@ -116,6 +118,29 @@ export class TicketsController {
     @ReqMeta() meta: RequestMeta,
   ) {
     return this.tickets.resolve(id, dto, staff, meta);
+  }
+
+  @Post('tickets/:id/close/approve')
+  @HttpCode(200)
+  @RequirePermissions('tickets.close')
+  approveClose(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.tickets.approveClose(id, staff, meta);
+  }
+
+  @Post('tickets/:id/close/reject')
+  @HttpCode(200)
+  @RequirePermissions('tickets.close')
+  rejectClose(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectCloseDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.tickets.rejectClose(id, dto.reason, staff, meta);
   }
 
   @Post('tickets/:id/cancel')

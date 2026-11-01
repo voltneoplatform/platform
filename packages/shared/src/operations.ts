@@ -43,7 +43,13 @@ export const TICKET_CHANNEL_LABELS: Record<TicketChannel, string> = {
   APP: 'Driver App',
 };
 
-export const TICKET_STATUSES = ['OPEN', 'ASSIGNED', 'RESOLVED', 'CANCELLED'] as const;
+export const TICKET_STATUSES = [
+  'OPEN',
+  'ASSIGNED',
+  'RESOLVED',
+  'CANCELLED',
+  'CLOSE_REQUESTED',
+] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
@@ -51,7 +57,15 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   ASSIGNED: 'Technician assigned',
   RESOLVED: 'Resolved',
   CANCELLED: 'Cancelled',
+  CLOSE_REQUESTED: 'Closed, waiting for approval',
 };
+
+/** Tickets still being worked on (a requested close is not final until approved). */
+export const ACTIVE_TICKET_STATUSES: readonly TicketStatus[] = [
+  'OPEN',
+  'ASSIGNED',
+  'CLOSE_REQUESTED',
+];
 
 /**
  * What the technician found. NOT_COVERED: the fault came from misuse, an

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ROLE_LABELS, type Permission } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
-import type { ApprovalRow, DriverListRow, Paged } from '@/lib/types';
+import type { ApprovalRow, DriverListRow, Paged, TicketList } from '@/lib/types';
 import { formatDate, useLoad } from '@/components/ui';
 import { Dashboard } from '@/components/Dashboard';
 
@@ -93,6 +93,13 @@ export default function HomePage() {
         : Promise.resolve(null),
     [api],
   );
+  const closes = useLoad(
+    () =>
+      can('tickets.close')
+        ? api.get<TicketList>('/v1/tickets?status=CLOSE_REQUESTED&limit=50')
+        : Promise.resolve(null),
+    [api],
+  );
   if (!staff) return null;
   const waitingForMe = approvals.data?.filter((a) => a.canDecide).length ?? 0;
   return (
@@ -143,6 +150,24 @@ export default function HomePage() {
                 <span className="muted" style={{ fontSize: 13 }}>
                   <span className="mono">{d.phone}</span>
                   {d.plan ? ` · ${d.plan.names.en}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(closes.data?.items.length ?? 0) > 0 && (
+        <div className="card">
+          <h2>Service tickets to approve closing ({closes.data!.total})</h2>
+          <ul className="timeline">
+            {closes.data!.items.map((k) => (
+              <li key={k.id}>
+                <Link href={`/tickets/${k.id}`}>
+                  {k.number} · {k.driver.name}
+                </Link>{' '}
+                <span className="muted" style={{ fontSize: 13 }}>
+                  {k.technicianName ?? '—'}
                 </span>
               </li>
             ))}

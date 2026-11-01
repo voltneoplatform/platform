@@ -39,6 +39,7 @@ const STATUS_TONE: Record<TicketStatus, string> = {
   ASSIGNED: 'info',
   RESOLVED: 'active',
   CANCELLED: '',
+  CLOSE_REQUESTED: 'warn',
 };
 
 export function TicketStatusBadge({ status }: { status: TicketStatus }) {

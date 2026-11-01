@@ -15,6 +15,7 @@ import {
   ticketNumber,
   ticketTiming,
   type AgreementState,
+  type TicketOutcome,
   type TicketTiming,
 } from '@voltneo/shared';
 import type { Prisma, ServiceTicket } from '../generated/prisma/client';
@@ -47,7 +48,8 @@ import type {
 
 const MINUTE = 60_000;
 const MAX_PHOTOS = 6;
-const ACTIVE = ['OPEN', 'ASSIGNED'] as const;
+/** A close requested from the field is not final until head office approves (founder, 1 Nov 2026). */
+const ACTIVE = ['OPEN', 'ASSIGNED', 'CLOSE_REQUESTED'] as const;
 
 const ticketInclude = {
   agreement: {
@@ -62,6 +64,7 @@ const ticketInclude = {
   },
   visits: { orderBy: { visitedAt: 'asc' }, include: { photos: true } },
   replacements: { orderBy: { replacedAt: 'asc' } },
+  closeRequests: { orderBy: { requestedAt: 'desc' }, include: { decision: true } },
 } satisfies Prisma.ServiceTicketInclude;
 
 type TicketFull = Prisma.ServiceTicketGetPayload<{ include: typeof ticketInclude }>;
@@ -194,7 +197,7 @@ export class TicketsService {
       ],
     };
     const activeWhere: Prisma.ServiceTicketWhereInput = { status: { in: [...ACTIVE] } };
-    const [total, rows, open, assigned, missed] = await Promise.all([
+    const [total, rows, open, assigned, missed, closeRequested] = await Promise.all([
       this.prisma.serviceTicket.count({ where }),
       this.prisma.serviceTicket.findMany({
         where,
@@ -217,6 +220,7 @@ export class TicketsService {
       this.prisma.serviceTicket.count({
         where: { ...activeWhere, respondedAt: null, dueBy: { lt: now } },
       }),
+      this.prisma.serviceTicket.count({ where: { status: 'CLOSE_REQUESTED' } }),
     ]);
     const [names, serials] = await Promise.all([
       this.names(rows.map((r) => r.technicianId)),
@@ -226,7 +230,7 @@ export class TicketsService {
       total,
       page,
       limit,
-      counts: { open, assigned, missed },
+      counts: { open, assigned, missed, closeRequested },
       items: rows.map((r) => this.summary(r, names, serials)),
     };
   }
@@ -246,6 +250,7 @@ export class TicketsService {
         t.createdById,
         ...t.visits.flatMap((v) => [v.technicianId, v.recordedById]),
         ...t.replacements.flatMap((r) => [r.technicianId, r.recordedById]),
+        ...t.closeRequests.flatMap((c) => [c.requestedById, c.decision?.decidedById]),
       ]),
       this.serials([
         t.batteryId,
@@ -254,6 +259,12 @@ export class TicketsService {
       ]),
     ]);
     const isActive = t.status === 'OPEN' || t.status === 'ASSIGNED';
+    const pending = t.closeRequests.find((c) => !c.decision) ?? null;
+    const decided = t.closeRequests
+      .filter((c) => c.decision)
+      .sort((x, y) => y.decision!.decidedAt.getTime() - x.decision!.decidedAt.getTime());
+    const latest = decided[0] ?? null;
+    const approval = latest?.decision?.decision === 'APPROVED' ? latest : null;
     const serviceable = SERVICEABLE_STATES.includes(t.agreement.state as AgreementState);
     const can = (p: Parameters<typeof hasPermission>[1]) =>
       viewer ? hasPermission(viewer.role, p) : false;
@@ -271,6 +282,26 @@ export class TicketsService {
       cancelReason: t.cancelReason,
       resolution: t.resolution,
       resolvedByName: t.resolvedById ? (names.get(t.resolvedById) ?? null) : null,
+      /** Head office approved the close from the field (founder, 1 Nov 2026). */
+      closeApprovedByName: approval ? (names.get(approval.decision!.decidedById) ?? null) : null,
+      closeRequest: pending
+        ? {
+            id: pending.id,
+            outcome: pending.outcome,
+            resolution: pending.resolution,
+            requestedByName: names.get(pending.requestedById) ?? null,
+            requestedAt: pending.requestedAt,
+          }
+        : null,
+      /** The last close sent back by head office, while the ticket is being worked again. */
+      closeRejected:
+        latest?.decision?.decision === 'REJECTED' && t.status === 'ASSIGNED'
+          ? {
+              reason: latest.decision.reason,
+              decidedByName: names.get(latest.decision.decidedById) ?? null,
+              decidedAt: latest.decision.decidedAt,
+            }
+          : null,
       createdAt: t.createdAt,
       createdByName: t.createdById ? (names.get(t.createdById) ?? null) : null,
       visits: t.visits.map((v) => ({
@@ -303,7 +334,13 @@ export class TicketsService {
           serviceable &&
           t.agreement.batteryId === t.batteryId &&
           t.replacements.length === 0,
-        resolve: t.status === 'ASSIGNED' && !!t.respondedAt && can('tickets.resolve'),
+        resolve:
+          t.status === 'ASSIGNED' &&
+          !!t.respondedAt &&
+          (can('tickets.resolve') || can('tickets.close')),
+        /** Closing goes to head office for approval unless you may close directly. */
+        resolveNeedsApproval: !can('tickets.close'),
+        decideClose: t.status === 'CLOSE_REQUESTED' && can('tickets.close'),
         cancel: isActive && can('tickets.manage'),
       },
     };
@@ -753,14 +790,22 @@ export class TicketsService {
   // Resolve or cancel
   // ---------------------------------------------------------------------------
 
+  /**
+   * Closes a ticket. Head office (tickets.close) closes it at once; a field
+   * agent's or technician's close waits for head office approval (founder,
+   * 1 Nov 2026).
+   */
   async resolve(id: string, dto: ResolveTicketDto, actor: AuthenticatedStaff, meta: RequestMeta) {
+    const direct = hasPermission(actor.role, 'tickets.close');
     const messageId = await serializable(this.prisma, async (tx) => {
       const t = await this.load(id, tx);
       if (t.status !== 'ASSIGNED') {
         throw new ConflictException(
           t.status === 'OPEN'
             ? 'Assign a technician and record the visit first'
-            : 'This ticket is already finished',
+            : t.status === 'CLOSE_REQUESTED'
+              ? 'This ticket is already waiting for head office to approve the close'
+              : 'This ticket is already finished',
         );
       }
       this.checkOwnTicket(t, actor);
@@ -776,38 +821,128 @@ export class TicketsService {
           'The battery was replaced on this ticket: choose "Battery replaced"',
         );
       }
-      const now = this.clock.now();
-      const after = await tx.serviceTicket.update({
-        where: { id },
-        data: {
-          status: 'RESOLVED',
-          outcome: dto.outcome,
-          resolution: dto.resolution,
-          resolvedAt: now,
-          resolvedById: actor.id,
-        },
+      if (!direct) {
+        const request = await tx.ticketCloseRequest.create({
+          data: {
+            ticketId: id,
+            outcome: dto.outcome,
+            resolution: dto.resolution,
+            requestedById: actor.id,
+            requestedAt: this.clock.now(),
+          },
+        });
+        await tx.serviceTicket.update({ where: { id }, data: { status: 'CLOSE_REQUESTED' } });
+        await this.record(
+          tx,
+          { id: actor.id, ip: meta.ip, requestId: meta.requestId },
+          'ticket.close_requested',
+          id,
+          { status: t.status },
+          { status: 'CLOSE_REQUESTED', requestId: request.id, outcome: dto.outcome },
+        );
+        return null;
+      }
+      return this.close(tx, t, dto, actor.id, {
+        id: actor.id,
+        ip: meta.ip,
+        requestId: meta.requestId,
       });
+    });
+    if (messageId) await this.messaging.deliver([messageId]);
+    return this.get(id, actor);
+  }
+
+  /** Marks the ticket resolved and queues the driver's SMS. */
+  private async close(
+    tx: Tx,
+    t: TicketFull,
+    dto: { outcome: TicketOutcome; resolution: string },
+    resolvedById: string,
+    actor: Actor,
+    approvedRequestId?: string,
+  ) {
+    const now = this.clock.now();
+    const after = await tx.serviceTicket.update({
+      where: { id: t.id },
+      data: {
+        status: 'RESOLVED',
+        outcome: dto.outcome,
+        resolution: dto.resolution,
+        resolvedAt: now,
+        resolvedById,
+      },
+    });
+    await this.record(
+      tx,
+      actor,
+      approvedRequestId ? 'ticket.close_approved' : 'ticket.resolve',
+      t.id,
+      { status: t.status },
+      {
+        status: after.status,
+        outcome: after.outcome,
+        resolution: after.resolution,
+        requestId: approvedRequestId,
+      },
+    );
+    const d = t.agreement.driver;
+    const lang = d.language as DriverLanguage;
+    return this.messaging.queue(tx, {
+      driverId: d.id,
+      toPhone: d.phone,
+      channel: 'SMS',
+      template: 'ticket_resolved',
+      language: lang,
+      body: TEXTS[lang].ticketResolvedSms({ ticket: t.number }),
+      agreementId: t.agreementId,
+    });
+  }
+
+  /** Head office approves a close from the field: the ticket is resolved and the driver told. */
+  async approveClose(id: string, actor: AuthenticatedStaff, meta: RequestMeta) {
+    const messageId = await serializable(this.prisma, async (tx) => {
+      const t = await this.load(id, tx);
+      const request = t.closeRequests.find((c) => !c.decision);
+      if (t.status !== 'CLOSE_REQUESTED' || !request) {
+        throw new ConflictException('This ticket is not waiting for a close approval');
+      }
+      await tx.ticketCloseDecision.create({
+        data: { requestId: request.id, decision: 'APPROVED', decidedById: actor.id },
+      });
+      return this.close(
+        tx,
+        t,
+        { outcome: request.outcome, resolution: request.resolution },
+        request.requestedById,
+        { id: actor.id, ip: meta.ip, requestId: meta.requestId },
+        request.id,
+      );
+    });
+    await this.messaging.deliver([messageId]);
+    return this.get(id, actor);
+  }
+
+  /** Head office sends a close back: the ticket is worked again, with the reason shown. */
+  async rejectClose(id: string, reason: string, actor: AuthenticatedStaff, meta: RequestMeta) {
+    await serializable(this.prisma, async (tx) => {
+      const t = await this.load(id, tx);
+      const request = t.closeRequests.find((c) => !c.decision);
+      if (t.status !== 'CLOSE_REQUESTED' || !request) {
+        throw new ConflictException('This ticket is not waiting for a close approval');
+      }
+      await tx.ticketCloseDecision.create({
+        data: { requestId: request.id, decision: 'REJECTED', reason, decidedById: actor.id },
+      });
+      await tx.serviceTicket.update({ where: { id }, data: { status: 'ASSIGNED' } });
       await this.record(
         tx,
         { id: actor.id, ip: meta.ip, requestId: meta.requestId },
-        'ticket.resolve',
+        'ticket.close_rejected',
         id,
-        { status: t.status },
-        { status: after.status, outcome: after.outcome, resolution: after.resolution },
+        { status: 'CLOSE_REQUESTED' },
+        { status: 'ASSIGNED', requestId: request.id, reason },
       );
-      const d = t.agreement.driver;
-      const lang = d.language as DriverLanguage;
-      return this.messaging.queue(tx, {
-        driverId: d.id,
-        toPhone: d.phone,
-        channel: 'SMS',
-        template: 'ticket_resolved',
-        language: lang,
-        body: TEXTS[lang].ticketResolvedSms({ ticket: t.number }),
-        agreementId: t.agreementId,
-      });
     });
-    await this.messaging.deliver([messageId]);
     return this.get(id, actor);
   }
 

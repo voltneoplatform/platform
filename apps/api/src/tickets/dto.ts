@@ -133,6 +133,14 @@ export class ResolveTicketDto {
   resolution: string;
 }
 
+export class RejectCloseDto {
+  @ApiProperty({ description: 'Why the ticket is not closed yet (the field user sees this)' })
+  @Transform(trim)
+  @IsString()
+  @Length(5, 300)
+  reason: string;
+}
+
 export class CancelTicketDto {
   @ApiProperty() @Transform(trim) @IsString() @Length(3, 500) reason: string;
 }

@@ -54,7 +54,9 @@ interface Ticket {
     finding: string;
   }[];
   replacements: { id: string; newBatterySerial: string | null }[];
-  allowed: { visit: boolean; replace: boolean; resolve: boolean };
+  allowed: { visit: boolean; replace: boolean; resolve: boolean; resolveNeedsApproval: boolean };
+  /** Founder, 1 Nov 2026: a close from the field waits for head office. */
+  closeRejected: { reason: string } | null;
 }
 
 type Mode = 'none' | 'visit' | 'replace' | 'resolve';
@@ -94,6 +96,10 @@ export default function TicketPage() {
         <Badge tone="plain" text={labels.ticketStatus[k.status]} />
       </View>
       {message && <Notice tone="success">{message}</Notice>}
+      {k.status === 'CLOSE_REQUESTED' && !message && <Notice>{t('closeWaiting')}</Notice>}
+      {k.closeRejected && (
+        <Notice tone="warn">{t('closeSentBack', { reason: k.closeRejected.reason })}</Notice>
+      )}
       <Card>
         <Body style={{ fontWeight: '700' }}>{k.driver.name}</Body>
         <Muted>
@@ -133,7 +139,7 @@ export default function TicketPage() {
         <ResolveForm
           ticket={k}
           onCancel={() => setMode('none')}
-          onDone={(x) => finish(x, t('resolved'))}
+          onDone={(x) => finish(x, x.status === 'CLOSE_REQUESTED' ? t('closeSent') : t('resolved'))}
         />
       ) : (
         <>
@@ -156,7 +162,11 @@ export default function TicketPage() {
             <Notice tone="warn">{t('disabledNoReplace')}</Notice>
           )}
           {k.allowed.resolve && (
-            <Button testID="resolve" title={t('resolve')} onPress={() => setMode('resolve')} />
+            <Button
+              testID="resolve"
+              title={k.allowed.resolveNeedsApproval ? t('closeTicket') : t('resolve')}
+              onPress={() => setMode('resolve')}
+            />
           )}
         </>
       )}
@@ -331,7 +341,7 @@ function ResolveForm({
   const options = TICKET_OUTCOMES.filter((o) => (replaced ? o === 'REPLACED' : o !== 'REPLACED'));
   return (
     <Card>
-      <H2>{t('resolve')}</H2>
+      <H2>{ticket.allowed.resolveNeedsApproval ? t('closeTicket') : t('resolve')}</H2>
       <Choice
         label={t('outcome')}
         value={outcome}
@@ -348,7 +358,7 @@ function ResolveForm({
       <ErrorNotice error={error} />
       <Button
         testID="save-resolve"
-        title={t('resolve')}
+        title={ticket.allowed.resolveNeedsApproval ? t('closeTicket') : t('resolve')}
         busy={busy}
         disabled={resolution.trim().length < 3}
         onPress={() =>
