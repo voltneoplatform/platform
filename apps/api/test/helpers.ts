@@ -50,7 +50,8 @@ export async function resetData(prisma: PrismaService): Promise<void> {
         "ticket_photos", "ticket_visits", "battery_replacements", "service_tickets",
         "ownership_transfers", "payment_links", "driver_sessions", "driver_otp_challenges",
         "autopay_charges", "autopay_mandates", "driver_phone_checks", "driver_approval_decisions",
-        "agreement_resignings", "agreement_battery_changes"
+        "agreement_resignings", "agreement_battery_changes", "ticket_close_decisions",
+        "ticket_close_requests"
         RESTART IDENTITY CASCADE`,
     );
   } finally {

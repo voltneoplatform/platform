@@ -39,6 +39,7 @@ export const LABELS: Record<Lang, Labels> = {
       ASSIGNED: 'Technician assigned',
       RESOLVED: 'Solved',
       CANCELLED: 'Closed',
+      CLOSE_REQUESTED: 'Being checked by Volt Neo',
     },
   },
   BN: {
@@ -70,6 +71,7 @@ export const LABELS: Record<Lang, Labels> = {
       ASSIGNED: 'টেকনিশিয়ান দেওয়া হয়েছে',
       RESOLVED: 'সমাধান হয়েছে',
       CANCELLED: 'বন্ধ',
+      CLOSE_REQUESTED: 'Volt Neo যাচাই করছে',
     },
   },
   HI: {
@@ -101,6 +103,7 @@ export const LABELS: Record<Lang, Labels> = {
       ASSIGNED: 'तकनीशियन तय',
       RESOLVED: 'हल हो गया',
       CANCELLED: 'बंद',
+      CLOSE_REQUESTED: 'Volt Neo जाँच रहा है',
     },
   },
 };

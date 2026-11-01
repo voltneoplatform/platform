@@ -83,7 +83,7 @@ export default function TicketPage() {
           {t.allowed.replace && <button onClick={() => open('replace')}>Replace battery</button>}
           {t.allowed.resolve && (
             <button className="primary" onClick={() => open('resolve')}>
-              Resolve
+              Close ticket
             </button>
           )}
           {t.allowed.assign && (
@@ -100,6 +100,60 @@ export default function TicketPage() {
       </div>
       {message && <div className="alert success">{message}</div>}
       {dialog === 'none' && <ErrorBox error={actionError} />}
+      {t.closeRequest && (
+        <div className="card">
+          <h2>Closed by {t.closeRequest.requestedByName ?? 'field staff'}: waiting for approval</h2>
+          <dl className="kv">
+            <dt>Outcome</dt>
+            <dd>{TICKET_OUTCOME_LABELS[t.closeRequest.outcome]}</dd>
+            <dt>What was done</dt>
+            <dd>{t.closeRequest.resolution}</dd>
+            <dt>Closed</dt>
+            <dd>{formatDate(t.closeRequest.requestedAt, true)}</dd>
+          </dl>
+          {t.allowed.decideClose && (
+            <div className="row" style={{ marginTop: 10 }}>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() =>
+                  void act(
+                    () => api.post<TicketDetail>(`/v1/tickets/${t.id}/close/approve`),
+                    'Closed. The driver has been sent an SMS.',
+                  )
+                }
+              >
+                Approve close
+              </button>
+              <button
+                className="danger"
+                disabled={busy}
+                onClick={() => {
+                  const reason = window.prompt(
+                    'Why is it not closed yet? The field agent or technician sees this.',
+                  );
+                  if (!reason || reason.trim().length < 5) return;
+                  void act(
+                    () =>
+                      api.post<TicketDetail>(`/v1/tickets/${t.id}/close/reject`, {
+                        reason: reason.trim(),
+                      }),
+                    'Sent back. The ticket is open again.',
+                  );
+                }}
+              >
+                Send back
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {t.closeRejected && (
+        <div className="alert warn">
+          Close sent back by {t.closeRejected.decidedByName ?? 'head office'} on{' '}
+          {formatDate(t.closeRejected.decidedAt, true)}: {t.closeRejected.reason}
+        </div>
+      )}
       {t.status === 'ASSIGNED' && !t.allowed.visit && t.technicianId !== me?.id && (
         <div className="alert info">Assigned to {t.technicianName}.</div>
       )}
@@ -178,6 +232,7 @@ export default function TicketPage() {
               <dt>Resolved</dt>
               <dd>
                 {formatDate(t.resolvedAt, true)} by {t.resolvedByName}
+                {t.closeApprovedByName && `, approved by ${t.closeApprovedByName}`}
               </dd>
             </dl>
           ) : (
@@ -300,7 +355,7 @@ export default function TicketPage() {
           }
         />
       </Modal>
-      <Modal open={dialog === 'resolve'} onClose={() => setDialog('none')} title="Resolve ticket">
+      <Modal open={dialog === 'resolve'} onClose={() => setDialog('none')} title="Close ticket">
         <ResolveForm
           replaced={t.replacements.length > 0}
           busy={busy}
@@ -308,7 +363,9 @@ export default function TicketPage() {
           onSubmit={(body) =>
             act(
               () => api.post<TicketDetail>(`/v1/tickets/${t.id}/resolve`, body),
-              'Resolved. The driver has been sent an SMS.',
+              t.allowed.resolveNeedsApproval
+                ? 'Closed. Waiting for head office to approve.'
+                : 'Closed. The driver has been sent an SMS.',
             )
           }
         />

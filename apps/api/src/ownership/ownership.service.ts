@@ -29,7 +29,7 @@ import { dateOnly, istDate, parseDateOnly, serializable, type Tx } from '../comm
 import type { FinishEarlyDto, TransferDto } from './dto';
 
 const MINUTE = 60_000;
-const OPEN_TICKET = ['OPEN', 'ASSIGNED'] as const;
+const OPEN_TICKET = ['OPEN', 'ASSIGNED', 'CLOSE_REQUESTED'] as const;
 
 /**
  * Finishing early (rule 13, clause E7) and ownership transfer (rule 14, clause

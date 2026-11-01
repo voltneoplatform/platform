@@ -347,7 +347,7 @@ export class MeService {
   ) {
     const a = await this.load(me, input.agreementId);
     const open = await this.prisma.serviceTicket.findFirst({
-      where: { agreementId: a.id, status: { in: ['OPEN', 'ASSIGNED'] } },
+      where: { agreementId: a.id, status: { in: ['OPEN', 'ASSIGNED', 'CLOSE_REQUESTED'] } },
     });
     if (open) {
       throw new ConflictException({

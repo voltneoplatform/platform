@@ -59,6 +59,16 @@ describe('role permissions (spec section 2)', () => {
     }
   });
 
+  it('has field staff close tickets subject to head office approval', () => {
+    for (const r of ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'PLAN_MANAGER'] as const) {
+      expect(hasPermission(r, 'tickets.close')).toBe(true);
+    }
+    for (const r of ['FIELD_AGENT', 'TECHNICIAN'] as const) {
+      expect(hasPermission(r, 'tickets.resolve')).toBe(true);
+      expect(hasPermission(r, 'tickets.close')).toBe(false);
+    }
+  });
+
   it('stops operations managers editing payments', () => {
     expect(hasPermission('OPERATIONS_MANAGER', 'payments.record')).toBe(false);
   });

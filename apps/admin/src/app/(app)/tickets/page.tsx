@@ -16,10 +16,11 @@ import {
 } from '@/components/TicketBits';
 import { ErrorBox, Modal, Pager, formatDate, useLoad } from '@/components/ui';
 
-type View = 'active' | 'missed' | 'finished' | 'all';
+type View = 'active' | 'approve' | 'missed' | 'finished' | 'all';
 
 const VIEWS: { key: View; label: string }[] = [
   { key: 'active', label: 'Open' },
+  { key: 'approve', label: 'Closed, waiting for approval' },
   { key: 'missed', label: '48 hours missed' },
   { key: 'finished', label: 'Resolved or cancelled' },
   { key: 'all', label: 'All' },
@@ -37,6 +38,7 @@ export default function TicketsPage() {
   const q = useLoad(() => {
     const p = new URLSearchParams({ page: String(page), limit: '50' });
     if (view === 'active') p.set('active', 'true');
+    if (view === 'approve') p.set('status', 'CLOSE_REQUESTED');
     if (view === 'finished') p.set('active', 'false');
     if (view === 'missed') p.set('timing', 'MISSED');
     if (technicianId) p.set('technicianId', technicianId);
@@ -74,6 +76,10 @@ export default function TicketsPage() {
             <div className="stat">
               <span className="muted">Technician assigned</span>
               <span className="value">{c.assigned}</span>
+            </div>
+            <div className="stat">
+              <span className="muted">Closed, waiting for approval</span>
+              <span className="value">{c.closeRequested}</span>
             </div>
             <div className="stat">
               <span className="muted">48 hours missed</span>

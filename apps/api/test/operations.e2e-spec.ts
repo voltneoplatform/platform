@@ -290,7 +290,7 @@ describe('Operations: finishing early, ownership transfer, service tickets, dash
     list = (await ctx.http.get('/v1/tickets?timing=MISSED').set(bearer(support.token)).expect(200))
       .body;
     expect(list.items.map((i: { id: string }) => i.id)).toEqual([t.id]);
-    expect(list.counts).toEqual({ open: 1, assigned: 0, missed: 1 });
+    expect(list.counts).toEqual({ open: 1, assigned: 0, missed: 1, closeRequested: 0 });
 
     // Assign: only someone who can do service visits.
     await ctx.http
@@ -335,13 +335,50 @@ describe('Operations: finishing early, ownership transfer, service tickets, dash
       .send({ outcome: 'REPLACED', resolution: 'Swapped' })
       .expect(409); // no replacement recorded
     ctx.messages.sent.length = 0;
-    const resolved = await ctx.http
-      .post(`/v1/tickets/${t.id}/resolve`)
-      .set(bearer(tech.token))
-      .send({ outcome: 'REPAIRED', resolution: 'Terminal tightened; battery holds charge' })
+    // Founder, 1 Nov 2026: a technician's close waits for head office approval.
+    const close = () =>
+      ctx.http
+        .post(`/v1/tickets/${t.id}/resolve`)
+        .set(bearer(tech.token))
+        .send({ outcome: 'REPAIRED', resolution: 'Terminal tightened; battery holds charge' });
+    const requested = (await close().expect(200)).body;
+    expect(requested).toMatchObject({
+      status: 'CLOSE_REQUESTED',
+      outcome: null,
+      closeRequest: { outcome: 'REPAIRED', requestedByName: tech.staff.name },
+      allowed: { decideClose: false, visit: false, resolve: false },
+    });
+    expect(ctx.messages.sent).toHaveLength(0);
+    await close().expect(409);
+    await ctx.http.post(`/v1/tickets/${t.id}/close/approve`).set(bearer(support.token)).expect(403);
+    await ctx.http.post(`/v1/tickets/${t.id}/close/approve`).set(bearer(tech.token)).expect(403);
+    const sentBack = await ctx.http
+      .post(`/v1/tickets/${t.id}/close/reject`)
+      .set(bearer(ops.token))
+      .send({ reason: 'Add a photo of the retest reading' })
       .expect(200);
-    expect(resolved.body).toMatchObject({ status: 'RESOLVED', outcome: 'REPAIRED' });
+    expect(sentBack.body).toMatchObject({
+      status: 'ASSIGNED',
+      closeRequest: null,
+      closeRejected: { reason: 'Add a photo of the retest reading' },
+      allowed: { resolve: true },
+    });
+    await close().expect(200);
+    const resolved = await ctx.http
+      .post(`/v1/tickets/${t.id}/close/approve`)
+      .set(bearer(pm.token))
+      .expect(200);
+    expect(resolved.body).toMatchObject({
+      status: 'RESOLVED',
+      outcome: 'REPAIRED',
+      resolvedByName: tech.staff.name,
+      closeApprovedByName: pm.staff.name,
+    });
     expect(ctx.messages.sent[0]!.template).toBe('ticket_resolved');
+    const decisions = await ctx.prisma.ticketCloseDecision.findMany({
+      where: { request: { ticketId: t.id } },
+    });
+    expect(decisions.map((d) => d.decision).sort()).toEqual(['APPROVED', 'REJECTED']);
 
     // Final.
     await ctx.http
@@ -361,6 +398,45 @@ describe('Operations: finishing early, ownership transfer, service tickets, dash
     expect(history.body[0]).toMatchObject({
       voltageReading: '47.9',
       ticket: { number: 'VNS-000001' },
+    });
+  });
+
+  it('lets a field agent close a ticket for approval, and head office close one directly', async () => {
+    const agent = await loginAs(ctx, 'FIELD_AGENT');
+    const visit = (id: string, token: string) =>
+      ctx.http
+        .post(`/v1/tickets/${id}/visits`)
+        .set(bearer(token))
+        .field('visitedAt', new Date().toISOString())
+        .field('finding', 'Loose connector, refitted')
+        .expect(201);
+    const first = (await newTicket({ technicianId: agent.staff.id }).expect(201)).body;
+    await visit(first.id, agent.token);
+    const asked = await ctx.http
+      .post(`/v1/tickets/${first.id}/resolve`)
+      .set(bearer(agent.token))
+      .send({ outcome: 'REPAIRED', resolution: 'Connector refitted' })
+      .expect(200);
+    expect(asked.body).toMatchObject({
+      status: 'CLOSE_REQUESTED',
+      allowed: { resolveNeedsApproval: true },
+    });
+    const list = await ctx.http.get('/v1/tickets').set(bearer(ops.token)).expect(200);
+    expect(list.body.counts.closeRequested).toBe(1);
+    await ctx.http.post(`/v1/tickets/${first.id}/close/approve`).set(bearer(ops.token)).expect(200);
+
+    // Head office closes directly.
+    const second = (await newTicket({ technicianId: tech.staff.id }).expect(201)).body;
+    await visit(second.id, tech.token);
+    const direct = await ctx.http
+      .post(`/v1/tickets/${second.id}/resolve`)
+      .set(bearer(pm.token))
+      .send({ outcome: 'NO_FAULT_FOUND', resolution: 'Driver was charging on a faulty socket' })
+      .expect(200);
+    expect(direct.body).toMatchObject({
+      status: 'RESOLVED',
+      resolvedByName: pm.staff.name,
+      closeApprovedByName: null,
     });
   });
 

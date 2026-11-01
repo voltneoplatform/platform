@@ -80,6 +80,7 @@ export const LABELS: Record<Lang, Labels> = {
       ASSIGNED: 'Assigned',
       RESOLVED: 'Resolved',
       CANCELLED: 'Cancelled',
+      CLOSE_REQUESTED: 'Closed, waiting for head office',
     },
     ticketTiming: {
       ON_TIME: 'Within 48 hours',
@@ -158,6 +159,7 @@ export const LABELS: Record<Lang, Labels> = {
       ASSIGNED: 'দায়িত্ব দেওয়া হয়েছে',
       RESOLVED: 'সমাধান হয়েছে',
       CANCELLED: 'বাতিল',
+      CLOSE_REQUESTED: 'বন্ধ, হেড অফিসের অনুমোদনের অপেক্ষায়',
     },
     ticketTiming: {
       ON_TIME: '৪৮ ঘণ্টার মধ্যে',
@@ -236,6 +238,7 @@ export const LABELS: Record<Lang, Labels> = {
       ASSIGNED: 'सौंपा गया',
       RESOLVED: 'समाधान हो गया',
       CANCELLED: 'रद्द',
+      CLOSE_REQUESTED: 'बंद, हेड ऑफिस की मंज़ूरी का इंतज़ार',
     },
     ticketTiming: {
       ON_TIME: '48 घंटे के अंदर',

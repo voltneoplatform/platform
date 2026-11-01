@@ -182,7 +182,8 @@ describe('Field App support (M5)', () => {
       collectedToday: r(1200),
       paymentsToday: 1,
     });
-    expect(s.myOpenTickets).toBeNull();
+    // Founder, 1 Nov 2026: field agents work service tickets too.
+    expect(s.myOpenTickets).toBe(0);
     const cash = (await ctx.http.get('/v1/field/cash').set(bearer(agent.token)).expect(200)).body;
     expect(cash.payments).toHaveLength(1);
     expect(cash.payments[0]).toMatchObject({ amount: r(1200), agreement: { number: a.number } });
