@@ -261,7 +261,7 @@ const EN: Texts = {
   signInCodeSms: (p) =>
     `Volt Neo: Your sign-in code is ${p.code}. It expires in ${p.minutes} minutes. Do not share it with anyone.`,
   registrationCodeSms: (p) =>
-    `Volt Neo: Your registration code is ${p.code}. Give it only to the Volt Neo agent registering you, to agree to Volt Neo checking your documents. It expires in ${p.minutes} minutes.`,
+    `Volt Neo: Your registration code is ${p.code}. Give it only to the Volt Neo agent registering you, to agree to us checking your documents. Valid ${p.minutes} minutes.`,
 };
 
 const BN: Texts = {
