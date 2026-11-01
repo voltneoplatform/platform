@@ -141,7 +141,7 @@ export default function BatteryPage() {
 
       <div className="card">
         <dl className="kv">
-          <dt>GPS device</dt>
+          <dt>IMEI</dt>
           <dd className="mono">{b.gpsDeviceId ?? 'Not fitted'}</dd>
           <dt>Location</dt>
           <dd>{b.location ?? '—'}</dd>
@@ -372,9 +372,11 @@ export default function BatteryPage() {
         >
           <ErrorBox error={actionError} />
           <div className="field">
-            <label htmlFor="e-gps">GPS device ID</label>
+            <label htmlFor="e-gps">IMEI (15 digits)</label>
             <input
               id="e-gps"
+              inputMode="numeric"
+              maxLength={20}
               className="mono"
               value={gps}
               onChange={(e) => setGps(e.target.value)}

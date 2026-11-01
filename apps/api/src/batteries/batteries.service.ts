@@ -9,6 +9,8 @@ import {
 import {
   RETIRABLE_STATUSES,
   canMoveBattery,
+  IMEI_PATTERN,
+  normaliseImei,
   normaliseSerial,
   type BatteryStatus,
 } from '@voltneo/shared';
@@ -55,7 +57,7 @@ function view(b: BatteryWithType, showCosts: boolean) {
 function duplicateMessage(err: unknown): string {
   const target = JSON.stringify((err as { meta?: unknown }).meta ?? {});
   return target.includes('gps')
-    ? 'Another battery already uses this GPS device ID'
+    ? 'Another battery already uses this IMEI'
     : 'Another battery already has this serial number';
 }
 
@@ -229,7 +231,7 @@ export class BatteriesService implements OnModuleInit {
     const items = dto.items.map((i, idx) => ({
       row: idx + 1,
       serial: normaliseSerial(i.serial),
-      gpsDeviceId: i.gpsDeviceId ? normaliseSerial(i.gpsDeviceId) : null,
+      gpsDeviceId: i.gpsDeviceId ? normaliseImei(i.gpsDeviceId) : null,
     }));
     const errors: { row: number; message: string }[] = [];
     const seenSerial = new Map<string, number>();
@@ -238,8 +240,11 @@ export class BatteriesService implements OnModuleInit {
     for (const i of items) {
       if (!pattern.test(i.serial))
         errors.push({ row: i.row, message: `Serial "${i.serial}" is not valid` });
-      if (i.gpsDeviceId && !pattern.test(i.gpsDeviceId)) {
-        errors.push({ row: i.row, message: `GPS ID "${i.gpsDeviceId}" is not valid` });
+      if (i.gpsDeviceId && !IMEI_PATTERN.test(i.gpsDeviceId)) {
+        errors.push({
+          row: i.row,
+          message: `IMEI "${i.gpsDeviceId}" is not valid: it must be exactly 15 digits`,
+        });
       }
       if (seenSerial.has(i.serial)) {
         errors.push({
@@ -251,7 +256,7 @@ export class BatteriesService implements OnModuleInit {
         if (seenGps.has(i.gpsDeviceId)) {
           errors.push({
             row: i.row,
-            message: `GPS ID ${i.gpsDeviceId} is repeated (also row ${seenGps.get(i.gpsDeviceId)})`,
+            message: `IMEI ${i.gpsDeviceId} is repeated (also row ${seenGps.get(i.gpsDeviceId)})`,
           });
         } else seenGps.set(i.gpsDeviceId, i.row);
       }
@@ -272,7 +277,7 @@ export class BatteriesService implements OnModuleInit {
       if (gRow)
         errors.push({
           row: gRow,
-          message: `GPS ID ${e.gpsDeviceId} is already used by battery ${e.serial}`,
+          message: `IMEI ${e.gpsDeviceId} is already used by battery ${e.serial}`,
         });
     }
     if (errors.length) {
@@ -344,7 +349,7 @@ export class BatteriesService implements OnModuleInit {
     const b = await tx.battery.create({
       data: {
         serial: normaliseSerial(d.serial),
-        gpsDeviceId: d.gpsDeviceId ? normaliseSerial(d.gpsDeviceId) : null,
+        gpsDeviceId: d.gpsDeviceId ? normaliseImei(d.gpsDeviceId) : null,
         batteryTypeId: d.batteryTypeId,
         purchaseDate: parseDateOnly(d.purchaseDate),
         purchaseCost: d.purchaseCost,
@@ -389,7 +394,7 @@ export class BatteriesService implements OnModuleInit {
               dto.gpsDeviceId === undefined
                 ? undefined
                 : dto.gpsDeviceId
-                  ? normaliseSerial(dto.gpsDeviceId)
+                  ? normaliseImei(dto.gpsDeviceId)
                   : null,
             location: dto.location,
             supplierRef: dto.supplierRef,

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BATTERY_STATUSES, type BatteryStatus } from '@voltneo/shared';
+import { BATTERY_STATUSES, normaliseImei, type BatteryStatus } from '@voltneo/shared';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -21,6 +21,13 @@ import {
 import { emptyToNull, trim } from '../battery-types/dto';
 
 const SERIAL = /^[A-Za-z0-9][A-Za-z0-9 ._/-]{2,59}$/;
+const IMEI = /^\d{15}$/;
+const IMEI_MESSAGE = 'IMEI must be exactly 15 digits';
+/** Empty → null; otherwise spaces and dashes removed. */
+const imei = ({ value }: { value: unknown }) => {
+  const v = emptyToNull({ value });
+  return typeof v === 'string' ? normaliseImei(v) : v;
+};
 const MAX_PAISE = 100_000_000_00;
 
 class BatteryCommon {
@@ -63,10 +70,13 @@ export class CreateBatteryDto extends BatteryCommon {
   @Matches(SERIAL, { message: 'serial must be 3-60 letters, digits, spaces or . _ / -' })
   serial: string;
 
-  @ApiPropertyOptional({ example: 'GPS-8812345' })
+  @ApiPropertyOptional({
+    description: "The GPS device's IMEI (15 digits)",
+    example: '356938035643809',
+  })
   @IsOptional()
-  @Transform(emptyToNull)
-  @Matches(SERIAL, { message: 'gpsDeviceId must be 3-60 letters, digits, spaces or . _ / -' })
+  @Transform(imei)
+  @Matches(IMEI, { message: IMEI_MESSAGE })
   gpsDeviceId?: string | null;
 
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(1000) notes?: string | null;
@@ -89,7 +99,8 @@ export class BulkCreateBatteriesDto extends BatteryCommon {
 
 export class UpdateBatteryDto {
   @IsOptional() @Transform(trim) @Matches(SERIAL) serial?: string;
-  @IsOptional() @Transform(emptyToNull) @Matches(SERIAL) gpsDeviceId?: string | null;
+  @IsOptional() @Transform(imei) @Matches(IMEI, { message: IMEI_MESSAGE }) gpsDeviceId?:
+    string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(100) location?: string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(100) supplierRef?: string | null;
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(1000) notes?: string | null;

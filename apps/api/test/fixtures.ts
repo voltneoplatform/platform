@@ -187,7 +187,7 @@ export async function makeBattery(
     .set(bearer(token))
     .send({
       serial: `NEO-T-${n}`,
-      gpsDeviceId: opts.gps === false ? null : `GPS-T-${n}`,
+      gpsDeviceId: opts.gps === false ? null : String(356000000000000 + n),
       batteryTypeId,
       purchaseDate: '2026-10-01',
       location: 'Head office store',
