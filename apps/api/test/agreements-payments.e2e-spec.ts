@@ -231,6 +231,33 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         .expect(409);
     });
 
+    it('assigns a battery to an agreement signed before batteries were assigned, without re-signing', async () => {
+      const a = await signed();
+      // Agreements signed before 1 Nov 2026 had no battery: simulate one.
+      await ctx.prisma.$transaction([
+        ctx.prisma.$executeRawUnsafe(
+          'ALTER TABLE "agreements" DISABLE TRIGGER "agreements_terms_frozen"',
+        ),
+        ctx.prisma.$executeRawUnsafe(
+          `UPDATE "agreements" SET "battery_id" = NULL WHERE "id" = '${a.id}'`,
+        ),
+        ctx.prisma.$executeRawUnsafe(
+          'ALTER TABLE "agreements" ENABLE TRIGGER "agreements_terms_frozen"',
+        ),
+      ]);
+      const battery = await makeBattery(ctx, ops.token, typeId);
+      const res = await ctx.http
+        .post(`/v1/agreements/${a.id}/battery`)
+        .set(bearer(ops.token))
+        .send({ batteryId: battery.id, reason: 'Assigned after the new process started' })
+        .expect(200);
+      expect(res.body).toMatchObject({
+        battery: { id: battery.id },
+        resignRequired: false,
+        batteryChanges: [],
+      });
+    });
+
     it('changes the battery until installation; after signing the driver signs again first', async () => {
       const a = await signed();
       await pay(finance.token, { agreementId: a.id, amountPaise: r(20000), method: 'CASH' }).expect(

@@ -1061,9 +1061,11 @@ export class AgreementsService implements OnModuleInit {
           );
         }
         await tx.$executeRaw`SELECT set_config('voltneo.reassigning_battery_for', ${id}, true)`;
+        // Agreements prepared before 1 Nov 2026 had no battery printed: assigning one
+        // needs no corrected agreement; changing a printed one does.
         after = await tx.agreement.update({
           where: { id },
-          data: { batteryId: battery.id, resignRequired: true },
+          data: { batteryId: battery.id, resignRequired: before.batteryId !== null },
         });
         await tx.$executeRaw`SELECT set_config('voltneo.reassigning_battery_for', '', true)`;
       } else {
