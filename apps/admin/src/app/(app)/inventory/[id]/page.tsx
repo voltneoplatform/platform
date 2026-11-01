@@ -85,6 +85,14 @@ export default function BatteryPage() {
           <h1 className="mono" style={{ fontSize: 22 }}>
             {b.serial} <StatusBadge status={b.status} />
           </h1>
+          {b.assignedTo && (
+            <p className="muted">
+              Assigned to agreement{' '}
+              <Link href={`/agreements/${b.assignedTo.agreementId}`}>{b.assignedTo.number}</Link> (
+              {b.assignedTo.driverName}), waiting for installation. To use it elsewhere, change the
+              agreement&apos;s battery first.
+            </p>
+          )}
           <p className="muted">{b.batteryType.name}</p>
         </div>
         {manage && (

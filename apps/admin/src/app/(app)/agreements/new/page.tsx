@@ -2,22 +2,21 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import {
-  READINESS_LABELS,
   VEHICLE_TYPE_LABELS,
   addMonths,
   buildSchedule,
   firstDueDateProblem,
   suggestFirstDueDate,
   type DueDay,
-  type ReadinessItem,
   type VehicleType,
 } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
 import type {
   AgreementDetail,
   AgreementOption,
+  BatteryRow,
   DriverDetail,
   DriverListRow,
   Paged,
@@ -29,14 +28,20 @@ function todayIst(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 }
 
+/**
+ * Founder, 1 Nov 2026: once head office approves a driver on a plan, head
+ * office assigns a battery and the agreement is prepared with that battery's
+ * serial number and IMEI. Then it is signed, the down payment is taken, and
+ * the battery is installed.
+ */
 function NewAgreement() {
   const { api, can } = useSession();
   const router = useRouter();
   const params = useSearchParams();
   const [driverId, setDriverId] = useState(params.get('driverId') ?? '');
   const [search, setSearch] = useState('');
-  const [planVersionId, setPlanVersionId] = useState('');
-  const [batteryTypeId, setBatteryTypeId] = useState('');
+  const [batteryId, setBatteryId] = useState('');
+  const [batterySearch, setBatterySearch] = useState('');
   const [dueDay, setDueDay] = useState<DueDay>(17);
   const [firstDueDate, setFirstDueDate] = useState(() => suggestFirstDueDate(17, todayIst()));
   const [notes, setNotes] = useState('');
@@ -48,22 +53,37 @@ function NewAgreement() {
     () => (allowed ? api.get<AgreementOption[]>('/v1/agreements/options') : Promise.resolve(null)),
     [api, allowed],
   );
-  const matches = useLoad(
+  const approved = useLoad(
     () =>
-      search.trim().length >= 2
-        ? api.get<Paged<DriverListRow>>(
-            `/v1/drivers?${new URLSearchParams({ search: search.trim(), limit: '8' })}`,
-          )
-        : Promise.resolve(null),
+      api.get<Paged<DriverListRow>>(
+        `/v1/drivers?${new URLSearchParams({
+          stage: 'APPROVED',
+          limit: '50',
+          ...(search.trim().length >= 2 ? { search: search.trim() } : {}),
+        })}`,
+      ),
     [api, search],
   );
   const driver = useLoad(
     () => (driverId ? api.get<DriverDetail>(`/v1/drivers/${driverId}`) : Promise.resolve(null)),
     [api, driverId],
   );
+  const stock = useLoad(
+    () =>
+      api.get<Paged<BatteryRow>>(
+        `/v1/batteries?${new URLSearchParams({
+          available: 'true',
+          limit: '200',
+          ...(batterySearch.trim() ? { search: batterySearch.trim() } : {}),
+        })}`,
+      ),
+    [api, batterySearch],
+  );
 
-  const version = options.data?.find((o) => o.planVersionId === planVersionId) ?? null;
-  const vehicleType = driver.data?.vehicle?.type ?? null;
+  const d = driver.data;
+  const planId = d?.onboarding.plan?.id ?? null;
+  const version = options.data?.find((o) => o.planId === planId) ?? null;
+  const vehicleType = d?.vehicle?.type ?? null;
   const prices = useMemo(
     () =>
       (version?.prices ?? []).filter(
@@ -71,12 +91,13 @@ function NewAgreement() {
       ),
     [version, vehicleType],
   );
-  const price = prices.find((p) => p.batteryTypeId === batteryTypeId) ?? null;
-
-  useEffect(() => {
-    if (prices.length === 1) setBatteryTypeId(prices[0]!.batteryTypeId);
-    else if (!prices.some((p) => p.batteryTypeId === batteryTypeId)) setBatteryTypeId('');
-  }, [prices, batteryTypeId]);
+  const batteries = (stock.data?.items ?? []).filter((b) =>
+    prices.some((p) => p.batteryTypeId === b.batteryType.id),
+  );
+  const battery = batteries.find((b) => b.id === batteryId) ?? null;
+  const price = battery
+    ? (prices.find((p) => p.batteryTypeId === battery.batteryType.id) ?? null)
+    : null;
 
   if (!allowed) return <Forbidden />;
 
@@ -90,6 +111,7 @@ function NewAgreement() {
           firstDueDate,
         })
       : null;
+  const ready = d?.onboarding.stage === 'APPROVED';
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -98,8 +120,7 @@ function NewAgreement() {
     try {
       const a = await api.post<AgreementDetail>('/v1/agreements', {
         driverId,
-        planVersionId,
-        batteryTypeId,
+        batteryId,
         dueDay,
         firstDueDate,
         notes: notes || undefined,
@@ -111,7 +132,6 @@ function NewAgreement() {
     }
   }
 
-  const d = driver.data;
   return (
     <>
       <Link href="/agreements" className="back">
@@ -119,16 +139,17 @@ function NewAgreement() {
       </Link>
       <div className="page-head">
         <div>
-          <h1>New agreement</h1>
+          <h1>Assign a battery</h1>
           <p className="muted">
-            Prepare a draft. Print Schedules 1 and 5 from the draft, explain them to the driver,
-            then record the signature.
+            For a driver head office has approved. The agreement is prepared with the battery&apos;s
+            serial number and IMEI. Then print it, have it signed, take the down payment, and
+            install this battery.
           </p>
         </div>
       </div>
       <form onSubmit={create}>
         <div className="card">
-          <h2>1. Driver</h2>
+          <h2>1. Approved driver</h2>
           {d ? (
             <>
               <p>
@@ -136,7 +157,14 @@ function NewAgreement() {
                   <strong>{d.name}</strong>
                 </Link>{' '}
                 <span className="mono muted">{d.phone}</span>{' '}
-                <button type="button" className="link" onClick={() => setDriverId('')}>
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    setDriverId('');
+                    setBatteryId('');
+                  }}
+                >
                   Change
                 </button>
               </p>
@@ -145,18 +173,17 @@ function NewAgreement() {
                 {d.vehicle
                   ? `${d.vehicle.registration ?? d.vehicle.chassisNumber} (${VEHICLE_TYPE_LABELS[d.vehicle.type as VehicleType]}${d.vehicle.ownedByDriver ? '' : ', rented'})`
                   : 'none recorded'}
+                <br />
+                Approved plan:{' '}
+                {d.onboarding.plan
+                  ? `${d.onboarding.plan.names.en} (${d.onboarding.plan.code})`
+                  : 'none'}
               </p>
-              {!d.readiness.ready && (
+              {!ready && (
                 <div className="alert warn">
-                  <strong>Not ready to sign yet.</strong> You can prepare the draft, but signing
-                  needs:
-                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                    {d.readiness.items
-                      .filter((i) => i.applies && !i.done)
-                      .map((i) => (
-                        <li key={i.item}>{READINESS_LABELS[i.item as ReadinessItem]}</li>
-                      ))}
-                  </ul>
+                  {d.onboarding.stage === 'AGREEMENT'
+                    ? 'This driver already has an agreement in progress.'
+                    : 'This driver needs final approval first (on the driver page).'}
                 </div>
               )}
             </>
@@ -172,19 +199,17 @@ function NewAgreement() {
                   autoFocus
                 />
               </div>
-              {matches.data?.items.length === 0 && <p className="muted">No drivers match.</p>}
+              {approved.data?.items.length === 0 && (
+                <p className="muted">No approved driver is waiting for a battery.</p>
+              )}
               <ul className="timeline">
-                {matches.data?.items.map((m) => (
+                {approved.data?.items.map((m) => (
                   <li key={m.id}>
                     <button type="button" className="link" onClick={() => setDriverId(m.id)}>
                       {m.name}
                     </button>{' '}
-                    <span className="mono muted">{m.phone}</span>{' '}
-                    {m.ready ? (
-                      <span className="badge active">Ready</span>
-                    ) : (
-                      <span className="badge warn">KYC incomplete</span>
-                    )}
+                    <span className="mono muted">{m.phone}</span>
+                    {m.plan && <span className="muted"> · {m.plan.names.en}</span>}
                   </li>
                 ))}
               </ul>
@@ -192,95 +217,97 @@ function NewAgreement() {
           )}
         </div>
 
-        <div className="card">
-          <h2>2. Plan and battery type</h2>
-          <ErrorBox error={options.error} />
-          {options.data?.length === 0 && (
-            <div className="alert warn">
-              No plan is published yet. Publish a plan version first.
-            </div>
-          )}
-          <div className="form-grid">
+        {d && ready && (
+          <div className="card">
+            <h2>2. Battery</h2>
+            <ErrorBox error={options.error ?? stock.error} />
+            {!version && options.data && (
+              <div className="alert warn">
+                The approved plan is no longer on offer. Approve the driver on another plan.
+              </div>
+            )}
+            {version && prices.length === 0 && (
+              <div className="alert warn">
+                This plan has no price for a battery type that fits this vehicle.
+              </div>
+            )}
             <div className="field">
-              <label htmlFor="plan">Plan</label>
-              <select
-                id="plan"
-                required
-                value={planVersionId}
-                onChange={(e) => setPlanVersionId(e.target.value)}
-              >
-                <option value="">Choose a plan</option>
-                {options.data?.map((o) => (
-                  <option key={o.planVersionId} value={o.planVersionId}>
-                    {o.names.EN} ({o.planCode} v{o.version}, {o.termMonths} months)
-                  </option>
-                ))}
-              </select>
+              <label htmlFor="battery-search">Serial number or IMEI</label>
+              <input
+                id="battery-search"
+                className="mono"
+                placeholder="Search batteries in stock"
+                value={batterySearch}
+                onChange={(e) => setBatterySearch(e.target.value)}
+              />
             </div>
             <div className="field">
-              <label htmlFor="type">Battery type</label>
+              <label htmlFor="battery">Battery in stock</label>
               <select
-                id="type"
+                id="battery"
                 required
-                value={batteryTypeId}
-                onChange={(e) => setBatteryTypeId(e.target.value)}
-                disabled={!version}
+                value={batteryId}
+                onChange={(e) => setBatteryId(e.target.value)}
               >
                 <option value="">
-                  {version ? 'Choose a battery type' : 'Choose a plan first'}
+                  {batteries.length ? 'Choose a battery' : 'No suitable battery in stock'}
                 </option>
-                {prices.map((p) => (
-                  <option key={p.batteryTypeId} value={p.batteryTypeId}>
-                    {p.batteryTypeName}
+                {batteries.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.serial} · IMEI {b.gpsDeviceId} · {b.batteryType.name}
+                    {b.location ? ` · ${b.location}` : ''}
                   </option>
                 ))}
               </select>
-              {version && vehicleType && prices.length === 0 && (
-                <p className="hint">This plan has no price for a battery that fits this vehicle.</p>
-              )}
+              <p className="hint">
+                Only batteries in stock, with an IMEI, not held for another agreement, of a type
+                this plan prices for this vehicle.
+              </p>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="card">
-          <h2>3. Due date</h2>
-          <div className="form-grid">
-            <div className="field">
-              <label htmlFor="due-day">Monthly due day</label>
-              <select
-                id="due-day"
-                value={dueDay}
-                onChange={(e) => {
-                  const day = Number(e.target.value) as DueDay;
-                  setDueDay(day);
-                  setFirstDueDate(suggestFirstDueDate(day, todayIst()));
-                }}
-              >
-                <option value={2}>2nd of the month</option>
-                <option value={17}>17th of the month</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="first-due">First due date</label>
-              <input
-                id="first-due"
-                type="date"
-                required
-                value={firstDueDate}
-                onChange={(e) => setFirstDueDate(e.target.value)}
-              />
-              {dateProblem ? (
-                <p className="hint" style={{ color: 'var(--danger)' }}>
-                  {dateProblem}
-                </p>
-              ) : (
-                <p className="hint">Install the battery at least 7 days before this date.</p>
-              )}
+        {d && ready && (
+          <div className="card">
+            <h2>3. Due date</h2>
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="due-day">Monthly due day</label>
+                <select
+                  id="due-day"
+                  value={dueDay}
+                  onChange={(e) => {
+                    const day = Number(e.target.value) as DueDay;
+                    setDueDay(day);
+                    setFirstDueDate(suggestFirstDueDate(day, todayIst()));
+                  }}
+                >
+                  <option value={2}>2nd of the month</option>
+                  <option value={17}>17th of the month</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="first-due">First due date</label>
+                <input
+                  id="first-due"
+                  type="date"
+                  required
+                  value={firstDueDate}
+                  onChange={(e) => setFirstDueDate(e.target.value)}
+                />
+                {dateProblem ? (
+                  <p className="hint" style={{ color: 'var(--danger)' }}>
+                    {dateProblem}
+                  </p>
+                ) : (
+                  <p className="hint">Install the battery at least 7 days before this date.</p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {schedule && version && price && (
+        {schedule && version && price && battery && (
           <div className="card">
             <h2>4. Check the figures</h2>
             <div className="stats">
@@ -308,7 +335,9 @@ function NewAgreement() {
               </div>
             </div>
             <p className="muted" style={{ marginTop: 12 }}>
-              First instalment {formatDate(firstDueDate)}, last{' '}
+              Battery <span className="mono">{battery.serial}</span>, IMEI{' '}
+              <span className="mono">{battery.gpsDeviceId}</span>. First instalment{' '}
+              {formatDate(firstDueDate)}, last{' '}
               {formatDate(addMonths(firstDueDate, version.termMonths - 1))}. Late fee{' '}
               <Money paise={version.lateFeePerDayPaise} /> a day after {version.graceDays}{' '}
               days&apos; grace, for at most {version.lateFeeCapDays} days each time the driver is
@@ -331,9 +360,9 @@ function NewAgreement() {
           <button
             type="submit"
             className="primary"
-            disabled={busy || !driverId || !schedule || !d?.vehicle}
+            disabled={busy || !ready || !schedule || !battery || !d?.vehicle}
           >
-            {busy ? 'Saving…' : 'Save draft'}
+            {busy ? 'Saving…' : 'Assign battery and prepare agreement'}
           </button>
         </div>
       </form>

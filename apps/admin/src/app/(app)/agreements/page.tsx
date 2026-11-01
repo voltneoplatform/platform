@@ -34,7 +34,7 @@ export default function AgreementsPage() {
         </div>
         {can('agreements.manage') && (
           <Link href="/agreements/new" className="button primary">
-            New agreement
+            Assign a battery
           </Link>
         )}
       </div>

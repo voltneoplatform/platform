@@ -17,6 +17,7 @@ import {
 import { useSession } from '@/lib/session';
 import type { AgreementListRow, DriverDetail, KycDoc, Paged } from '@/lib/types';
 import { AgreementStateBadge } from '@/components/AgreementBits';
+import { OnboardingCard, PhoneCheck } from '@/components/Onboarding';
 import {
   DriverFields,
   VehicleFields,
@@ -73,6 +74,7 @@ export default function DriverPage() {
   const [actionError, setActionError] = useState<unknown>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editCheck, setEditCheck] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const consentRef = useRef<HTMLInputElement>(null);
 
@@ -107,6 +109,9 @@ export default function DriverPage() {
 
   if (!d) return <ErrorBox error={error} />;
   const info = KYC_DOC_INFO[docType];
+  // A new mobile number is confirmed by the driver's code (founder, 1 Nov 2026).
+  const phoneChanged =
+    draft.phone.replace(/\D/g, '').slice(-10) !== d.phone.replace(/\D/g, '').slice(-10);
 
   const upload = (acknowledge = false) => {
     const file = fileRef.current?.files?.[0];
@@ -143,6 +148,7 @@ export default function DriverPage() {
             <button
               onClick={() => {
                 setDraft(driverDraft(d));
+                setEditCheck(null);
                 open('edit');
               }}
             >
@@ -180,8 +186,9 @@ export default function DriverPage() {
       )}
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+        <OnboardingCard d={d} onChange={setData} />
         <div className="card">
-          <h2>Ready for an agreement?</h2>
+          <h2>Checklist for approval</h2>
           <p>
             {d.readiness.ready ? (
               <span className="badge active">Ready</span>
@@ -200,7 +207,7 @@ export default function DriverPage() {
               ))}
           </ul>
         </div>
-        {can('agreements.read') && <DriverAgreements driverId={d.id} ready={d.readiness.ready} />}
+        {can('agreements.read') && <DriverAgreements driverId={d.id} />}
         <div className="card">
           <h2>Details</h2>
           <dl className="kv">
@@ -492,13 +499,26 @@ export default function DriverPage() {
           onSubmit={(e) => {
             e.preventDefault();
             void act(
-              () => api.patch<DriverDetail>(`/v1/drivers/${id}`, driverPayload(draft)),
+              () =>
+                api.patch<DriverDetail>(`/v1/drivers/${id}`, {
+                  ...driverPayload(draft),
+                  phoneCheckId: phoneChanged ? (editCheck ?? undefined) : undefined,
+                }),
               'Saved.',
             );
           }}
         >
           <ErrorBox error={actionError} />
           <DriverFields value={draft} onChange={setDraft} />
+          {phoneChanged && (
+            <PhoneCheck
+              phone={draft.phone}
+              language={draft.language}
+              name={draft.name}
+              checkId={editCheck}
+              onChange={setEditCheck}
+            />
+          )}
           {dups && (
             <DuplicateWarning
               matches={dups}
@@ -508,6 +528,7 @@ export default function DriverPage() {
                   () =>
                     api.patch<DriverDetail>(`/v1/drivers/${id}`, {
                       ...driverPayload(draft),
+                      phoneCheckId: phoneChanged ? (editCheck ?? undefined) : undefined,
                       acknowledgeDuplicates: true,
                     }),
                   'Saved.',
@@ -691,14 +712,11 @@ export default function DriverPage() {
   );
 }
 
-function DriverAgreements({ driverId, ready }: { driverId: string; ready: boolean }) {
-  const { api, can } = useSession();
+function DriverAgreements({ driverId }: { driverId: string }) {
+  const { api } = useSession();
   const list = useLoad(
     () => api.get<Paged<AgreementListRow>>(`/v1/agreements?driverId=${driverId}`),
     [api, driverId],
-  );
-  const open = list.data?.items.filter(
-    (a) => !['CLOSED', 'TRANSFERRED', 'CANCELLED'].includes(a.state),
   );
   return (
     <div className="card">
@@ -718,19 +736,6 @@ function DriverAgreements({ driverId, ready }: { driverId: string; ready: boolea
           </li>
         ))}
       </ul>
-      {can('agreements.manage') && open?.length === 0 && (
-        <p style={{ marginTop: 10 }}>
-          <Link href={`/agreements/new?driverId=${driverId}`} className="button">
-            Start an agreement
-          </Link>
-          {!ready && (
-            <span className="muted" style={{ fontSize: 13 }}>
-              {' '}
-              (a draft is possible; signing needs the checklist complete)
-            </span>
-          )}
-        </p>
-      )}
     </div>
   );
 }

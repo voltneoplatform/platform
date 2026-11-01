@@ -1,5 +1,6 @@
 import type {
   CollectionStage,
+  OnboardingStage,
   Role,
   TicketCategory,
   TicketChannel,
@@ -58,6 +59,8 @@ export interface BatteryRow {
   id: string;
   serial: string;
   gpsDeviceId: string | null;
+  /** In stock but held for an agreement not yet installed (founder, 1 Nov 2026). */
+  assignedTo: { agreementId: string; number: string; driverName: string } | null;
   batteryType: { id: string; name: string };
   status: string;
   holder: string;
@@ -216,6 +219,36 @@ export interface DriverDetail {
   documents: KycDoc[];
   readiness: { ready: boolean; items: { item: string; done: boolean; applies: boolean }[] };
   duplicates: { kind: string; driverId: string; driverName: string; detail: string }[];
+  onboarding: Onboarding;
+}
+
+export interface PlanRef {
+  id: string;
+  code: string;
+  names: { en: string; bn: string; hi: string };
+}
+
+/** Founder, 1 Nov 2026: OTP and location at registration, plan, final approval. */
+export interface Onboarding {
+  stage: OnboardingStage;
+  approval: 'AWAITING' | 'APPROVED' | 'REJECTED';
+  approvalReason: string | null;
+  approvedByName: string | null;
+  approvedAt: string | null;
+  plan: PlanRef | null;
+  phoneVerifiedAt: string | null;
+  phoneVerifiedByName: string | null;
+  consentVersion: string | null;
+  registeredByName: string | null;
+  registeredAt: { lat: number; lng: number; accuracyM: number | null } | null;
+  decisions: {
+    id: string;
+    decision: 'APPROVED' | 'REJECTED';
+    plan: PlanRef | null;
+    reason: string | null;
+    decidedByName: string | null;
+    decidedAt: string;
+  }[];
 }
 
 export interface DriverListRow {
@@ -229,6 +262,9 @@ export interface DriverListRow {
   ready: boolean;
   /** The agreement still in progress, if any. */
   agreement: { id: string; number: string; state: string } | null;
+  approval: 'AWAITING' | 'APPROVED' | 'REJECTED';
+  stage: OnboardingStage;
+  plan: PlanRef | null;
   itemsDone: number;
   itemsTotal: number;
   pendingDocuments: number;
@@ -316,7 +352,19 @@ export interface AgreementDetail {
     names: Record<Lang, string>;
   };
   batteryType: { id: string; name: string; voltage: string; capacityAh: string };
-  battery: { id: string; serial: string; gpsDeviceId: string | null } | null;
+  battery: { id: string; serial: string; gpsDeviceId: string | null; status: string } | null;
+  /** The battery changed after signing: the driver signs a corrected agreement first. */
+  resignRequired: boolean;
+  batteryChanges: {
+    id: string;
+    fromSerial: string | null;
+    toSerial: string | null;
+    reason: string;
+    afterSigning: boolean;
+    changedByName: string | null;
+    changedAt: string;
+    resigned: { signedAt: string; recordedByName: string | null; fileName: string } | null;
+  }[];
   terms: {
     downPayment: number;
     instalment: number;
@@ -383,6 +431,7 @@ export interface AgreementDetail {
     decidedByName: string | null;
     decidedAt: string | null;
     rejectedReason: string | null;
+    geotag: { lat: number; lng: number; accuracyM: number | null } | null;
   } | null;
   readiness: DriverDetail['readiness'] | null;
   pendingVariation: { id: string; summary: string; requestedById: string } | null;
@@ -394,6 +443,8 @@ export interface AgreementDetail {
     install: boolean;
     verifyInstallation: boolean;
     pay: boolean;
+    changeBattery: boolean;
+    resign: boolean;
   };
 }
 

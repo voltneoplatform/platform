@@ -12,7 +12,7 @@ import {
 import { useSession } from '@/lib/session';
 import type { DriverDetail, DriverListRow, Paged } from '@/lib/types';
 import { Forbidden } from '@/components/AppShell';
-import { AgreementStateBadge } from '@/components/AgreementBits';
+import { DriverStageBadge, PhoneCheck, PlanSelect } from '@/components/Onboarding';
 import {
   DriverFields,
   VehicleFields,
@@ -36,14 +36,14 @@ export default function DriversPage() {
   const { api, can } = useSession();
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const [readiness, setReadiness] = useState('');
+  const [stage, setStage] = useState('');
   const [page, setPage] = useState(1);
   const list = useLoad(() => {
     const q = new URLSearchParams({ page: String(page), limit: '50' });
     if (search.trim()) q.set('search', search.trim());
-    if (readiness) q.set('readiness', readiness);
+    if (stage) q.set('stage', stage);
     return api.get<Paged<DriverListRow>>(`/v1/drivers?${q}`);
-  }, [api, search, readiness, page]);
+  }, [api, search, stage, page]);
 
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(driverDraft());
@@ -52,8 +52,13 @@ export default function DriversPage() {
   const [saveError, setSaveError] = useState<unknown>(null);
   const [dups, setDups] = useState<DuplicateMatch[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [planId, setPlanId] = useState('');
+  const [phoneCheckId, setPhoneCheckId] = useState<string | null>(null);
+  const [checkedPhone, setCheckedPhone] = useState('');
 
   if (!can('drivers.read')) return <Forbidden />;
+  // The code confirms the number typed when it was sent (founder, 1 Nov 2026).
+  const phoneConfirmed = !!phoneCheckId && checkedPhone === draft.phone;
 
   async function save(acknowledge = false) {
     setSaving(true);
@@ -61,6 +66,8 @@ export default function DriversPage() {
     try {
       const d = await api.post<DriverDetail>('/v1/drivers', {
         ...driverPayload(draft),
+        planId: planId || undefined,
+        phoneCheckId: phoneCheckId ?? undefined,
         vehicle: withVehicle ? vehiclePayload(vehicle) : undefined,
         acknowledgeDuplicates: acknowledge || undefined,
       });
@@ -84,6 +91,8 @@ export default function DriversPage() {
           <button
             className="primary"
             onClick={() => {
+              setPlanId('');
+              setPhoneCheckId(null);
               setDraft(driverDraft());
               setVehicle(vehicleDraft());
               setSaveError(null);
@@ -107,16 +116,19 @@ export default function DriversPage() {
           aria-label="Search"
         />
         <select
-          value={readiness}
+          value={stage}
           onChange={(e) => {
-            setReadiness(e.target.value);
+            setStage(e.target.value);
             setPage(1);
           }}
           aria-label="Status"
         >
           <option value="">Any status</option>
-          <option value="ready">Ready for an agreement (none yet)</option>
-          <option value="not_ready">KYC incomplete</option>
+          <option value="PAPERWORK">Paperwork in progress</option>
+          <option value="AWAITING_APPROVAL">Awaiting approval</option>
+          <option value="REJECTED">Not approved</option>
+          <option value="APPROVED">Approved: assign a battery</option>
+          <option value="AGREEMENT">Agreement in progress</option>
         </select>
       </div>
       <div className="card table-wrap" style={{ padding: 0 }}>
@@ -170,22 +182,12 @@ export default function DriversPage() {
                 </td>
                 <td>{d.district}</td>
                 <td>
-                  {d.agreement ? (
-                    <>
-                      <AgreementStateBadge state={d.agreement.state} />
-                      <div className="muted" style={{ fontSize: 13 }}>
-                        <Link href={`/agreements/${d.agreement.id}`} className="mono">
-                          {d.agreement.number}
-                        </Link>
-                      </div>
-                    </>
-                  ) : d.ready ? (
-                    <span className="badge active">Ready to sign</span>
-                  ) : (
-                    <span className="badge warn">
-                      KYC {d.itemsDone} of {d.itemsTotal}
-                    </span>
-                  )}
+                  <DriverStageBadge
+                    stage={d.stage}
+                    agreement={d.agreement}
+                    itemsDone={d.itemsDone}
+                    itemsTotal={d.itemsTotal}
+                  />
                   {d.pendingDocuments > 0 && (
                     <div className="muted" style={{ fontSize: 13 }}>
                       {d.pendingDocuments} to check
@@ -211,6 +213,21 @@ export default function DriversPage() {
         >
           <ErrorBox error={saveError} />
           <DriverFields value={draft} onChange={setDraft} />
+          <div className="field">
+            <label htmlFor="reg-plan">Plan</label>
+            <PlanSelect id="reg-plan" value={planId} onChange={setPlanId} required />
+            <p className="hint">Head office can change it at final approval.</p>
+          </div>
+          <PhoneCheck
+            phone={draft.phone}
+            language={draft.language}
+            name={draft.name}
+            checkId={phoneConfirmed ? phoneCheckId : null}
+            onChange={(c) => {
+              setPhoneCheckId(c);
+              setCheckedPhone(draft.phone);
+            }}
+          />
           <h3 style={{ fontSize: 15, margin: '4px 0 10px' }}>Vehicle</h3>
           <label className="checkbox" style={{ marginBottom: 12 }}>
             <input
@@ -228,7 +245,7 @@ export default function DriversPage() {
             <button type="button" onClick={() => setOpen(false)}>
               Cancel
             </button>
-            <button className="primary" type="submit" disabled={saving}>
+            <button className="primary" type="submit" disabled={saving || !phoneConfirmed}>
               {saving ? 'Saving…' : 'Register'}
             </button>
           </div>

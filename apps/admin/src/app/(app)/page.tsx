@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ROLE_LABELS, type Permission } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
-import type { ApprovalRow } from '@/lib/types';
+import type { ApprovalRow, DriverListRow, Paged } from '@/lib/types';
 import { formatDate, useLoad } from '@/components/ui';
 import { Dashboard } from '@/components/Dashboard';
 
@@ -34,7 +34,7 @@ const CARDS: { href: string; title: string; text: string; permission: Permission
   {
     href: '/inventory',
     title: 'Inventory',
-    text: 'Every battery by serial and GPS ID, where it is and who holds it.',
+    text: 'Every battery by serial and IMEI, where it is and who holds it.',
     permission: 'batteries.read',
   },
   {
@@ -79,6 +79,20 @@ export default function HomePage() {
         : Promise.resolve([] as PendingInstallation[]),
     [api],
   );
+  const toApprove = useLoad(
+    () =>
+      can('drivers.approve')
+        ? api.get<Paged<DriverListRow>>('/v1/drivers?stage=AWAITING_APPROVAL&limit=50')
+        : Promise.resolve(null),
+    [api],
+  );
+  const toAssign = useLoad(
+    () =>
+      can('agreements.manage')
+        ? api.get<Paged<DriverListRow>>('/v1/drivers?stage=APPROVED&limit=50')
+        : Promise.resolve(null),
+    [api],
+  );
   if (!staff) return null;
   const waitingForMe = approvals.data?.filter((a) => a.canDecide).length ?? 0;
   return (
@@ -96,6 +110,43 @@ export default function HomePage() {
             {waitingForMe} request{waitingForMe === 1 ? '' : 's'} waiting for your approval.
           </strong>{' '}
           <Link href="/approvals">Review now</Link>
+        </div>
+      )}
+
+      {(toApprove.data?.items.length ?? 0) > 0 && (
+        <div className="card">
+          <h2>Drivers to approve ({toApprove.data!.total})</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Every document is verified. Check the details and the plan, then approve or say why not.
+          </p>
+          <ul className="timeline">
+            {toApprove.data!.items.map((d) => (
+              <li key={d.id}>
+                <Link href={`/drivers/${d.id}`}>{d.name}</Link>{' '}
+                <span className="muted" style={{ fontSize: 13 }}>
+                  <span className="mono">{d.phone}</span> · {d.district}
+                  {d.plan ? ` · ${d.plan.names.en}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(toAssign.data?.items.length ?? 0) > 0 && (
+        <div className="card">
+          <h2>Approved drivers waiting for a battery ({toAssign.data!.total})</h2>
+          <ul className="timeline">
+            {toAssign.data!.items.map((d) => (
+              <li key={d.id}>
+                <Link href={`/agreements/new?driverId=${d.id}`}>{d.name}</Link>{' '}
+                <span className="muted" style={{ fontSize: 13 }}>
+                  <span className="mono">{d.phone}</span>
+                  {d.plan ? ` · ${d.plan.names.en}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

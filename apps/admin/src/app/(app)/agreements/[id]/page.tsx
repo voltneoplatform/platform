@@ -7,6 +7,7 @@ import {
   DRIVER_LANGUAGE_LABELS,
   PAYMENT_METHOD_LABELS,
   READINESS_LABELS,
+  mapLink,
   ROLE_LABELS,
   VEHICLE_TYPE_LABELS,
   formatRupees,
@@ -20,7 +21,6 @@ import {
 import { useSession } from '@/lib/session';
 import type {
   AgreementDetail,
-  AgreementOption,
   BatteryRow,
   Lang,
   Paged,
@@ -44,7 +44,8 @@ import { AutopayCard } from '@/components/AutopayCard';
 import { AgreementTickets } from '@/components/TicketBits';
 import { ErrorBox, Modal, Money, formatDate, useLoad } from '@/components/ui';
 
-type Dialog = 'none' | 'edit' | 'sign' | 'cancel' | 'pay' | 'install' | 'reschedule';
+type Dialog =
+  'none' | 'edit' | 'sign' | 'cancel' | 'pay' | 'install' | 'reschedule' | 'battery' | 'resign';
 const LANGS: Lang[] = ['BN', 'HI', 'EN'];
 
 function todayIst(): string {
@@ -139,7 +140,15 @@ export default function AgreementPage() {
               Record installation
             </button>
           )}
+          {a.allowed.resign && manage && (
+            <button className="primary" onClick={() => open('resign')}>
+              Record corrected agreement
+            </button>
+          )}
           {a.allowed.edit && manage && <button onClick={() => open('edit')}>Edit draft</button>}
+          {a.allowed.changeBattery && manage && (
+            <button onClick={() => open('battery')}>Change battery</button>
+          )}
           {a.allowed.reschedule && manage && can('approvals.request') && !a.pendingVariation && (
             <button onClick={() => open('reschedule')}>Move first due date</button>
           )}
@@ -152,6 +161,13 @@ export default function AgreementPage() {
       </div>
       {message && <div className="alert success">{message}</div>}
       {dialog === 'none' && <ErrorBox error={actionError} />}
+      {a.resignRequired && (
+        <div className="alert warn">
+          <strong>The battery was changed after signing.</strong> Print the agreement again (it
+          shows the new serial number and IMEI), have the driver sign it, and record the corrected
+          agreement before installation.
+        </div>
+      )}
       {a.state === 'DRAFT' && a.readiness && !a.readiness.ready && (
         <div className="alert warn">
           <strong>The driver is not ready to sign.</strong> Still needed:{' '}
@@ -279,10 +295,28 @@ export default function AgreementPage() {
                   {a.battery.serial}
                 </Link>
               ) : (
-                <span className="muted">Assigned at installation</span>
+                <span className="muted">Not assigned</span>
               )}
               {a.battery?.gpsDeviceId && (
                 <span className="muted mono"> · IMEI {a.battery.gpsDeviceId}</span>
+              )}
+              {a.batteryChanges.length > 0 && (
+                <ul className="timeline" style={{ marginTop: 6 }}>
+                  {a.batteryChanges.map((c) => (
+                    <li key={c.id} style={{ fontSize: 13 }}>
+                      Changed from <span className="mono">{c.fromSerial}</span> to{' '}
+                      <span className="mono">{c.toSerial}</span>
+                      {c.afterSigning ? ' after signing' : ''}: {c.reason}
+                      <div className="muted">
+                        {c.changedByName ?? '—'} · {formatDate(c.changedAt, true)}
+                        {c.afterSigning &&
+                          (c.resigned
+                            ? ` · corrected agreement signed ${formatDate(c.resigned.signedAt, true)}`
+                            : ' · corrected agreement not yet signed')}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </dd>
             <dt>Down payment</dt>
@@ -449,6 +483,20 @@ export default function AgreementPage() {
             <dt>Installed</dt>
             <dd>
               {formatDate(a.installation.installedAt, true)} at {a.installation.location}
+              {a.installation.geotag && (
+                <>
+                  {' · '}
+                  <a href={mapLink(a.installation.geotag)} target="_blank" rel="noreferrer">
+                    Location on map
+                  </a>
+                  {a.installation.geotag.accuracyM !== null && (
+                    <span className="muted">
+                      {' '}
+                      (±{Math.round(a.installation.geotag.accuracyM)} m)
+                    </span>
+                  )}
+                </>
+              )}
             </dd>
             <dt>Installed by</dt>
             <dd>{a.installation.technicianName}</dd>
@@ -700,6 +748,44 @@ export default function AgreementPage() {
         />
       </Modal>
 
+      <Modal
+        open={dialog === 'battery'}
+        onClose={() => setDialog('none')}
+        title="Change the battery"
+        wide
+      >
+        <BatteryChangeForm
+          a={a}
+          busy={busy}
+          error={actionError}
+          onSubmit={(body) =>
+            act(
+              () => api.post<AgreementDetail>(`/v1/agreements/${a.id}/battery`, body),
+              a.state === 'DRAFT'
+                ? 'Battery changed. Print the agreement again before signing.'
+                : 'Battery changed. The driver must sign the corrected agreement before installation.',
+            )
+          }
+        />
+      </Modal>
+
+      <Modal
+        open={dialog === 'resign'}
+        onClose={() => setDialog('none')}
+        title="Record the corrected agreement"
+      >
+        <ResignForm
+          busy={busy}
+          error={actionError}
+          onSubmit={(form) =>
+            act(
+              () => api.upload<AgreementDetail>(`/v1/agreements/${a.id}/resign`, form),
+              'Corrected agreement recorded. The battery can be installed.',
+            )
+          }
+        />
+      </Modal>
+
       <Modal open={dialog === 'edit'} onClose={() => setDialog('none')} title="Edit draft" wide>
         <EditForm
           a={a}
@@ -921,17 +1007,8 @@ function InstallForm({
   error: unknown;
   onSubmit: (form: FormData) => void;
 }) {
-  const { api } = useSession();
-  const batteries = useLoad(
-    () =>
-      api.get<Paged<BatteryRow>>(
-        `/v1/batteries?${new URLSearchParams({ status: 'IN_STOCK', batteryTypeId: a.batteryType.id, limit: '200' })}`,
-      ),
-    [api, a.batteryType.id],
-  );
   const technicians = staff.filter((s) => hasPermission(s.role, 'installations.record'));
   const photos = useRef<HTMLInputElement>(null);
-  const [batteryId, setBatteryId] = useState('');
   const [technicianId, setTechnicianId] = useState('');
   const [installedAt, setInstalledAt] = useState(nowLocal());
   const [location, setLocation] = useState('');
@@ -939,7 +1016,6 @@ function InstallForm({
   const [readings, setReadings] = useState('');
   const [condition, setCondition] = useState('');
   const [confirmed, setConfirmed] = useState(false);
-  const usable = (batteries.data?.items ?? []).filter((b) => b.gpsDeviceId);
   return (
     <form
       onSubmit={(e) => {
@@ -947,7 +1023,6 @@ function InstallForm({
         const files = photos.current?.files;
         if (!files?.length) return;
         const form = new FormData();
-        form.set('batteryId', batteryId);
         form.set('technicianId', technicianId);
         form.set('installedAt', localToIso(installedAt));
         form.set('location', location);
@@ -960,28 +1035,12 @@ function InstallForm({
       }}
     >
       <p className="muted">
-        The technician&apos;s record for Schedule 3. The battery must be in stock, of type{' '}
-        {a.batteryType.name}, with its IMEI recorded.
+        The technician&apos;s record for Schedule 3. Fit the battery assigned in the agreement:{' '}
+        <strong className="mono">{a.battery?.serial}</strong>, IMEI{' '}
+        <span className="mono">{a.battery?.gpsDeviceId}</span>. Check the serial number on the
+        battery before fitting it.
       </p>
-      <ErrorBox error={batteries.error} />
       <div className="form-grid">
-        <div className="field">
-          <label htmlFor="inst-battery">Battery</label>
-          <select
-            id="inst-battery"
-            required
-            value={batteryId}
-            onChange={(e) => setBatteryId(e.target.value)}
-          >
-            <option value="">{usable.length ? 'Choose a battery' : 'None in stock'}</option>
-            {usable.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.serial} · IMEI {b.gpsDeviceId}
-                {b.location ? ` · ${b.location}` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="field">
           <label htmlFor="inst-tech">Technician</label>
           <select
@@ -1077,58 +1136,22 @@ function EditForm({
   error: unknown;
   onSubmit: (body: Record<string, unknown>) => void;
 }) {
-  const { api } = useSession();
-  const options = useLoad(() => api.get<AgreementOption[]>('/v1/agreements/options'), [api]);
-  const [planVersionId, setPlanVersionId] = useState(a.plan.planVersionId);
-  const [batteryTypeId, setBatteryTypeId] = useState(a.batteryType.id);
   const [dueDay, setDueDay] = useState<DueDay>(a.terms.dueDay as DueDay);
   const [firstDueDate, setFirstDueDate] = useState(a.terms.firstDueDate);
   const [notes, setNotes] = useState(a.notes ?? '');
-  const version = options.data?.find((o) => o.planVersionId === planVersionId);
-  const prices = (version?.prices ?? []).filter((p) =>
-    p.compatibleVehicles.includes(a.vehicle.type),
-  );
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ planVersionId, batteryTypeId, dueDay, firstDueDate, notes: notes || null });
+        onSubmit({ dueDay, firstDueDate, notes: notes || null });
       }}
     >
       <p className="muted">
-        Saving also picks up the driver&apos;s current vehicle and the current prices.
+        Saving also picks up the driver&apos;s current vehicle and the current prices of the
+        approved plan. The plan is changed at the driver&apos;s final approval; the battery with
+        Change battery.
       </p>
       <div className="form-grid">
-        <div className="field">
-          <label htmlFor="e-plan">Plan</label>
-          <select
-            id="e-plan"
-            value={planVersionId}
-            onChange={(e) => setPlanVersionId(e.target.value)}
-          >
-            {!version && <option value={planVersionId}>Current (no longer offered)</option>}
-            {options.data?.map((o) => (
-              <option key={o.planVersionId} value={o.planVersionId}>
-                {o.names.EN} ({o.planCode} v{o.version})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="e-type">Battery type</label>
-          <select
-            id="e-type"
-            value={batteryTypeId}
-            onChange={(e) => setBatteryTypeId(e.target.value)}
-          >
-            {prices.map((p) => (
-              <option key={p.batteryTypeId} value={p.batteryTypeId}>
-                {p.batteryTypeName} · {formatRupees(p.downPayment)} + {version?.termMonths} ×{' '}
-                {formatRupees(p.instalment)}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="field">
           <label htmlFor="e-day">Monthly due day</label>
           <select
@@ -1259,6 +1282,141 @@ function ReasonForm({
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button type="submit" className="danger" disabled={busy}>
           {action}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Founder, 1 Nov 2026: the assigned battery can change until it is installed. */
+function BatteryChangeForm({
+  a,
+  busy,
+  error,
+  onSubmit,
+}: {
+  a: AgreementDetail;
+  busy: boolean;
+  error: unknown;
+  onSubmit: (body: { batteryId: string; reason: string }) => void;
+}) {
+  const { api } = useSession();
+  const signed = a.state !== 'DRAFT';
+  const stock = useLoad(
+    () =>
+      api.get<Paged<BatteryRow>>(
+        `/v1/batteries?${new URLSearchParams({
+          available: 'true',
+          limit: '200',
+          ...(signed ? { batteryTypeId: a.batteryType.id } : {}),
+        })}`,
+      ),
+    [api, signed, a.batteryType.id],
+  );
+  const [batteryId, setBatteryId] = useState('');
+  const [reason, setReason] = useState('');
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({ batteryId, reason });
+      }}
+    >
+      <p className="muted">
+        {signed
+          ? `The agreement is signed, so the new battery must be a ${a.batteryType.name} (same price). The driver then signs the corrected agreement before installation.`
+          : 'The draft is reprinted with the new battery; if its type differs, the figures follow the plan price for that type.'}
+      </p>
+      <ErrorBox error={stock.error} />
+      <div className="field">
+        <label htmlFor="cb-battery">New battery</label>
+        <select
+          id="cb-battery"
+          required
+          value={batteryId}
+          onChange={(e) => setBatteryId(e.target.value)}
+        >
+          <option value="">
+            {stock.data?.items.length ? 'Choose a battery' : 'No suitable battery in stock'}
+          </option>
+          {stock.data?.items.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.serial} · IMEI {b.gpsDeviceId} · {b.batteryType.name}
+              {b.location ? ` · ${b.location}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="cb-reason">Why</label>
+        <input
+          id="cb-reason"
+          required
+          minLength={5}
+          maxLength={300}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </div>
+      <ErrorBox error={error} />
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <button type="submit" className="primary" disabled={busy || !batteryId}>
+          {busy ? 'Saving…' : 'Change battery'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** The corrected agreement the driver signed after the battery changed. */
+function ResignForm({
+  busy,
+  error,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: unknown;
+  onSubmit: (form: FormData) => void;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [signedAt, setSignedAt] = useState(nowLocal());
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!files.length) return;
+        const form = new FormData();
+        form.set('signedAt', localToIso(signedAt));
+        for (const f of files) form.append('files', f);
+        onSubmit(form);
+      }}
+    >
+      <div className="field">
+        <label htmlFor="rs-at">Signed at</label>
+        <input
+          id="rs-at"
+          type="datetime-local"
+          required
+          value={signedAt}
+          max={nowLocal()}
+          onChange={(e) => setSignedAt(e.target.value)}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="rs-file">Scan (one PDF) or photos of every page</label>
+        <input
+          id="rs-file"
+          type="file"
+          accept="application/pdf,image/jpeg,image/png"
+          multiple
+          required
+          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+        />
+      </div>
+      <ErrorBox error={error} />
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <button type="submit" className="primary" disabled={busy || !files.length}>
+          {busy ? 'Saving…' : 'Record corrected agreement'}
         </button>
       </div>
     </form>
