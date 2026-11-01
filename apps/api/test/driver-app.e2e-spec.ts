@@ -53,6 +53,7 @@ describe('Driver App (M6)', () => {
     it('sends a code only to drivers with a signed agreement, and never says which numbers exist', async () => {
       await ctx.http.post('/v1/driver-auth/code/request').send({ phone: '9000000001' }).expect(202);
       const unsigned = await makeDriver(ctx, ops.token);
+      codes.sent.length = 0; // the registration code sent while registering
       await ctx.http
         .post('/v1/driver-auth/code/request')
         .send({ phone: unsigned.phone })

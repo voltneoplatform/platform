@@ -67,6 +67,8 @@ function sample(key: DltKey, lang: Lang): string {
       });
     case 'sign_in_code':
       return t.signInCodeSms({ code: '482913', minutes: '5' });
+    case 'registration_code':
+      return t.registrationCodeSms({ code: '482913', minutes: '10' });
   }
 }
 
@@ -104,6 +106,7 @@ describe('DLT templates', () => {
       'ticket_resolved',
       'payment_link',
       'sign_in_code',
+      'registration_code',
     ]) {
       expect(dltKeyFor(t)).not.toBeNull();
     }

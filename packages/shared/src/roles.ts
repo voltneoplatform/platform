@@ -65,6 +65,8 @@ export const PERMISSIONS = [
   'kyc.view_full',
   /** Mark KYC documents verified or rejected. */
   'kyc.verify',
+  /** Final approval of a driver's onboarding, and the plan (founder, 1 Nov 2026). */
+  'drivers.approve',
   // Modules 6-7: agreements and installation
   'agreements.read',
   'agreements.manage',
@@ -123,6 +125,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'batteries.manage',
     'plans.manage',
     'drivers.manage',
+    'drivers.approve',
     'agreements.manage',
     'installations.record',
     'installations.verify',
@@ -137,6 +140,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'collections.assign',
     'batteries.manage',
     'drivers.manage',
+    'drivers.approve',
     'kyc.view_full',
     'kyc.verify',
     'agreements.manage',

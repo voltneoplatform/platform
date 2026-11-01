@@ -50,6 +50,15 @@ describe('role permissions (spec section 2)', () => {
     }
   });
 
+  it('leaves the final approval of a driver to head office', () => {
+    for (const r of ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'PLAN_MANAGER'] as const) {
+      expect(hasPermission(r, 'drivers.approve')).toBe(true);
+    }
+    for (const r of ['FIELD_AGENT', 'TECHNICIAN', 'FINANCE', 'SUPPORT'] as const) {
+      expect(hasPermission(r, 'drivers.approve')).toBe(false);
+    }
+  });
+
   it('stops operations managers editing payments', () => {
     expect(hasPermission('OPERATIONS_MANAGER', 'payments.record')).toBe(false);
   });

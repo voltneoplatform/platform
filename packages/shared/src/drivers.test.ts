@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   ageOn,
+  geotagProblem,
+  mapLink,
+  onboardingStage,
   docNumberProblem,
   maskDocNumber,
   normaliseRegistration,
@@ -51,6 +54,8 @@ describe('vehicles and batteries', () => {
 
 describe('driver readiness checklist', () => {
   const complete: ReadinessInput = {
+    phoneVerified: true,
+    planChosen: true,
     dateOfBirth: '1990-05-01',
     today: '2026-10-23',
     nomineeRecorded: true,
@@ -113,5 +118,33 @@ describe('driver readiness checklist', () => {
     expect(ageOn('2008-10-24', '2026-10-23')).toBe(17);
     expect(ageOn('2008-10-23', '2026-10-23')).toBe(18);
     expect(readiness({ ...complete, dateOfBirth: '2008-10-24' }).ready).toBe(false);
+  });
+
+  it('needs the OTP and a plan (founder, 1 Nov 2026)', () => {
+    expect(readiness({ ...complete, phoneVerified: false }).ready).toBe(false);
+    expect(readiness({ ...complete, planChosen: false }).ready).toBe(false);
+  });
+});
+
+describe('onboarding', () => {
+  it('moves from paperwork to approval to agreement', () => {
+    const s = (ready: boolean, approval: 'AWAITING' | 'APPROVED' | 'REJECTED', open = false) =>
+      onboardingStage({ ready, approval, hasOpenAgreement: open });
+    expect(s(false, 'AWAITING')).toBe('PAPERWORK');
+    expect(s(true, 'AWAITING')).toBe('AWAITING_APPROVAL');
+    expect(s(true, 'REJECTED')).toBe('REJECTED');
+    expect(s(false, 'REJECTED')).toBe('REJECTED');
+    expect(s(true, 'APPROVED')).toBe('APPROVED');
+    expect(s(true, 'APPROVED', true)).toBe('AGREEMENT');
+  });
+
+  it('accepts only a usable geotag', () => {
+    expect(geotagProblem({ lat: 22.57, lng: 88.36, accuracyM: 12 })).toBeNull();
+    expect(geotagProblem(null)).toMatch(/missing/);
+    expect(geotagProblem({ lat: 95, lng: 88, accuracyM: 5 })).toMatch(/not valid/);
+    expect(geotagProblem({ lat: 22.57, lng: 88.36, accuracyM: 900 })).toMatch(/too rough/);
+    expect(mapLink({ lat: 22.5726, lng: 88.3639 })).toBe(
+      'https://www.google.com/maps?q=22.572600,88.363900',
+    );
   });
 });

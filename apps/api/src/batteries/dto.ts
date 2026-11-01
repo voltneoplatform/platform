@@ -5,6 +5,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -137,6 +138,13 @@ export class RetireBatteryDto {
 export class ListBatteriesQuery {
   @IsOptional() @IsUUID() batteryTypeId?: string;
   @IsOptional() @IsIn(BATTERY_STATUSES) status?: BatteryStatus;
+  @ApiPropertyOptional({
+    description: 'Only batteries that can be assigned: in stock, with an IMEI, not held',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  available?: boolean;
   @IsOptional() @Transform(trim) @IsString() @MaxLength(60) search?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;

@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import {
   AGREEMENT_DOCUMENT_VERSION,
+  HEAD_OFFICE_ROLES,
+  OPEN_AGREEMENT_STATES,
   PAYABLE_STATES,
+  geotagProblem,
   addMonths,
   agreementNumber,
   buildSchedule,
@@ -52,6 +55,8 @@ import {
   type Tx,
 } from '../common/util';
 import type {
+  ChangeBatteryDto,
+  ResignAgreementDto,
   CancelAgreementDto,
   CreateAgreementDto,
   InstallationDto,
@@ -107,7 +112,11 @@ const fullInclude = {
   lateFees: { orderBy: { accrualDate: 'asc' } },
   events: { orderBy: { at: 'asc' } },
   installations: { include: { photos: true, decision: true }, orderBy: { createdAt: 'desc' } },
+  batteryChanges: { include: { resigning: true }, orderBy: { changedAt: 'desc' } },
 } satisfies Prisma.AgreementInclude;
+
+/** States in which the assigned battery can still be changed (founder, 1 Nov 2026: until installed). */
+const BATTERY_CHANGE_STATES = ['DRAFT', 'AWAITING_DOWN_PAYMENT', 'AWAITING_INSTALLATION'];
 
 type AgreementFull = Prisma.AgreementGetPayload<{ include: typeof fullInclude }>;
 
@@ -216,9 +225,12 @@ export class AgreementsService implements OnModuleInit {
     return {
       edit: a.state === 'DRAFT',
       sign: a.state === 'DRAFT',
+      changeBattery: BATTERY_CHANGE_STATES.includes(a.state) && !installWaiting,
+      /** The battery changed after signing: upload the corrected agreement the driver signed. */
+      resign: a.resignRequired,
       cancel: a.state === 'DRAFT' || (a.state === 'AWAITING_DOWN_PAYMENT' && !hasPayments),
       reschedule: a.state === 'AWAITING_DOWN_PAYMENT' || a.state === 'AWAITING_INSTALLATION',
-      install: a.state === 'AWAITING_INSTALLATION' && !installWaiting,
+      install: a.state === 'AWAITING_INSTALLATION' && !installWaiting && !a.resignRequired,
       verifyInstallation: a.state === 'AWAITING_INSTALLATION' && installWaiting,
       pay: (PAYABLE_STATES as readonly string[]).includes(a.state),
     };
@@ -309,6 +321,7 @@ export class AgreementsService implements OnModuleInit {
         installation?.technicianId,
         installation?.recordedById,
         installation?.decision?.decidedById,
+        ...a.batteryChanges.flatMap((c) => [c.changedById, c.resigning?.recordedById]),
       ]),
       this.prisma.payment.count({ where: { agreementId: id } }),
       this.prisma.approvalRequest.findFirst({
@@ -360,8 +373,15 @@ export class AgreementsService implements OnModuleInit {
         capacityAh: a.batteryType.capacityAh.toString(),
       },
       battery: a.battery
-        ? { id: a.battery.id, serial: a.battery.serial, gpsDeviceId: a.battery.gpsDeviceId }
+        ? {
+            id: a.battery.id,
+            serial: a.battery.serial,
+            gpsDeviceId: a.battery.gpsDeviceId,
+            status: a.battery.status,
+          }
         : null,
+      resignRequired: a.resignRequired,
+      batteryChanges: await this.batteryChangeViews(a, names),
       terms: {
         downPayment: a.downPayment,
         instalment: a.instalment,
@@ -441,6 +461,14 @@ export class AgreementsService implements OnModuleInit {
               : null,
             decidedAt: installation.decision?.decidedAt ?? null,
             rejectedReason: installation.decision?.reason ?? null,
+            geotag:
+              installation.geoLat !== null && installation.geoLng !== null
+                ? {
+                    lat: installation.geoLat,
+                    lng: installation.geoLng,
+                    accuracyM: installation.geoAccuracyM,
+                  }
+                : null,
             photos: installation.photos.map((p) => ({ id: p.id, fileName: p.fileName })),
           }
         : null,
@@ -577,16 +605,82 @@ export class AgreementsService implements OnModuleInit {
     });
   }
 
+  /**
+   * A battery that can be assigned to an agreement: in stock, with its IMEI,
+   * and not held for another agreement or in a waiting installation.
+   */
+  private async assignableBattery(tx: Tx, batteryId: string, agreementId?: string) {
+    const battery = await tx.battery.findUnique({ where: { id: batteryId } });
+    if (!battery) throw new NotFoundException('Battery not found');
+    if (battery.status !== 'IN_STOCK') {
+      throw new ConflictException(`Battery ${battery.serial} is not in stock`);
+    }
+    if (!battery.gpsDeviceId) {
+      throw new UnprocessableEntityException(
+        `Battery ${battery.serial} has no IMEI recorded. Add the GPS device's IMEI first.`,
+      );
+    }
+    const held = await tx.agreement.findFirst({
+      where: {
+        batteryId,
+        state: { in: [...OPEN_AGREEMENT_STATES] },
+        ...(agreementId ? { id: { not: agreementId } } : {}),
+      },
+      select: { number: true },
+    });
+    if (held) {
+      throw new ConflictException(
+        `Battery ${battery.serial} is already assigned to agreement ${held.number}`,
+      );
+    }
+    if (await this.pendingInstallation(tx, { batteryId })) {
+      throw new ConflictException(
+        `Battery ${battery.serial} is in an installation waiting for verification`,
+      );
+    }
+    return battery;
+  }
+
+  /** The approved driver and the current published version of their approved plan. */
+  private async approvedDriverPlan(tx: Tx, driverId: string) {
+    const driver = await tx.driver.findUnique({ where: { id: driverId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+    if (driver.status !== 'ACTIVE') {
+      throw new UnprocessableEntityException('This driver is marked inactive');
+    }
+    if (driver.approval !== 'APPROVED' || !driver.planId) {
+      throw new UnprocessableEntityException({
+        message: 'Head office must give the driver final approval before a battery is assigned',
+        code: 'NOT_APPROVED',
+      });
+    }
+    const version = await tx.planVersion.findFirst({
+      where: { planId: driver.planId, status: 'PUBLISHED', plan: { status: 'ACTIVE' } },
+    });
+    if (!version) {
+      throw new UnprocessableEntityException(
+        "The driver's approved plan is no longer on offer. Approve the driver on another plan.",
+      );
+    }
+    return { driver, versionId: version.id };
+  }
+
+  /**
+   * Founder, 1 Nov 2026: head office assigns a battery to an approved driver,
+   * and the agreement is prepared on the driver's approved plan with that
+   * battery's serial number and IMEI.
+   */
   async create(dto: CreateAgreementDto, actor: AuthenticatedStaff, meta: RequestMeta) {
     this.checkFirstDue(dto.firstDueDate, dto.dueDay);
     const id = await serializable(this.prisma, async (tx) => {
-      const driver = await tx.driver.findUnique({ where: { id: dto.driverId } });
-      if (!driver) throw new NotFoundException('Driver not found');
-      if (driver.status !== 'ACTIVE') {
-        throw new UnprocessableEntityException('This driver is marked inactive');
-      }
+      const { driver, versionId } = await this.approvedDriverPlan(tx, dto.driverId);
       const vehicle = await this.currentVehicle(tx, driver.id);
-      const terms = await this.terms(tx, { ...dto, vehicleType: vehicle.type });
+      const battery = await this.assignableBattery(tx, dto.batteryId);
+      const terms = await this.terms(tx, {
+        planVersionId: versionId,
+        batteryTypeId: battery.batteryTypeId,
+        vehicleType: vehicle.type,
+      });
       const seq = await nextCounter(tx, 'agreement');
       let a: Agreement;
       try {
@@ -596,6 +690,7 @@ export class AgreementsService implements OnModuleInit {
             driverId: driver.id,
             vehicleId: vehicle.id,
             ...terms,
+            batteryId: battery.id,
             dueDay: dto.dueDay,
             firstDueDate: parseDateOnly(dto.firstDueDate),
             language: driver.language,
@@ -607,7 +702,12 @@ export class AgreementsService implements OnModuleInit {
       } catch (err) {
         openConflict(err);
       }
-      await this.event(tx, a.id, { event: 'CREATED', from: null, to: 'DRAFT' }, actor.id);
+      await this.event(
+        tx,
+        a.id,
+        { event: 'CREATED', from: null, to: 'DRAFT', reason: `Battery ${battery.serial} assigned` },
+        actor.id,
+      );
       await this.audit.record(
         {
           actorType: 'STAFF',
@@ -638,11 +738,12 @@ export class AgreementsService implements OnModuleInit {
       const dueDay = dto.dueDay ?? before.dueDay;
       const firstDueDate = dto.firstDueDate ?? dateOnly(before.firstDueDate)!;
       this.checkFirstDue(firstDueDate, dueDay);
-      // A draft always follows the driver's current vehicle and current prices.
+      // A draft always follows the driver's current vehicle, approved plan and current prices.
       const vehicle = await this.currentVehicle(tx, before.driverId);
+      const { versionId } = await this.approvedDriverPlan(tx, before.driverId);
       const terms = await this.terms(tx, {
-        planVersionId: dto.planVersionId ?? before.planVersionId,
-        batteryTypeId: dto.batteryTypeId ?? before.batteryTypeId,
+        planVersionId: versionId,
+        batteryTypeId: before.batteryTypeId,
         vehicleType: vehicle.type,
       });
       let after: Agreement;
@@ -763,6 +864,15 @@ export class AgreementsService implements OnModuleInit {
           readiness: ready,
         });
       }
+      if (driver!.approval !== 'APPROVED') {
+        throw new UnprocessableEntityException({
+          message: 'Head office must give the driver final approval before signing',
+          code: 'NOT_APPROVED',
+        });
+      }
+      if (!before.batteryId) {
+        throw new UnprocessableEntityException('Assign a battery before signing');
+      }
       const vehicle = await this.currentVehicle(tx, before.driverId);
       if (vehicle.id !== before.vehicleId) {
         throw new ConflictException(
@@ -871,11 +981,197 @@ export class AgreementsService implements OnModuleInit {
       ip: meta.ip,
       requestId: meta.requestId,
     });
-    return this.links.issue(
-      a.signedFileKey,
-      a.signedFileType ?? 'application/octet-stream',
-      a.signedFileName ?? 'signed-agreement',
-    );
+    const f = await this.currentSignedCopy(a);
+    return this.links.issue(f.key, f.type, f.name);
+  }
+
+  /** The signed copy in force: the latest corrected agreement after a battery change, if any. */
+  async currentSignedCopy(a: Agreement): Promise<{ key: string; type: string; name: string }> {
+    const latest = await this.prisma.agreementResigning.findFirst({
+      where: { agreementId: a.id },
+      orderBy: { recordedAt: 'desc' },
+    });
+    if (latest) return { key: latest.fileKey, type: latest.fileType, name: latest.fileName };
+    return {
+      key: a.signedFileKey!,
+      type: a.signedFileType ?? 'application/octet-stream',
+      name: a.signedFileName ?? 'signed-agreement',
+    };
+  }
+
+  private async batteryChangeViews(a: AgreementFull, names: Map<string, string>) {
+    if (!a.batteryChanges.length) return [];
+    const ids = [...new Set(a.batteryChanges.flatMap((c) => [c.fromBatteryId, c.toBatteryId]))];
+    const batteries = await this.prisma.battery.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, serial: true },
+    });
+    const serial = new Map(batteries.map((b) => [b.id, b.serial]));
+    return a.batteryChanges.map((c) => ({
+      id: c.id,
+      fromSerial: serial.get(c.fromBatteryId) ?? null,
+      toSerial: serial.get(c.toBatteryId) ?? null,
+      reason: c.reason,
+      afterSigning: c.afterSigning,
+      changedByName: names.get(c.changedById) ?? null,
+      changedAt: c.changedAt,
+      resigned: c.resigning
+        ? {
+            signedAt: c.resigning.signedAt,
+            recordedByName: names.get(c.resigning.recordedById) ?? null,
+            fileName: c.resigning.fileName,
+          }
+        : null,
+    }));
+  }
+
+  /**
+   * Changes the assigned battery before installation (founder, 1 Nov 2026).
+   * A draft can take any priced battery type (its figures follow). Once signed,
+   * the battery must be of the same type, and the driver signs a corrected
+   * agreement before installation.
+   */
+  async changeBattery(
+    id: string,
+    dto: ChangeBatteryDto,
+    actor: AuthenticatedStaff,
+    meta: RequestMeta,
+  ) {
+    await serializable(this.prisma, async (tx) => {
+      const before = await tx.agreement.findUnique({ where: { id } });
+      if (!before) throw new NotFoundException('Agreement not found');
+      if (!BATTERY_CHANGE_STATES.includes(before.state)) {
+        throw new ConflictException('The battery can only be changed before it is installed');
+      }
+      if (await this.pendingInstallation(tx, { agreementId: id })) {
+        throw new ConflictException(
+          'An installation is waiting for verification. Reject it before changing the battery.',
+        );
+      }
+      if (before.batteryId === dto.batteryId) {
+        throw new ConflictException('That battery is already assigned to this agreement');
+      }
+      const battery = await this.assignableBattery(tx, dto.batteryId, id);
+      const signed = before.state !== 'DRAFT';
+      let after: Agreement;
+      if (signed) {
+        if (battery.batteryTypeId !== before.batteryTypeId) {
+          throw new UnprocessableEntityException(
+            'A signed agreement keeps its battery type and price. Choose a battery of the same type, or cancel and prepare a new agreement.',
+          );
+        }
+        await tx.$executeRaw`SELECT set_config('voltneo.reassigning_battery_for', ${id}, true)`;
+        after = await tx.agreement.update({
+          where: { id },
+          data: { batteryId: battery.id, resignRequired: true },
+        });
+        await tx.$executeRaw`SELECT set_config('voltneo.reassigning_battery_for', '', true)`;
+      } else {
+        const vehicle = await this.currentVehicle(tx, before.driverId);
+        const { versionId } = await this.approvedDriverPlan(tx, before.driverId);
+        const terms = await this.terms(tx, {
+          planVersionId: versionId,
+          batteryTypeId: battery.batteryTypeId,
+          vehicleType: vehicle.type,
+        });
+        after = await tx.agreement.update({
+          where: { id },
+          data: { ...terms, batteryId: battery.id, vehicleId: vehicle.id },
+        });
+      }
+      if (before.batteryId) {
+        await tx.agreementBatteryChange.create({
+          data: {
+            agreementId: id,
+            fromBatteryId: before.batteryId,
+            toBatteryId: battery.id,
+            reason: dto.reason,
+            afterSigning: signed,
+            changedById: actor.id,
+          },
+        });
+      }
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'agreement.battery_change',
+          tableName: 'agreements',
+          recordId: id,
+          before,
+          after: { ...after, reason: dto.reason },
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  /** The corrected agreement the driver signed after the battery changed. */
+  async recordResigning(
+    id: string,
+    dto: ResignAgreementDto,
+    files: UploadedFile[] | undefined,
+    actor: AuthenticatedStaff,
+    meta: RequestMeta,
+  ) {
+    const signedAt = new Date(dto.signedAt);
+    if (signedAt.getTime() > Date.now() + 60_000) {
+      throw new BadRequestException('The signing time cannot be in the future');
+    }
+    const number = (
+      await this.prisma.agreement.findUnique({ where: { id }, select: { number: true } })
+    )?.number;
+    if (!number) throw new NotFoundException('Agreement not found');
+    const copy = await assembleSignedCopy(files, number);
+    const key = newFileKey('agreements', id, 'pdf');
+    let stored = false;
+    await serializable(this.prisma, async (tx) => {
+      const before = await tx.agreement.findUniqueOrThrow({ where: { id } });
+      if (!before.resignRequired) {
+        throw new ConflictException('No corrected agreement is needed for this agreement');
+      }
+      const change = await tx.agreementBatteryChange.findFirst({
+        where: { agreementId: id, afterSigning: true, resigning: { is: null } },
+        orderBy: { changedAt: 'desc' },
+      });
+      if (!change) throw new ConflictException('No battery change is waiting for signature');
+      if (signedAt.getTime() < change.changedAt.getTime() - MINUTE) {
+        throw new BadRequestException('The corrected agreement must be signed after the change');
+      }
+      if (!stored) {
+        await this.storage.put(key, copy.buffer, 'application/pdf');
+        stored = true;
+      }
+      await tx.agreementResigning.create({
+        data: {
+          agreementId: id,
+          batteryChangeId: change.id,
+          fileKey: key,
+          fileName: copy.name,
+          fileType: 'application/pdf',
+          signedAt,
+          recordedById: actor.id,
+        },
+      });
+      await tx.agreement.update({ where: { id }, data: { resignRequired: false } });
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'agreement.resign',
+          tableName: 'agreements',
+          recordId: id,
+          after: { batteryChangeId: change.id, signedAt, fileName: copy.name },
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
   }
 
   // ---------------------------------------------------------------------------
@@ -1079,7 +1375,11 @@ export class AgreementsService implements OnModuleInit {
         ownerName: a.vehicle.ownerName,
         ownerPhone: a.vehicle.ownerPhone,
       },
-      batteryDetail: { chemistry: a.batteryType.chemistry, serial: a.battery?.serial ?? null },
+      batteryDetail: {
+        chemistry: a.batteryType.chemistry,
+        serial: a.battery?.serial ?? null,
+        imei: a.battery?.gpsDeviceId ?? null,
+      },
       driverLanguage: a.language,
     });
     return { pdf, fileName: `${a.number}-agreement.pdf` };
@@ -1108,8 +1408,13 @@ export class AgreementsService implements OnModuleInit {
   private async installChecks(
     tx: Tx,
     before: Agreement,
-    input: { batteryId: string; technicianId: string; installedAt: Date },
+    input: { batteryId?: string; technicianId: string; installedAt: Date },
   ) {
+    if (before.resignRequired) {
+      throw new ConflictException(
+        'The battery was changed after signing. Upload the corrected agreement the driver signed first.',
+      );
+    }
     if (before.state !== 'AWAITING_INSTALLATION') {
       throw new ConflictException(
         before.state === 'AWAITING_DOWN_PAYMENT'
@@ -1132,8 +1437,17 @@ export class AgreementsService implements OnModuleInit {
         "The driver's vehicle changed after signing. Changing vehicle needs head office (clause C5).",
       );
     }
-    const battery = await tx.battery.findUnique({ where: { id: input.batteryId } });
+    // Founder, 1 Nov 2026: the battery assigned in the agreement is the one installed.
+    const batteryId = before.batteryId ?? input.batteryId;
+    if (!batteryId)
+      throw new UnprocessableEntityException('No battery is assigned to this agreement');
+    const battery = await tx.battery.findUnique({ where: { id: batteryId } });
     if (!battery) throw new NotFoundException('Battery not found');
+    if (input.batteryId && input.batteryId !== batteryId) {
+      throw new UnprocessableEntityException(
+        `Fit battery ${battery.serial}, the one assigned in this agreement`,
+      );
+    }
     if (battery.status !== 'IN_STOCK') {
       throw new ConflictException(`Battery ${battery.serial} is not in stock`);
     }
@@ -1144,7 +1458,7 @@ export class AgreementsService implements OnModuleInit {
     }
     if (!battery.gpsDeviceId) {
       throw new UnprocessableEntityException(
-        `Battery ${battery.serial} has no GPS device recorded (D13)`,
+        `Battery ${battery.serial} has no IMEI recorded (D13)`,
       );
     }
     const technician = await tx.staffUser.findUnique({ where: { id: input.technicianId } });
@@ -1265,6 +1579,16 @@ export class AgreementsService implements OnModuleInit {
       throw new BadRequestException('The installation time cannot be in the future');
     }
     const verifiedNow = hasPermission(actor.role, 'installations.verify');
+    // Founder, 1 Nov 2026: the Field App records an installation only with the phone's location.
+    const geo =
+      dto.geoLat !== undefined || dto.geoLng !== undefined || dto.geoAccuracyM !== undefined
+        ? { lat: dto.geoLat, lng: dto.geoLng, accuracyM: dto.geoAccuracyM }
+        : null;
+    if (!HEAD_OFFICE_ROLES.includes(actor.role) || geo) {
+      const problem = geotagProblem(geo);
+      if (problem)
+        throw new UnprocessableEntityException({ message: problem, code: 'NO_LOCATION' });
+    }
     const keys = photos.map((p) => newFileKey('installations', id, p.upload.ext));
     let stored = false;
 
@@ -1308,6 +1632,9 @@ export class AgreementsService implements OnModuleInit {
           driverConfirmed: true,
           recordedById: actor.id,
           needsVerification: !verifiedNow,
+          geoLat: geo?.lat ?? null,
+          geoLng: geo?.lng ?? null,
+          geoAccuracyM: geo?.accuracyM ?? null,
           photos: {
             create: photos.map((p, i) => ({
               fileKey: keys[i]!,

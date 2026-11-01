@@ -117,18 +117,27 @@ describe('Field App support (M5)', () => {
       rejectedReason: 'Photos do not show the serial number',
     });
     expect(rejected.allowed.install).toBe(true);
-    await ctx.http
-      .post(`/v1/agreements/${b.id}/installation`)
-      .set(bearer(agent.token))
-      .field('batteryId', b.battery.id)
-      .field('technicianId', agent.staff.id)
-      .field('installedAt', new Date().toISOString())
-      .field('location', 'Baruipur')
-      .field('voltageReading', '52.4')
-      .field('conditionNote', 'Good')
-      .field('driverConfirmed', 'true')
-      .attach('photos', PNG, 'p.png')
-      .expect(200);
+    const reinstall = (geo: Record<string, string>) => {
+      const req = ctx.http
+        .post(`/v1/agreements/${b.id}/installation`)
+        .set(bearer(agent.token))
+        .field('batteryId', b.battery.id)
+        .field('technicianId', agent.staff.id)
+        .field('installedAt', new Date().toISOString())
+        .field('location', 'Baruipur')
+        .field('voltageReading', '52.4')
+        .field('conditionNote', 'Good')
+        .field('driverConfirmed', 'true');
+      for (const [k, v] of Object.entries(geo)) req.field(k, v);
+      return req.attach('photos', PNG, 'p.png');
+    };
+    // Founder, 1 Nov 2026: the Field App records an installation only with the phone's location.
+    expect((await reinstall({}).expect(422)).body.code).toBe('NO_LOCATION');
+    expect(
+      (await reinstall({ geoLat: '22.36', geoLng: '88.43', geoAccuracyM: '900' }).expect(422)).body
+        .message,
+    ).toMatch(/too rough/);
+    await reinstall({ geoLat: '22.36', geoLng: '88.43', geoAccuracyM: '14' }).expect(200);
     const again = await ctx.http
       .get('/v1/installations/pending')
       .set(bearer(ops.token))
@@ -138,6 +147,7 @@ describe('Field App support (M5)', () => {
       .set(bearer(ops.token))
       .expect(200);
     expect(done.body.state).toBe('ACTIVE');
+    expect(done.body.installation.geotag).toEqual({ lat: 22.36, lng: 88.43, accuracyM: 14 });
     expect(done.body.installation).toMatchObject({
       status: 'VERIFIED',
       decidedByName: expect.any(String),

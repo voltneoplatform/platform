@@ -14,6 +14,7 @@ import {
   PDF,
   PNG,
   realPng,
+  approvedDriver,
   makeBattery,
   makeBatteryType,
   makeDriver,
@@ -31,6 +32,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
   let finance: { token: string; staff: { id: string } };
   let typeId: string;
   let versionId: string;
+  let planId: string;
   const fy = () => financialYear(istDate());
   const firstDue = () => suggestFirstDueDate(17, istDate());
 
@@ -46,29 +48,41 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     ops2 = await loginAs(ctx, 'OPERATIONS_MANAGER');
     finance = await loginAs(ctx, 'FINANCE');
     typeId = (await makeBatteryType(ctx, pm.token, { purchase: 50000 })).id;
-    versionId = (await publishedPlan(ctx, pm.token, typeId)).versionId;
+    const published = await publishedPlan(ctx, pm.token, typeId);
+    versionId = published.versionId;
+    planId = published.plan.id;
   });
 
   afterAll(async () => {
     await ctx.app.close();
   });
 
+  /** A driver with head office's final approval on the test plan (founder, 1 Nov 2026). */
+  const approved = (overrides: Record<string, unknown> = {}) =>
+    approvedDriver(ctx, ops.token, planId, overrides);
+
+  /**
+   * Head office assigns a battery (a new one in stock unless given) and the
+   * agreement is prepared with it. Call .expect(status) as with a request.
+   */
   function draft(driverId: string, overrides: Record<string, unknown> = {}) {
-    return ctx.http
-      .post('/v1/agreements')
-      .set(bearer(ops.token))
-      .send({
-        driverId,
-        planVersionId: versionId,
-        batteryTypeId: typeId,
-        dueDay: 17,
-        firstDueDate: firstDue(),
-        ...overrides,
-      });
+    const req = (async () => {
+      const batteryId =
+        (overrides.batteryId as string | undefined) ??
+        (await makeBattery(ctx, ops.token, typeId)).id;
+      // Wrapped so awaiting does not send the request before .expect is attached.
+      return {
+        test: ctx.http
+          .post('/v1/agreements')
+          .set(bearer(ops.token))
+          .send({ driverId, dueDay: 17, firstDueDate: firstDue(), ...overrides, batteryId }),
+      };
+    })();
+    return { expect: (status: number) => req.then((w) => w.test.expect(status)) };
   }
 
   async function signed(driverId?: string) {
-    const d = driverId ?? (await readyDriver(ctx, ops.token)).id;
+    const d = driverId ?? (await approved()).id;
     const a = (await draft(d).expect(201)).body;
     const res = await ctx.http
       .post(`/v1/agreements/${a.id}/sign`)
@@ -93,11 +107,10 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
       201,
     );
     const tech = await createStaff(ctx.prisma, 'TECHNICIAN');
-    const battery = await makeBattery(ctx, ops.token, typeId);
+    const battery = a.battery as { id: string; serial: string };
     const res = await ctx.http
       .post(`/v1/agreements/${a.id}/installation`)
       .set(bearer(ops.token))
-      .field('batteryId', battery.id)
       .field('technicianId', tech.id)
       .field('installedAt', new Date().toISOString())
       .field('location', 'Driver home, Baruipur')
@@ -150,7 +163,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     });
 
     it('copies the figures from the price grid and shows the schedule it will get', async () => {
-      const d = await makeDriver(ctx, ops.token);
+      const d = await approved();
       const res = await draft(d.id).expect(201);
       expect(res.body).toMatchObject({
         number: 'NOA-000001',
@@ -173,12 +186,127 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         allowed: { edit: true, sign: true, cancel: true, install: false, pay: false },
       });
       expect(res.body.schedule).toHaveLength(19);
-      expect(res.body.readiness.ready).toBe(false);
+      expect(res.body.readiness.ready).toBe(true);
       expect(res.body.events[0]).toMatchObject({ event: 'CREATED', toState: 'DRAFT' });
+      expect(res.body.battery).toMatchObject({ serial: expect.any(String), status: 'IN_STOCK' });
+      expect(res.body.battery.gpsDeviceId).toMatch(/^\d{15}$/);
+      expect(res.body.plan.planVersionId).toBe(versionId);
+    });
+
+    it('is prepared only for an approved driver, on their approved plan, with a battery that is free', async () => {
+      // Founder, 1 Nov 2026: final approval, then a battery, then the agreement.
+      const waiting = await readyDriver(ctx, ops.token, { planId });
+      expect((await draft(waiting.id).expect(422)).body.code).toBe('NOT_APPROVED');
+
+      const d = await approved();
+      const noImei = await makeBattery(ctx, ops.token, typeId, { gps: false });
+      expect((await draft(d.id, { batteryId: noImei.id }).expect(422)).body.message).toMatch(
+        /IMEI/,
+      );
+      const unpriced = await makeBattery(ctx, ops.token, (await makeBatteryType(ctx, pm.token)).id);
+      expect((await draft(d.id, { batteryId: unpriced.id }).expect(422)).body.message).toMatch(
+        /no price/,
+      );
+      const battery = await makeBattery(ctx, ops.token, typeId);
+      const a = (await draft(d.id, { batteryId: battery.id }).expect(201)).body;
+
+      // The battery is held: not offered to anyone else, and not moved out of stock.
+      const other = await approved();
+      expect((await draft(other.id, { batteryId: battery.id }).expect(409)).body.message).toMatch(
+        new RegExp(`assigned to agreement ${a.number}`),
+      );
+      const free = await ctx.http
+        .get(`/v1/batteries?available=true&limit=100`)
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(free.body.items.map((b: { id: string }) => b.id)).not.toContain(battery.id);
+      const shown = await ctx.http
+        .get(`/v1/batteries/${battery.id}`)
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(shown.body.assignedTo).toMatchObject({ agreementId: a.id, number: a.number });
+      await ctx.http
+        .post(`/v1/batteries/${battery.id}/status`)
+        .set(bearer(ops.token))
+        .send({ to: 'UNDER_REPAIR', note: 'Check cells' })
+        .expect(409);
+    });
+
+    it('changes the battery until installation; after signing the driver signs again first', async () => {
+      const a = await signed();
+      await pay(finance.token, { agreementId: a.id, amountPaise: r(20000), method: 'CASH' }).expect(
+        201,
+      );
+      const otherType = (await makeBatteryType(ctx, pm.token)).id;
+      const wrongType = await makeBattery(ctx, ops.token, otherType);
+      const change = (batteryId: string, token = ops.token) =>
+        ctx.http
+          .post(`/v1/agreements/${a.id}/battery`)
+          .set(bearer(token))
+          .send({ batteryId, reason: 'Found a cell fault before fitting' });
+      expect((await change(wrongType.id).expect(422)).body.message).toMatch(/same type/);
+      const agent = await loginAs(ctx, 'FIELD_AGENT');
+      const replacement = await makeBattery(ctx, ops.token, typeId);
+      await change(replacement.id, agent.token).expect(403);
+      const changed = (await change(replacement.id).expect(200)).body;
+      expect(changed).toMatchObject({
+        battery: { id: replacement.id },
+        resignRequired: true,
+        allowed: { install: false, resign: true },
+        terms: { downPayment: r(20000), instalment: r(3000) },
+      });
+      expect(changed.batteryChanges[0]).toMatchObject({
+        fromSerial: a.battery.serial,
+        toSerial: replacement.serial,
+        afterSigning: true,
+        resigned: null,
+      });
+      // The old battery is free again.
+      const old = await ctx.http
+        .get(`/v1/batteries/${a.battery.id}`)
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(old.body.assignedTo).toBeNull();
+
+      const tech = await createStaff(ctx.prisma, 'TECHNICIAN');
+      const install = () =>
+        ctx.http
+          .post(`/v1/agreements/${a.id}/installation`)
+          .set(bearer(ops.token))
+          .field('technicianId', tech.id)
+          .field('installedAt', new Date().toISOString())
+          .field('location', 'Baruipur')
+          .field('voltageReading', '52.4')
+          .field('conditionNote', 'Good')
+          .field('driverConfirmed', 'true')
+          .attach('photos', PNG, 'p.png');
+      expect((await install().expect(409)).body.message).toMatch(/corrected agreement/);
+
+      const resigned = await ctx.http
+        .post(`/v1/agreements/${a.id}/resign`)
+        .set(bearer(ops.token))
+        .field('signedAt', new Date().toISOString())
+        .attach('files', PDF, 'corrected.pdf')
+        .expect(200);
+      expect(resigned.body).toMatchObject({ resignRequired: false, allowed: { install: true } });
+      expect(resigned.body.batteryChanges[0].resigned).toMatchObject({
+        recordedByName: expect.any(String),
+      });
+      const link = await ctx.http
+        .post(`/v1/agreements/${a.id}/signed-copy/link`)
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(link.body.url).toBeTruthy();
+
+      const done = await install().expect(200);
+      expect(done.body).toMatchObject({ state: 'ACTIVE', battery: { id: replacement.id } });
+      expect((await change(a.battery.id).expect(409)).body.message).toMatch(
+        /before it is installed/,
+      );
     });
 
     it('checks the due day, the first due date and the vehicle type', async () => {
-      const d = await makeDriver(ctx, ops.token);
+      const d = await approved();
       const wrongDay = addMonths(firstDue(), 0).replace(/-17$/, '-18');
       expect((await draft(d.id, { firstDueDate: wrongDay }).expect(422)).body.message).toMatch(
         /17th/,
@@ -196,13 +324,13 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     });
 
     it('allows one open agreement per driver', async () => {
-      const d = await makeDriver(ctx, ops.token);
+      const d = await approved();
       await draft(d.id).expect(201);
       expect((await draft(d.id).expect(409)).body.message).toMatch(/already has an open agreement/);
     });
 
     it('lets head office edit a draft, and support only read', async () => {
-      const d = await makeDriver(ctx, ops.token);
+      const d = await approved();
       const a = (await draft(d.id).expect(201)).body;
       const res = await ctx.http
         .patch(`/v1/agreements/${a.id}`)
@@ -225,7 +353,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     });
 
     it('produces Schedule 1 and Schedule 5 as PDFs in each language', async () => {
-      const d = await makeDriver(ctx, ops.token);
+      const d = await approved();
       const a = (await draft(d.id).expect(201)).body;
       for (const doc of ['schedule-1', 'schedule-5']) {
         for (const lang of ['BN', 'HI', 'EN', undefined]) {
@@ -254,7 +382,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     });
 
     it('cancels a draft with a reason', async () => {
-      const d = await makeDriver(ctx, ops.token);
+      const d = await approved();
       const a = (await draft(d.id).expect(201)).body;
       const res = await ctx.http
         .post(`/v1/agreements/${a.id}/cancel`)
@@ -271,9 +399,18 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
   });
 
   describe('signing', () => {
-    it('refuses to sign until the readiness checklist is complete', async () => {
-      const d = await makeDriver(ctx, ops.token);
+    it('refuses to sign if the checklist is no longer complete', async () => {
+      const d = await approved();
       const a = (await draft(d.id).expect(201)).body;
+      // A document found wrong after approval.
+      const pan = await ctx.prisma.kycDocument.findFirstOrThrow({
+        where: { driverId: d.id, type: 'PAN' },
+      });
+      await ctx.http
+        .post(`/v1/kyc-documents/${pan.id}/reject`)
+        .set(bearer(ops.token))
+        .send({ reason: 'Photo is not readable' })
+        .expect(200);
       const res = await ctx.http
         .post(`/v1/agreements/${a.id}/sign`)
         .set(bearer(ops.token))
@@ -329,7 +466,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     });
 
     it('joins page photos into one PDF and records the stamp paper, which then cannot change', async () => {
-      const d = await readyDriver(ctx, ops.token);
+      const d = await approved();
       const a = (await draft(d.id).expect(201)).body;
       const sign = () =>
         ctx.http
@@ -376,7 +513,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     });
 
     it('prints the whole agreement for stamp paper, with the company and the driver named', async () => {
-      const d = await readyDriver(ctx, ops.token);
+      const d = await approved();
       const a = (await draft(d.id).expect(201)).body;
       const res = await ctx.http
         .get(`/v1/agreements/${a.id}/documents/agreement`)
@@ -394,7 +531,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     });
 
     it('prints the full PAN only for staff who may see full ID numbers, and logs it', async () => {
-      const d = await readyDriver(ctx, ops.token);
+      const d = await approved();
       const a = (await draft(d.id).expect(201)).body;
       const reveals = () =>
         ctx.prisma.auditLog.count({
@@ -481,10 +618,10 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
       expect((await ledgerBalanced()).balanced).toBe(true);
     });
 
-    it('installs only a GPS-fitted, in-stock battery of the right type, with photos', async () => {
+    it('installs only the battery assigned in the agreement, with photos', async () => {
       const a = await signed();
       const tech = await createStaff(ctx.prisma, 'TECHNICIAN');
-      const battery = await makeBattery(ctx, ops.token, typeId);
+      const battery = a.battery as { id: string; serial: string };
       const install = (fields: Record<string, string>, photos = 1) => {
         const req = ctx.http.post(`/v1/agreements/${a.id}/installation`).set(bearer(ops.token));
         const all = {
@@ -510,12 +647,9 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
       await install({}, 0).expect(400);
       await install({ driverConfirmed: 'false' }).expect(400);
       await install({ technicianId: finance.staff.id }).expect(400);
-      const noGps = await makeBattery(ctx, ops.token, typeId, { gps: false });
-      expect((await install({ batteryId: noGps.id }).expect(422)).body.message).toMatch(/GPS/);
-      const otherType = (await makeBatteryType(ctx, pm.token)).id;
-      const wrong = await makeBattery(ctx, ops.token, otherType);
-      expect((await install({ batteryId: wrong.id }).expect(422)).body.message).toMatch(
-        /battery type/,
+      const another = await makeBattery(ctx, ops.token, typeId);
+      expect((await install({ batteryId: another.id }).expect(422)).body.message).toMatch(
+        new RegExp(`Fit battery ${battery.serial}`),
       );
 
       const res = await install({}, 2).expect(200);
@@ -546,25 +680,8 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         .expect(200);
       await ctx.http.get(photo.body.url).expect(200);
 
-      // The same battery cannot go into a second agreement.
-      const other = await signed();
-      await pay(finance.token, {
-        agreementId: other.id,
-        amountPaise: r(20000),
-        method: 'CASH',
-      }).expect(201);
-      const again = await ctx.http
-        .post(`/v1/agreements/${other.id}/installation`)
-        .set(bearer(ops.token))
-        .field('batteryId', battery.id)
-        .field('technicianId', tech.id)
-        .field('installedAt', new Date().toISOString())
-        .field('location', 'Kolkata')
-        .field('voltageReading', '52')
-        .field('conditionNote', 'Good')
-        .field('driverConfirmed', 'true')
-        .attach('photos', PNG, 'p.png')
-        .expect(409);
+      // The same battery cannot be assigned to a second agreement.
+      const again = await draft((await approved()).id, { batteryId: battery.id }).expect(409);
       expect(again.body.message).toMatch(/not in stock/);
     });
   });

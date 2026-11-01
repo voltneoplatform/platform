@@ -4,9 +4,17 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
+  HEAD_OFFICE_ROLES,
   KYC_DOC_INFO,
+  REGISTRATION_CONSENT_VERSION,
+  geotagProblem,
+  onboardingStage,
+  type DriverApproval,
+  type OnboardingStage,
   MIN_DRIVER_AGE,
   OPEN_AGREEMENT_STATES,
   ageOn,
@@ -32,13 +40,16 @@ import {
 import type { AuthenticatedStaff, RequestMeta } from '../common/decorators';
 import { dateOnly, istDate, parseDateOnly, serializable, type Tx } from '../common/util';
 import type {
+  ApproveDriverDto,
   CreateDriverDto,
   ListDriversQuery,
+  RejectDriverDto,
   RejectKycDto,
   UpdateDriverDto,
   UploadKycDto,
   VehicleDto,
 } from './dto';
+import { PhoneChecksService } from './phone-checks.service';
 
 export interface UploadedFile {
   buffer: Buffer;
@@ -54,6 +65,11 @@ export interface Duplicate {
 }
 
 type DriverFull = Driver & { kycDocuments: KycDocument[]; vehicles: Vehicle[] };
+
+const PLAN_SELECT = { id: true, code: true, nameEn: true, nameBn: true, nameHi: true } as const;
+function planView(p: { id: string; code: string; nameEn: string; nameBn: string; nameHi: string }) {
+  return { id: p.id, code: p.code, names: { en: p.nameEn, bn: p.nameBn, hi: p.nameHi } };
+}
 
 function phone(raw: string | null | undefined, label: string): string | null {
   if (raw === null || raw === undefined) return null;
@@ -97,6 +113,7 @@ export class DriversService {
     private readonly crypto: KycCryptoService,
     private readonly links: FileLinks,
     @Inject(FILE_STORAGE) private readonly storage: FileStorage,
+    private readonly phoneChecks: PhoneChecksService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -148,6 +165,8 @@ export class DriversService {
   readinessOf(d: DriverFull) {
     const vehicle = d.vehicles.find((v) => v.isCurrent) ?? null;
     return readiness({
+      phoneVerified: !!d.phoneVerifiedAt,
+      planChosen: !!d.planId,
       dateOfBirth: dateOnly(d.dateOfBirth),
       today: istDate(),
       nomineeRecorded: !!(d.nomineeName && d.nomineeRelation && d.nomineePhone),
@@ -186,6 +205,9 @@ export class DriversService {
           : null,
       nominee: { name: d.nomineeName, relation: d.nomineeRelation, phone: d.nomineePhone },
       notes: d.notes,
+      planId: d.planId,
+      phoneVerifiedAt: d.phoneVerifiedAt,
+      approval: d.approval,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
     };
@@ -211,10 +233,12 @@ export class DriversService {
           ]
         : undefined,
     };
+    const filtered = !!(q.readiness || q.stage);
     const all = await this.prisma.driver.findMany({
       where,
       include: {
         ...this.fullInclude,
+        plan: { select: PLAN_SELECT },
         // The agreement still in progress, if any, so the list shows where it stands.
         agreements: {
           where: { state: { in: [...OPEN_AGREEMENT_STATES] } },
@@ -224,9 +248,9 @@ export class DriversService {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: q.readiness ? 2000 : undefined,
-      skip: q.readiness ? undefined : (page - 1) * limit,
-      ...(q.readiness ? {} : { take: limit }),
+      take: filtered ? 2000 : undefined,
+      skip: filtered ? undefined : (page - 1) * limit,
+      ...(filtered ? {} : { take: limit }),
     });
     let rows = all.map((d) => {
       const r = this.readinessOf(d);
@@ -247,6 +271,13 @@ export class DriversService {
           : null,
         ready: r.ready,
         agreement: d.agreements[0] ?? null,
+        approval: d.approval,
+        stage: onboardingStage({
+          ready: r.ready,
+          approval: d.approval,
+          hasOpenAgreement: d.agreements.length > 0,
+        }),
+        plan: d.plan ? planView(d.plan) : null,
         itemsDone: r.items.filter((i) => i.done).length,
         itemsTotal: r.items.length,
         pendingDocuments: d.kycDocuments.filter((k) => k.status === 'PENDING').length,
@@ -254,9 +285,11 @@ export class DriversService {
       };
     });
     let total: number;
-    if (q.readiness) {
+    if (filtered) {
       // "Ready" means ready for a new agreement: paperwork done and none in progress.
-      rows = rows.filter((r) => (q.readiness === 'ready' ? r.ready && !r.agreement : !r.ready));
+      if (q.readiness)
+        rows = rows.filter((r) => (q.readiness === 'ready' ? r.ready && !r.agreement : !r.ready));
+      if (q.stage) rows = rows.filter((r) => r.stage === q.stage);
       total = rows.length;
       rows = rows.slice((page - 1) * limit, page * limit);
     } else {
@@ -266,10 +299,30 @@ export class DriversService {
   }
 
   async get(id: string) {
-    const d = await this.prisma.driver.findUnique({ where: { id }, include: this.fullInclude });
+    const d = await this.prisma.driver.findUnique({
+      where: { id },
+      include: {
+        ...this.fullInclude,
+        plan: { select: PLAN_SELECT },
+        decisions: { orderBy: { decidedAt: 'desc' }, include: { plan: { select: PLAN_SELECT } } },
+        agreements: {
+          where: { state: { in: [...OPEN_AGREEMENT_STATES] } },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
     if (!d) throw new NotFoundException('Driver not found');
     const staffIds = [
-      ...new Set(d.kycDocuments.flatMap((k) => [k.verifiedById, k.uploadedById]).filter(Boolean)),
+      ...new Set(
+        [
+          ...d.kycDocuments.flatMap((k) => [k.verifiedById, k.uploadedById]),
+          d.approvedById,
+          d.phoneVerifiedById,
+          d.createdById,
+          ...d.decisions.map((x) => x.decidedById),
+        ].filter(Boolean),
+      ),
     ] as string[];
     const staff = await this.prisma.staffUser.findMany({
       where: { id: { in: staffIds } },
@@ -277,12 +330,41 @@ export class DriversService {
     });
     const names = new Map(staff.map((s) => [s.id, s.name]));
     const current = d.vehicles.find((v) => v.isCurrent) ?? null;
+    const readiness = this.readinessOf(d);
     return {
       ...this.driverFields(d),
       vehicle: current ? this.vehicleView(current) : null,
       previousVehicles: d.vehicles.filter((v) => !v.isCurrent).map((v) => this.vehicleView(v)),
       documents: d.kycDocuments.map((k) => this.docView(k, names)),
-      readiness: this.readinessOf(d),
+      readiness,
+      onboarding: {
+        stage: onboardingStage({
+          ready: readiness.ready,
+          approval: d.approval,
+          hasOpenAgreement: d.agreements.length > 0,
+        }) as OnboardingStage,
+        approval: d.approval as DriverApproval,
+        approvalReason: d.approvalReason,
+        approvedByName: d.approvedById ? (names.get(d.approvedById) ?? null) : null,
+        approvedAt: d.approvedAt,
+        plan: d.plan ? planView(d.plan) : null,
+        phoneVerifiedAt: d.phoneVerifiedAt,
+        phoneVerifiedByName: d.phoneVerifiedById ? (names.get(d.phoneVerifiedById) ?? null) : null,
+        consentVersion: d.consentVersion,
+        registeredByName: d.createdById ? (names.get(d.createdById) ?? null) : null,
+        registeredAt:
+          d.registeredLat !== null && d.registeredLng !== null
+            ? { lat: d.registeredLat, lng: d.registeredLng, accuracyM: d.registeredAccuracyM }
+            : null,
+        decisions: d.decisions.map((x) => ({
+          id: x.id,
+          decision: x.decision,
+          plan: x.plan ? planView(x.plan) : null,
+          reason: x.reason,
+          decidedByName: names.get(x.decidedById) ?? null,
+          decidedAt: x.decidedAt,
+        })),
+      },
       duplicates: await this.findDuplicates(this.prisma, {
         driverId: id,
         phones: [d.phone, d.altPhone].filter(Boolean) as string[],
@@ -395,6 +477,12 @@ export class DriversService {
 
   async create(dto: CreateDriverDto, actor: AuthenticatedStaff, meta: RequestMeta) {
     const main = phone(dto.phone, 'Phone')!;
+    // Founder, 1 Nov 2026: the Field App saves a registration only with the phone's location.
+    if (!HEAD_OFFICE_ROLES.includes(actor.role) || dto.location) {
+      const problem = geotagProblem(dto.location);
+      if (problem)
+        throw new UnprocessableEntityException({ message: problem, code: 'NO_LOCATION' });
+    }
     const alt = phone(dto.altPhone, 'Alternate phone');
     checkAge(dto.dateOfBirth);
     checkRelative(dto.relativeRelation ?? null, dto.relativeName ?? null);
@@ -408,8 +496,21 @@ export class DriversService {
         chassis: vehicle?.chassisNumber,
       });
       if (duplicates.length && !dto.acknowledgeDuplicates) throw possibleDuplicate(duplicates);
+      if (dto.planId) await this.checkPlan(tx, dto.planId);
+      const newId = randomUUID();
+      // The driver read out the code sent to this phone, after hearing the consent line.
+      const consentAt = await this.phoneChecks.use(tx, dto.phoneCheckId, main, newId, actor);
       const d = await tx.driver.create({
         data: {
+          id: newId,
+          phoneVerifiedAt: consentAt,
+          phoneVerifiedById: actor.id,
+          consentVersion: REGISTRATION_CONSENT_VERSION,
+          consentAt,
+          registeredLat: dto.location?.lat ?? null,
+          registeredLng: dto.location?.lng ?? null,
+          registeredAccuracyM: dto.location?.accuracyM ?? null,
+          planId: dto.planId ?? null,
           name: dto.name,
           phone: main,
           altPhone: alt,
@@ -474,9 +575,31 @@ export class DriversService {
         const duplicates = await this.findDuplicates(tx, { driverId: id, phones: newPhones });
         if (duplicates.length && !dto.acknowledgeDuplicates) throw possibleDuplicate(duplicates);
       }
+      // A new mobile number is confirmed by the driver's code, like at registration.
+      let verifiedAt: Date | undefined;
+      if (main && main !== before.phone) {
+        verifiedAt = await this.phoneChecks.use(tx, dto.phoneCheckId, main, id, actor);
+      }
+      if (dto.planId !== undefined && dto.planId !== before.planId) {
+        if (before.approval === 'APPROVED') {
+          throw new ConflictException(
+            'This driver is approved. Head office changes the plan from the approval panel.',
+          );
+        }
+        await this.checkPlan(tx, dto.planId);
+      }
       const after = await tx.driver.update({
         where: { id },
         data: {
+          planId: dto.planId,
+          ...(verifiedAt
+            ? {
+                phoneVerifiedAt: verifiedAt,
+                phoneVerifiedById: actor.id,
+                consentVersion: REGISTRATION_CONSENT_VERSION,
+                consentAt: verifiedAt,
+              }
+            : {}),
           name: dto.name,
           phone: main,
           altPhone: alt,
@@ -510,6 +633,204 @@ export class DriversService {
             dto.status && dto.status !== before.status
               ? `driver.${dto.status.toLowerCase()}`
               : 'driver.update',
+          tableName: 'drivers',
+          recordId: id,
+          before: this.driverFields(before),
+          after: this.driverFields(after),
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Onboarding (founder, 1 Nov 2026): OTP, plan and final approval
+  // ---------------------------------------------------------------------------
+
+  /** A plan a driver can be put on: active, with a published version. */
+  private async checkPlan(tx: Tx, planId: string) {
+    const plan = await tx.plan.findUnique({
+      where: { id: planId },
+      include: { versions: { where: { status: 'PUBLISHED' }, select: { id: true } } },
+    });
+    if (!plan) throw new NotFoundException('Plan not found');
+    if (plan.status !== 'ACTIVE' || plan.versions.length === 0) {
+      throw new UnprocessableEntityException('That plan is not on offer');
+    }
+    return plan;
+  }
+
+  /** Confirms the driver's current mobile number with a code (drivers registered before OTP). */
+  async verifyPhone(id: string, checkId: string, actor: AuthenticatedStaff, meta: RequestMeta) {
+    await serializable(this.prisma, async (tx) => {
+      const before = await tx.driver.findUnique({ where: { id } });
+      if (!before) throw new NotFoundException('Driver not found');
+      const at = await this.phoneChecks.use(tx, checkId, before.phone, id, actor);
+      const after = await tx.driver.update({
+        where: { id },
+        data: {
+          phoneVerifiedAt: at,
+          phoneVerifiedById: actor.id,
+          consentVersion: REGISTRATION_CONSENT_VERSION,
+          consentAt: at,
+        },
+      });
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'driver.phone_verified',
+          tableName: 'drivers',
+          recordId: id,
+          before: this.driverFields(before),
+          after: this.driverFields(after),
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  private async openAgreement(tx: Tx, driverId: string) {
+    return tx.agreement.findFirst({
+      where: { driverId, state: { in: [...OPEN_AGREEMENT_STATES] } },
+      select: { id: true, number: true },
+    });
+  }
+
+  /**
+   * Final approval by a super admin, operations manager or plan manager, after
+   * every document is verified. The plan may be changed here. Approving again
+   * (to change the plan) is allowed until an agreement is prepared.
+   */
+  async approve(id: string, dto: ApproveDriverDto, actor: AuthenticatedStaff, meta: RequestMeta) {
+    await serializable(this.prisma, async (tx) => {
+      const before = await tx.driver.findUnique({ where: { id }, include: this.fullInclude });
+      if (!before) throw new NotFoundException('Driver not found');
+      if (before.status !== 'ACTIVE') {
+        throw new UnprocessableEntityException('This driver is marked inactive');
+      }
+      const open = await this.openAgreement(tx, id);
+      if (open) {
+        throw new ConflictException(
+          `Agreement ${open.number} is already in progress for this driver`,
+        );
+      }
+      const planId = dto.planId ?? before.planId;
+      if (!planId) {
+        throw new UnprocessableEntityException({ message: 'Choose a plan first', code: 'NO_PLAN' });
+      }
+      await this.checkPlan(tx, planId);
+      const ready = this.readinessOf({ ...before, planId });
+      if (!ready.ready) {
+        throw new UnprocessableEntityException({
+          message: 'Every item on the checklist must be done before approval',
+          code: 'NOT_READY',
+          readiness: ready,
+        });
+      }
+      const now = new Date();
+      const after = await tx.driver.update({
+        where: { id },
+        data: {
+          planId,
+          approval: 'APPROVED',
+          approvalReason: null,
+          approvedById: actor.id,
+          approvedAt: now,
+        },
+      });
+      await tx.driverApprovalDecision.create({
+        data: { driverId: id, decision: 'APPROVED', planId, decidedById: actor.id, decidedAt: now },
+      });
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'driver.approve',
+          tableName: 'drivers',
+          recordId: id,
+          before: this.driverFields(before),
+          after: this.driverFields(after),
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  async reject(id: string, dto: RejectDriverDto, actor: AuthenticatedStaff, meta: RequestMeta) {
+    await serializable(this.prisma, async (tx) => {
+      const before = await tx.driver.findUnique({ where: { id } });
+      if (!before) throw new NotFoundException('Driver not found');
+      const open = await this.openAgreement(tx, id);
+      if (open) {
+        throw new ConflictException(
+          `Agreement ${open.number} is already in progress for this driver`,
+        );
+      }
+      const now = new Date();
+      const after = await tx.driver.update({
+        where: { id },
+        data: {
+          approval: 'REJECTED',
+          approvalReason: dto.reason,
+          approvedById: null,
+          approvedAt: null,
+        },
+      });
+      await tx.driverApprovalDecision.create({
+        data: {
+          driverId: id,
+          decision: 'REJECTED',
+          planId: before.planId,
+          reason: dto.reason,
+          decidedById: actor.id,
+          decidedAt: now,
+        },
+      });
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'driver.reject',
+          tableName: 'drivers',
+          recordId: id,
+          before: this.driverFields(before),
+          after: { ...this.driverFields(after), reason: dto.reason },
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  /** After a rejection is fixed, the driver goes back to head office for approval. */
+  async resubmit(id: string, actor: AuthenticatedStaff, meta: RequestMeta) {
+    await serializable(this.prisma, async (tx) => {
+      const before = await tx.driver.findUnique({ where: { id } });
+      if (!before) throw new NotFoundException('Driver not found');
+      if (before.approval !== 'REJECTED') {
+        throw new ConflictException('Only a driver who was not approved can be sent again');
+      }
+      const after = await tx.driver.update({
+        where: { id },
+        data: { approval: 'AWAITING', approvalReason: null },
+      });
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'driver.resubmit',
           tableName: 'drivers',
           recordId: id,
           before: this.driverFields(before),
