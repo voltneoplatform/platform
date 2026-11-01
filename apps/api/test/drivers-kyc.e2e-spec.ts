@@ -1,10 +1,16 @@
 import request from 'supertest';
+import {
+  DRIVER_CODE_SENDER,
+  type MemoryDriverCodeSender,
+} from '../src/driver-auth/driver-code-sender';
 import { bearer, createTestApp, loginAs, resetData, type TestContext } from './helpers';
 import {
   NOT_A_DOC,
   PDF,
   PNG,
   activeAgreement,
+  bareActivePlan,
+  confirmPhone,
   makeDriver,
   readyDriver,
   uploadKyc,
@@ -27,12 +33,14 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
 
   describe('registering drivers', () => {
     it('registers a driver with vehicle and nominee, normalising phone and registration', async () => {
+      const phoneCheckId = await confirmPhone(ctx, ops.token, '9830011111');
       const res = await ctx.http
         .post('/v1/drivers')
         .set(bearer(ops.token))
         .send({
           name: 'Ramesh Das',
           phone: '098300 11111',
+          phoneCheckId,
           language: 'BN',
           dateOfBirth: '1985-03-02',
           relativeRelation: 'SON_OF',
@@ -61,10 +69,24 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
         res.body.readiness.items
           .filter((i: { done: boolean }) => i.done)
           .map((i: { item: string }) => i.item),
-      ).toEqual(['ADULT', 'VEHICLE_RECORDED', 'OWNER_CONSENT', 'NOMINEE_RECORDED']);
+      ).toEqual([
+        'PHONE_VERIFIED',
+        'ADULT',
+        'VEHICLE_RECORDED',
+        'OWNER_CONSENT',
+        'NOMINEE_RECORDED',
+      ]);
+      expect(res.body.onboarding).toMatchObject({
+        stage: 'PAPERWORK',
+        approval: 'AWAITING',
+        consentVersion: 'reg-consent-v1',
+        registeredAt: null,
+      });
+      expect(res.body.onboarding.phoneVerifiedAt).not.toBeNull();
     });
 
     it("needs both the relation and the father's or husband's name, or neither", async () => {
+      const phoneCheckId = await confirmPhone(ctx, ops.token, '9830022222');
       const send = (extra: Record<string, unknown>) =>
         ctx.http
           .post('/v1/drivers')
@@ -72,6 +94,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
           .send({
             name: 'Anil Roy',
             phone: '9830022222',
+            phoneCheckId,
             language: 'BN',
             dateOfBirth: '1988-05-05',
             addressLine: '1 Bazar Road',
@@ -103,6 +126,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
       const body = {
         name: 'Second Driver',
         phone: first.phone,
+        phoneCheckId: await confirmPhone(ctx, ops.token, first.phone),
         language: 'HI',
         addressLine: '1 Main Road',
         district: 'Kolkata',
@@ -430,6 +454,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
 
     it('becomes ready once identity, PAN, address and photo are verified and the renter has owner consent', async () => {
       const d = await makeDriver(ctx, ops.token, {
+        planId: await bareActivePlan(ctx),
         vehicle: {
           registration: 'WB 19 R 5555',
           type: 'E_RICKSHAW',
@@ -532,6 +557,182 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
         .set(bearer(ops.token))
         .attach('file', PDF, 'c.pdf')
         .expect(409);
+    });
+  });
+
+  describe('onboarding (founder, 1 Nov 2026)', () => {
+    const body = (phone: string, extra: Record<string, unknown> = {}) => ({
+      name: 'Kartik Pal',
+      phone,
+      language: 'BN',
+      dateOfBirth: '1991-02-02',
+      addressLine: '3 Hat Road',
+      district: 'South 24 Parganas',
+      pinCode: '743610',
+      vehicle: { registration: 'WB 19 K 2468', type: 'TOTO', ownedByDriver: true },
+      ...extra,
+    });
+
+    it('saves a driver only after they give the code sent to their phone', async () => {
+      const agent = await loginAs(ctx, 'FIELD_AGENT');
+      const location = { lat: 22.36, lng: 88.43, accuracyM: 9 };
+      const none = await ctx.http
+        .post('/v1/drivers')
+        .set(bearer(agent.token))
+        .send(body('9830055555', { location }))
+        .expect(422);
+      expect(none.body.code).toBe('PHONE_NOT_CONFIRMED');
+
+      const sent = await ctx.http
+        .post('/v1/drivers/phone-codes')
+        .set(bearer(agent.token))
+        .send({ phone: '98300 55555', language: 'BN', name: 'Kartik Pal' })
+        .expect(201);
+      expect(sent.body).toMatchObject({ phone: '+919830055555', expiresInSeconds: 600 });
+      const confirm = (code: string, token = agent.token) =>
+        ctx.http
+          .post('/v1/drivers/phone-codes/confirm')
+          .set(bearer(token))
+          .send({ checkId: sent.body.checkId, code });
+      const code = ctx.app
+        .get<MemoryDriverCodeSender>(DRIVER_CODE_SENDER)
+        .lastCodeFor('+919830055555')!;
+      await confirm(code === '000000' ? '111111' : '000000').expect(422);
+      // Only the staff member who sent it can use it.
+      await confirm(code, ops.token).expect(422);
+      await confirm(code).expect(200);
+
+      // A different number cannot use this check.
+      await ctx.http
+        .post('/v1/drivers')
+        .set(bearer(agent.token))
+        .send(body('9830066666', { location, phoneCheckId: sent.body.checkId }))
+        .expect(422);
+      // From the Field App, the location is needed too.
+      expect(
+        (
+          await ctx.http
+            .post('/v1/drivers')
+            .set(bearer(agent.token))
+            .send(body('9830055555', { phoneCheckId: sent.body.checkId }))
+            .expect(422)
+        ).body.code,
+      ).toBe('NO_LOCATION');
+      const d = (
+        await ctx.http
+          .post('/v1/drivers')
+          .set(bearer(agent.token))
+          .send(body('9830055555', { location, phoneCheckId: sent.body.checkId }))
+          .expect(201)
+      ).body;
+      expect(d.onboarding).toMatchObject({
+        registeredAt: location,
+        consentVersion: 'reg-consent-v1',
+        phoneVerifiedByName: agent.staff.name,
+      });
+      // A check is used once.
+      await ctx.http
+        .post('/v1/drivers')
+        .set(bearer(agent.token))
+        .send(
+          body('9830055555', {
+            location,
+            phoneCheckId: sent.body.checkId,
+            acknowledgeDuplicates: true,
+            vehicle: undefined,
+          }),
+        )
+        .expect(422);
+
+      // Changing the number needs the driver's code on the new number.
+      await ctx.http
+        .patch(`/v1/drivers/${d.id}`)
+        .set(bearer(agent.token))
+        .send({ phone: '9830077777' })
+        .expect(422);
+      const newCheck = await confirmPhone(ctx, agent.token, '9830077777');
+      const changed = await ctx.http
+        .patch(`/v1/drivers/${d.id}`)
+        .set(bearer(agent.token))
+        .send({ phone: '9830077777', phoneCheckId: newCheck })
+        .expect(200);
+      expect(changed.body.phone).toBe('+919830077777');
+    });
+
+    it('is approved by head office once every item is done, on a plan it may change', async () => {
+      const agent = await loginAs(ctx, 'FIELD_AGENT');
+      const firstPlan = await bareActivePlan(ctx);
+      const betterPlan = await bareActivePlan(ctx);
+      const d = await readyDriver(ctx, ops.token, { planId: firstPlan });
+      const unready = await makeDriver(ctx, ops.token, { planId: firstPlan });
+
+      // The field agent can change the plan before approval, but cannot approve.
+      await ctx.http
+        .patch(`/v1/drivers/${d.id}`)
+        .set(bearer(agent.token))
+        .send({ planId: firstPlan })
+        .expect(200);
+      await ctx.http.post(`/v1/drivers/${d.id}/approve`).set(bearer(agent.token)).expect(403);
+      const pm = await loginAs(ctx, 'PLAN_MANAGER');
+      expect(
+        (await ctx.http.post(`/v1/drivers/${unready.id}/approve`).set(bearer(pm.token)).expect(422))
+          .body.code,
+      ).toBe('NOT_READY');
+
+      const waiting = await ctx.http
+        .get('/v1/drivers?stage=AWAITING_APPROVAL')
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(waiting.body.items.map((x: { id: string }) => x.id)).toEqual([d.id]);
+
+      // Rejected with a reason, fixed, and sent again.
+      await ctx.http
+        .post(`/v1/drivers/${d.id}/reject`)
+        .set(bearer(pm.token))
+        .send({ reason: 'no' })
+        .expect(400);
+      const rejected = await ctx.http
+        .post(`/v1/drivers/${d.id}/reject`)
+        .set(bearer(pm.token))
+        .send({ reason: 'Address proof is an old bill' })
+        .expect(200);
+      expect(rejected.body.onboarding).toMatchObject({
+        stage: 'REJECTED',
+        approvalReason: 'Address proof is an old bill',
+      });
+      const again = await ctx.http
+        .post(`/v1/drivers/${d.id}/resubmit`)
+        .set(bearer(agent.token))
+        .expect(200);
+      expect(again.body.onboarding.stage).toBe('AWAITING_APPROVAL');
+
+      // Approved on a different plan.
+      const ok = await ctx.http
+        .post(`/v1/drivers/${d.id}/approve`)
+        .set(bearer(pm.token))
+        .send({ planId: betterPlan })
+        .expect(200);
+      expect(ok.body.onboarding).toMatchObject({
+        stage: 'APPROVED',
+        approval: 'APPROVED',
+        approvedByName: pm.staff.name,
+        plan: { id: betterPlan },
+      });
+      expect(ok.body.onboarding.decisions.map((x: { decision: string }) => x.decision)).toEqual([
+        'APPROVED',
+        'REJECTED',
+      ]);
+      // Once approved, only head office changes the plan (by approving again).
+      await ctx.http
+        .patch(`/v1/drivers/${d.id}`)
+        .set(bearer(agent.token))
+        .send({ planId: firstPlan })
+        .expect(409);
+      await expect(
+        ctx.prisma.$executeRawUnsafe(
+          `UPDATE "driver_approval_decisions" SET "reason" = 'x' WHERE "driver_id" = '${d.id}'`,
+        ),
+      ).rejects.toThrow();
     });
   });
 });

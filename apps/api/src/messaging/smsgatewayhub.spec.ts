@@ -23,6 +23,7 @@ function registration(): DltRegistration {
       ticket_resolved: none,
       payment_link: none,
       sign_in_code: { EN: '1107000000000000009', BN: null, HI: null },
+      registration_code: { EN: null, BN: null, HI: null },
     },
   };
 }

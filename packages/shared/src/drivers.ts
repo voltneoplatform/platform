@@ -171,6 +171,9 @@ export function ageOn(dateOfBirth: string, on: string): number {
 // ---------------------------------------------------------------------------
 
 export interface ReadinessInput {
+  /** The driver gave the OTP sent to the current mobile number. */
+  phoneVerified: boolean;
+  planChosen: boolean;
   dateOfBirth: string | null;
   today: string;
   nomineeRecorded: boolean;
@@ -183,6 +186,8 @@ export interface ReadinessInput {
 }
 
 export const READINESS_ITEMS = [
+  'PHONE_VERIFIED',
+  'PLAN_CHOSEN',
   'ADULT',
   'IDENTITY_VERIFIED',
   'PAN_VERIFIED',
@@ -195,6 +200,8 @@ export const READINESS_ITEMS = [
 export type ReadinessItem = (typeof READINESS_ITEMS)[number];
 
 export const READINESS_LABELS: Record<ReadinessItem, string> = {
+  PHONE_VERIFIED: 'Mobile number confirmed by OTP',
+  PLAN_CHOSEN: 'Plan chosen',
   ADULT: `Driver is ${MIN_DRIVER_AGE} or older`,
   IDENTITY_VERIFIED: 'Identity document verified',
   PAN_VERIFIED: 'PAN card verified',
@@ -214,6 +221,9 @@ export function readiness(input: ReadinessInput): Readiness {
   const verified = input.documents.filter((d) => d.status === 'VERIFIED');
   const renter = input.vehicle ? !input.vehicle.ownedByDriver : false;
   const items: Readiness['items'] = [
+    // Founder, 1 Nov 2026: the driver gives an OTP at registration, and a plan is chosen.
+    { item: 'PHONE_VERIFIED', applies: true, done: input.phoneVerified },
+    { item: 'PLAN_CHOSEN', applies: true, done: input.planChosen },
     {
       item: 'ADULT',
       applies: true,
@@ -245,4 +255,78 @@ export function readiness(input: ReadinessInput): Readiness {
     { item: 'NOMINEE_RECORDED', applies: true, done: input.nomineeRecorded },
   ];
   return { ready: items.every((i) => i.done), items };
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding (founder, 1 Nov 2026): OTP and location at registration, a plan,
+// then final approval by a super admin, operations manager or plan manager.
+// ---------------------------------------------------------------------------
+
+export const DRIVER_APPROVALS = ['AWAITING', 'APPROVED', 'REJECTED'] as const;
+export type DriverApproval = (typeof DRIVER_APPROVALS)[number];
+
+/** Where a driver stands before and after an agreement, for lists and badges. */
+export type OnboardingStage =
+  'PAPERWORK' | 'AWAITING_APPROVAL' | 'REJECTED' | 'APPROVED' | 'AGREEMENT';
+
+export function onboardingStage(input: {
+  ready: boolean;
+  approval: DriverApproval;
+  hasOpenAgreement: boolean;
+}): OnboardingStage {
+  if (input.hasOpenAgreement) return 'AGREEMENT';
+  if (input.approval === 'APPROVED') return 'APPROVED';
+  if (input.approval === 'REJECTED') return 'REJECTED';
+  return input.ready ? 'AWAITING_APPROVAL' : 'PAPERWORK';
+}
+
+export const ONBOARDING_STAGE_LABELS: Record<Exclude<OnboardingStage, 'AGREEMENT'>, string> = {
+  PAPERWORK: 'Paperwork in progress',
+  AWAITING_APPROVAL: 'Awaiting approval',
+  REJECTED: 'Not approved',
+  APPROVED: 'Approved: assign a battery',
+};
+
+/**
+ * Read to the driver before they give the registration code. Version is stored
+ * with the driver. REQUIRES VALIDATION (lawyer, DPDP Act consent wording).
+ */
+export const REGISTRATION_CONSENT_VERSION = 'reg-consent-v1';
+export const REGISTRATION_CONSENT: Record<DriverLanguage, string> = {
+  EN: 'I agree that Volt Neo may collect and verify my documents and details for a battery agreement. I am giving this code to the Volt Neo agent to confirm my mobile number.',
+  BN: 'আমি সম্মতি দিচ্ছি যে Volt Neo ব্যাটারি চুক্তির জন্য আমার নথি ও তথ্য সংগ্রহ ও যাচাই করতে পারে। আমার মোবাইল নম্বর নিশ্চিত করতে আমি এই কোড Volt Neo-র এজেন্টকে দিচ্ছি।',
+  HI: 'मैं सहमति देता/देती हूँ कि Volt Neo बैटरी अनुबंध के लिए मेरे दस्तावेज़ और जानकारी ले और जाँच सके। अपना मोबाइल नंबर पक्का करने के लिए मैं यह कोड Volt Neo एजेंट को दे रहा/रही हूँ।',
+};
+
+/**
+ * Geotags from the Field App (founder, 1 Nov 2026): registration and
+ * installation are saved only with the phone's location. ASSUMED: a fix
+ * rougher than 200 m is refused (move into the open and try again).
+ */
+export const MAX_GEOTAG_ACCURACY_M = 200;
+
+export interface Geotag {
+  lat: number;
+  lng: number;
+  accuracyM: number;
+}
+
+/** Returns an error message, or null if the geotag is usable. */
+export function geotagProblem(g: Partial<Geotag> | null | undefined): string | null {
+  if (!g || typeof g.lat !== 'number' || typeof g.lng !== 'number') {
+    return 'The location is missing. Turn on location and try again.';
+  }
+  if (!Number.isFinite(g.lat) || g.lat < -90 || g.lat > 90) return 'The location is not valid.';
+  if (!Number.isFinite(g.lng) || g.lng < -180 || g.lng > 180) return 'The location is not valid.';
+  if (typeof g.accuracyM !== 'number' || !Number.isFinite(g.accuracyM) || g.accuracyM < 0) {
+    return 'The location is not valid.';
+  }
+  if (g.accuracyM > MAX_GEOTAG_ACCURACY_M) {
+    return `The location is too rough (about ${Math.round(g.accuracyM)} m). Move into the open and try again.`;
+  }
+  return null;
+}
+
+export function mapLink(g: { lat: number; lng: number }): string {
+  return `https://www.google.com/maps?q=${g.lat.toFixed(6)},${g.lng.toFixed(6)}`;
 }

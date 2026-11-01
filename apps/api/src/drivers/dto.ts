@@ -7,6 +7,7 @@ import {
   VEHICLE_TYPES,
   type DriverLanguage,
   type KycDocType,
+  type OnboardingStage,
   type VehicleType,
 } from '@voltneo/shared';
 import { Transform, Type } from 'class-transformer';
@@ -15,8 +16,10 @@ import {
   IsEmail,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Matches,
   Max,
@@ -125,7 +128,33 @@ class DriverFields {
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(1000) notes?: string | null;
 }
 
+/** The phone's location when the Field App saved the record (founder, 1 Nov 2026). */
+export class GeotagDto {
+  @ApiProperty({ example: 22.5726 }) @IsNumber() @Min(-90) @Max(90) lat: number;
+  @ApiProperty({ example: 88.3639 }) @IsNumber() @Min(-180) @Max(180) lng: number;
+  @ApiProperty({ description: 'Metres', example: 12 }) @IsNumber() @Min(0) accuracyM: number;
+}
+
 export class CreateDriverDto extends DriverFields {
+  @ApiPropertyOptional({
+    description:
+      'A confirmed registration code check for this phone (POST /v1/drivers/phone-codes)',
+  })
+  @IsOptional()
+  @IsUUID()
+  phoneCheckId?: string;
+
+  @ApiPropertyOptional({ type: GeotagDto, description: 'Required from the Field App' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GeotagDto)
+  location?: GeotagDto;
+
+  @ApiPropertyOptional({ description: 'The plan chosen for the driver' })
+  @IsOptional()
+  @IsUUID()
+  planId?: string;
+
   @ApiPropertyOptional({ type: VehicleDto })
   @IsOptional()
   @ValidateNested()
@@ -168,12 +197,54 @@ export class UpdateDriverDto {
   @IsOptional() @Transform(emptyToNull) @IsString() @MaxLength(1000) notes?: string | null;
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: 'ACTIVE' | 'INACTIVE';
   @IsOptional() @Transform(toBool) @IsBoolean() acknowledgeDuplicates?: boolean;
+  @ApiPropertyOptional({ description: 'Needed when the phone number changes' })
+  @IsOptional()
+  @IsUUID()
+  phoneCheckId?: string;
+  @ApiPropertyOptional({ description: 'Before final approval only' })
+  @IsOptional()
+  @IsUUID()
+  planId?: string;
+}
+
+export class SendPhoneCodeDto {
+  @ApiProperty({ example: '9830012345' }) @Transform(trim) @IsString() @MaxLength(20) phone: string;
+  @ApiProperty({ enum: DRIVER_LANGUAGES }) @IsIn(DRIVER_LANGUAGES) language: DriverLanguage;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(100) name?: string;
+}
+
+export class ConfirmPhoneCodeDto {
+  @ApiProperty() @IsUUID() checkId: string;
+  @ApiProperty({ example: '482913' })
+  @Matches(/^\d{6}$/, { message: 'The code has 6 digits' })
+  code: string;
+}
+
+export class VerifyPhoneDto {
+  @ApiProperty() @IsUUID() phoneCheckId: string;
+}
+
+export class ApproveDriverDto {
+  @ApiPropertyOptional({ description: 'Change the plan while approving' })
+  @IsOptional()
+  @IsUUID()
+  planId?: string;
+}
+
+export class RejectDriverDto {
+  @ApiProperty() @Transform(trim) @IsString() @Length(5, 300) reason: string;
 }
 
 export class ListDriversQuery {
   @IsOptional() @Transform(trim) @IsString() @MaxLength(60) search?: string;
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: 'ACTIVE' | 'INACTIVE';
   @IsOptional() @IsIn(['ready', 'not_ready']) readiness?: 'ready' | 'not_ready';
+  @ApiPropertyOptional({
+    enum: ['PAPERWORK', 'AWAITING_APPROVAL', 'REJECTED', 'APPROVED', 'AGREEMENT'],
+  })
+  @IsOptional()
+  @IsIn(['PAPERWORK', 'AWAITING_APPROVAL', 'REJECTED', 'APPROVED', 'AGREEMENT'])
+  stage?: OnboardingStage;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
 }

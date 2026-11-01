@@ -54,6 +54,8 @@ export const LABELS: Record<Lang, Labels> = {
       DRIVER_PHOTO: 'Driver photo',
     },
     readiness: {
+      PHONE_VERIFIED: 'Mobile number confirmed by code',
+      PLAN_CHOSEN: 'Plan chosen',
       ADULT: 'Driver is 18 or older',
       IDENTITY_VERIFIED: 'Identity document checked',
       PAN_VERIFIED: 'PAN card checked',
@@ -130,6 +132,8 @@ export const LABELS: Record<Lang, Labels> = {
       DRIVER_PHOTO: 'চালকের ছবি',
     },
     readiness: {
+      PHONE_VERIFIED: 'কোড দিয়ে মোবাইল নম্বর নিশ্চিত',
+      PLAN_CHOSEN: 'প্ল্যান বেছে নেওয়া হয়েছে',
       ADULT: 'চালকের বয়স ১৮ বা তার বেশি',
       IDENTITY_VERIFIED: 'পরিচয়পত্র যাচাই হয়েছে',
       PAN_VERIFIED: 'প্যান কার্ড যাচাই হয়েছে',
@@ -206,6 +210,8 @@ export const LABELS: Record<Lang, Labels> = {
       DRIVER_PHOTO: 'चालक की फ़ोटो',
     },
     readiness: {
+      PHONE_VERIFIED: 'कोड से मोबाइल नंबर पक्का',
+      PLAN_CHOSEN: 'प्लान चुना गया',
       ADULT: 'चालक की उम्र 18 या उससे अधिक',
       IDENTITY_VERIFIED: 'पहचान पत्र की जाँच हो गई',
       PAN_VERIFIED: 'पैन कार्ड की जाँच हो गई',

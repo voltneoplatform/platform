@@ -23,14 +23,20 @@ import {
 } from '../common/decorators';
 import { MAX_UPLOAD_BYTES } from '../files/file-storage';
 import {
+  ApproveDriverDto,
+  ConfirmPhoneCodeDto,
   CreateDriverDto,
   ListDriversQuery,
+  RejectDriverDto,
   RejectKycDto,
+  SendPhoneCodeDto,
+  VerifyPhoneDto,
   UpdateDriverDto,
   UploadKycDto,
   VehicleDto,
 } from './dto';
 import { DriversService, type UploadedFile as File } from './drivers.service';
+import { PhoneChecksService } from './phone-checks.service';
 
 const upload = () =>
   UseInterceptors(
@@ -41,7 +47,71 @@ const upload = () =>
 @ApiBearerAuth()
 @Controller()
 export class DriversController {
-  constructor(private readonly drivers: DriversService) {}
+  constructor(
+    private readonly drivers: DriversService,
+    private readonly phoneChecks: PhoneChecksService,
+  ) {}
+
+  /** Sends a registration code to the driver's phone (founder, 1 Nov 2026). */
+  @Post('drivers/phone-codes')
+  @RequirePermissions('drivers.manage')
+  sendPhoneCode(@Body() dto: SendPhoneCodeDto, @CurrentStaff() staff: AuthenticatedStaff) {
+    return this.phoneChecks.send(dto, staff);
+  }
+
+  @Post('drivers/phone-codes/confirm')
+  @HttpCode(200)
+  @RequirePermissions('drivers.manage')
+  confirmPhoneCode(@Body() dto: ConfirmPhoneCodeDto, @CurrentStaff() staff: AuthenticatedStaff) {
+    return this.phoneChecks.confirm(dto.checkId, dto.code, staff);
+  }
+
+  @Post('drivers/:id/verify-phone')
+  @HttpCode(200)
+  @RequirePermissions('drivers.manage')
+  verifyPhone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VerifyPhoneDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.drivers.verifyPhone(id, dto.phoneCheckId, staff, meta);
+  }
+
+  @Post('drivers/:id/approve')
+  @HttpCode(200)
+  @RequirePermissions('drivers.approve')
+  approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApproveDriverDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.drivers.approve(id, dto, staff, meta);
+  }
+
+  @Post('drivers/:id/reject')
+  @HttpCode(200)
+  @RequirePermissions('drivers.approve')
+  rejectDriver(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectDriverDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.drivers.reject(id, dto, staff, meta);
+  }
+
+  @Post('drivers/:id/resubmit')
+  @HttpCode(200)
+  @RequirePermissions('drivers.manage')
+  resubmit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.drivers.resubmit(id, staff, meta);
+  }
 
   @Get('drivers')
   @RequirePermissions('drivers.read')

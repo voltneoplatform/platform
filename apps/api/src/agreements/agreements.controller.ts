@@ -28,12 +28,14 @@ import { AGREEMENT_DOC, SCHEDULE_DOCS, type ScheduleDoc } from '../documents/doc
 import type { UploadedFile as File } from '../drivers/drivers.service';
 import {
   CancelAgreementDto,
+  ChangeBatteryDto,
   CreateAgreementDto,
   DocumentQuery,
   InstallationDto,
   ListAgreementsQuery,
   RejectInstallationDto,
   RescheduleDto,
+  ResignAgreementDto,
   SignAgreementDto,
   UpdateAgreementDto,
 } from './dto';
@@ -129,6 +131,39 @@ export class AgreementsController {
     @ReqMeta() meta: RequestMeta,
   ) {
     return this.agreements.sign(id, dto, files, staff, meta);
+  }
+
+  /** Founder, 1 Nov 2026: the assigned battery can change until it is installed. */
+  @Post('agreements/:id/battery')
+  @HttpCode(200)
+  @RequirePermissions('agreements.manage')
+  changeBattery(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeBatteryDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.agreements.changeBattery(id, dto, staff, meta);
+  }
+
+  /** The corrected agreement the driver signed after a battery change. */
+  @Post('agreements/:id/resign')
+  @HttpCode(200)
+  @RequirePermissions('agreements.manage')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FilesInterceptor('files', MAX_SIGNED_PHOTOS, {
+      limits: { fileSize: MAX_SIGNED_PDF_BYTES, files: MAX_SIGNED_PHOTOS, fields: 4 },
+    }),
+  )
+  resign(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResignAgreementDto,
+    @UploadedFiles() files: File[] | undefined,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.agreements.recordResigning(id, dto, files, staff, meta);
   }
 
   @Post('agreements/:id/signed-copy/link')

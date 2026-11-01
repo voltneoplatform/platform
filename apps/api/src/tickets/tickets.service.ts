@@ -605,6 +605,18 @@ export class TicketsService {
       if (fresh.status !== 'IN_STOCK') {
         throw new ConflictException(`Battery ${fresh.serial} is not in stock`);
       }
+      const held = await tx.agreement.findFirst({
+        where: {
+          batteryId: fresh.id,
+          state: { in: ['DRAFT', 'AWAITING_DOWN_PAYMENT', 'AWAITING_INSTALLATION'] },
+        },
+        select: { number: true },
+      });
+      if (held) {
+        throw new ConflictException(
+          `Battery ${fresh.serial} is assigned to agreement ${held.number}`,
+        );
+      }
       if (fresh.batteryTypeId !== a.batteryTypeId) {
         throw new UnprocessableEntityException(
           `Battery ${fresh.serial} is not the battery type in this agreement`,

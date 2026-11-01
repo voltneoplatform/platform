@@ -23,7 +23,8 @@ export type DltKey =
   | 'ticket_received'
   | 'ticket_resolved'
   | 'payment_link'
-  | 'sign_in_code';
+  | 'sign_in_code'
+  | 'registration_code';
 
 const V = DLT_VAR;
 
@@ -88,6 +89,11 @@ export const DLT_TEMPLATES: Record<
     when: 'Staff sign-in by phone (now) and Driver App sign-in (M6)',
     render: (l) => TEXTS[l].signInCodeSms({ code: V, minutes: V }),
   },
+  registration_code: {
+    name: 'Registration code (OTP)',
+    when: 'When a field agent or head office registers a driver (founder, 1 Nov 2026)',
+    render: (l) => TEXTS[l].registrationCodeSms({ code: V, minutes: V }),
+  },
 };
 
 /** The message template names the platform stores, and the DLT template each one uses. */
@@ -105,6 +111,7 @@ const BY_MESSAGE_TEMPLATE: Record<string, DltKey> = {
   ticket_resolved: 'ticket_resolved',
   payment_link: 'payment_link',
   sign_in_code: 'sign_in_code',
+  registration_code: 'registration_code',
 };
 
 export function dltKeyFor(messageTemplate: string): DltKey | null {

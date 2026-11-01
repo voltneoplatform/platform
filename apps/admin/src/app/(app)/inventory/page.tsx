@@ -280,6 +280,15 @@ export default function InventoryPage() {
                 <td>{b.batteryType.name}</td>
                 <td>
                   <StatusBadge status={b.status} />
+                  {b.assignedTo && (
+                    <div className="muted" style={{ fontSize: 13 }}>
+                      Assigned:{' '}
+                      <Link href={`/agreements/${b.assignedTo.agreementId}`}>
+                        {b.assignedTo.number}
+                      </Link>{' '}
+                      · {b.assignedTo.driverName}
+                    </div>
+                  )}
                 </td>
                 <td>{b.location ?? <span className="muted">—</span>}</td>
                 <td>{formatDate(b.purchaseDate)}</td>

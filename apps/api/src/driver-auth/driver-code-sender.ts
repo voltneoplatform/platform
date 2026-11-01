@@ -14,7 +14,11 @@ export interface DriverCodeMessage {
   language: Lang;
   /** Names on this phone, for the test-site email only. */
   names: string[];
+  /** Driver App sign-in (default) or a registration check read out to staff. */
+  purpose?: CodePurpose;
 }
+
+export type CodePurpose = 'sign_in' | 'registration';
 
 /**
  * Delivers Driver App sign-in codes. By SMS in the driver's language once the
@@ -23,7 +27,7 @@ export interface DriverCodeMessage {
  */
 export interface DriverCodeSender {
   /** Whether a code can be delivered for a driver who reads this language. */
-  canSend(language: Lang): boolean;
+  canSend(language: Lang, purpose?: CodePurpose): boolean;
   send(m: DriverCodeMessage): Promise<void>;
 }
 
@@ -53,7 +57,8 @@ export class LogDriverCodeSender implements DriverCodeSender {
     return true;
   }
   async send(m: DriverCodeMessage): Promise<void> {
-    this.logger.warn(`[dev] Driver App code for ${m.phone} (${m.names.join(', ')}): ${m.code}`);
+    const what = m.purpose === 'registration' ? 'Registration' : 'Driver App';
+    this.logger.warn(`[dev] ${what} code for ${m.phone} (${m.names.join(', ')}): ${m.code}`);
   }
 }
 
@@ -63,18 +68,22 @@ export class SmsDriverCodeSender implements DriverCodeSender {
     private readonly client: SmsGatewayHubClient,
     private readonly ttlMinutes: number,
   ) {}
-  canSend(language: Lang): boolean {
-    return this.client.ready('sign_in_code', language);
+  canSend(language: Lang, purpose: CodePurpose = 'sign_in'): boolean {
+    return this.client.ready(
+      purpose === 'registration' ? 'registration_code' : 'sign_in_code',
+      language,
+    );
   }
   async send(m: DriverCodeMessage): Promise<void> {
-    const text = TEXTS[m.language].signInCodeSms({
-      code: m.code,
-      minutes: String(this.ttlMinutes),
-    });
+    const registration = m.purpose === 'registration';
+    const p = { code: m.code, minutes: String(this.ttlMinutes) };
+    const text = registration
+      ? TEXTS[m.language].registrationCodeSms(p)
+      : TEXTS[m.language].signInCodeSms(p);
     await this.client.send({
       to: m.phone,
       text,
-      key: 'sign_in_code',
+      key: registration ? 'registration_code' : 'sign_in_code',
       lang: m.language,
       otp: true,
     });
@@ -101,8 +110,10 @@ export class TestEmailDriverCodeSender implements DriverCodeSender {
   }
   async send(m: DriverCodeMessage): Promise<void> {
     const who = m.names.join(', ');
+    const registration = m.purpose === 'registration';
+    const what = registration ? 'Driver registration code' : 'Driver App sign-in code';
     const text = [
-      `Driver App sign-in code for ${who} (${m.phone}): ${m.code}`,
+      `${what} for ${who} (${m.phone}): ${m.code}`,
       '',
       'This is the Volt Neo test site. Codes come to this address because driver SMS is not switched on yet (the DLT templates are not approved).',
     ].join('\n');
@@ -112,7 +123,10 @@ export class TestEmailDriverCodeSender implements DriverCodeSender {
         Destination: { ToAddresses: [this.to] },
         Content: {
           Simple: {
-            Subject: { Data: `[Test site] Driver App code ${m.code} for ${who}`, Charset: 'UTF-8' },
+            Subject: {
+              Data: `[Test site] ${registration ? 'Registration' : 'Driver App'} code ${m.code} for ${who}`,
+              Charset: 'UTF-8',
+            },
             Body: { Text: { Data: text, Charset: 'UTF-8' } },
           },
         },
@@ -127,11 +141,13 @@ export class RoutingDriverCodeSender implements DriverCodeSender {
     private readonly sms: SmsDriverCodeSender | null,
     private readonly fallback: DriverCodeSender | null,
   ) {}
-  canSend(language: Lang): boolean {
-    return Boolean(this.sms?.canSend(language) || this.fallback?.canSend(language));
+  canSend(language: Lang, purpose?: CodePurpose): boolean {
+    return Boolean(
+      this.sms?.canSend(language, purpose) || this.fallback?.canSend(language, purpose),
+    );
   }
   async send(m: DriverCodeMessage): Promise<void> {
-    if (this.sms?.canSend(m.language)) return this.sms.send(m);
+    if (this.sms?.canSend(m.language, m.purpose)) return this.sms.send(m);
     if (this.fallback) return this.fallback.send(m);
     throw new Error('No way to send Driver App codes yet');
   }

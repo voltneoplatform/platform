@@ -307,6 +307,12 @@ export class MeService {
       ip: meta.ip,
       requestId: meta.requestId,
     });
+    // The corrected agreement, if the battery changed after signing.
+    const latest = await this.prisma.agreementResigning.findFirst({
+      where: { agreementId: a.id },
+      orderBy: { recordedAt: 'desc' },
+    });
+    if (latest) return this.links.issue(latest.fileKey, latest.fileType, latest.fileName);
     return this.links.issue(
       a.signedFileKey,
       a.signedFileType ?? 'application/pdf',

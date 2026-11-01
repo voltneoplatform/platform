@@ -63,7 +63,7 @@ export interface AgreementPackData extends AgreementDocData {
     ownerName: string | null;
     ownerPhone: string | null;
   };
-  batteryDetail: { chemistry: string; serial: string | null };
+  batteryDetail: { chemistry: string; serial: string | null; imei: string | null };
   driverLanguage: Lang;
 }
 
@@ -416,7 +416,7 @@ export class DocumentsService {
       ['Voltage and capacity', `${data.batteryType.voltage} V, ${data.batteryType.capacityAh} Ah`],
       ['Chemistry', data.batteryDetail.chemistry],
       ['Serial number', data.batteryDetail.serial ?? 'Recorded at installation (Schedule 3)'],
-      ['GPS Module', 'Recorded at installation (Schedule 3)'],
+      ['GPS Module IMEI', data.batteryDetail.imei ?? 'Recorded at installation (Schedule 3)'],
       [
         'Replacement history',
         "Recorded in Volt Neo's system if the Battery is replaced (clause C8)",

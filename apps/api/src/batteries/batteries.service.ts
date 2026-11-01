@@ -31,13 +31,29 @@ import type {
   UpdateBatteryDto,
 } from './dto';
 
-type BatteryWithType = Battery & { batteryType: BatteryType };
+type BatteryWithType = Battery & {
+  batteryType: BatteryType;
+  agreements?: { id: string; number: string; driver: { name: string } }[];
+};
+
+/** Agreements not yet installed that hold a battery (founder, 1 Nov 2026: assigned before signing). */
+const ASSIGNED_STATES = ['DRAFT', 'AWAITING_DOWN_PAYMENT', 'AWAITING_INSTALLATION'] as const;
+const ASSIGNED_INCLUDE = {
+  where: { state: { in: [...ASSIGNED_STATES] } },
+  select: { id: true, number: true, driver: { select: { name: true } } },
+  take: 1,
+} satisfies Prisma.Battery$agreementsArgs;
 
 function view(b: BatteryWithType, showCosts: boolean) {
+  const held = b.agreements?.[0];
   return {
     id: b.id,
     serial: b.serial,
     gpsDeviceId: b.gpsDeviceId,
+    /** In stock but held for an agreement not yet installed. */
+    assignedTo: held
+      ? { agreementId: held.id, number: held.number, driverName: held.driver.name }
+      : null,
     batteryType: { id: b.batteryType.id, name: b.batteryType.name },
     status: b.status,
     holder: b.holder,
@@ -117,7 +133,13 @@ export class BatteriesService implements OnModuleInit {
     const search = q.search ? normaliseSerial(q.search) : undefined;
     const where: Prisma.BatteryWhereInput = {
       batteryTypeId: q.batteryTypeId,
-      status: q.status,
+      status: q.available ? 'IN_STOCK' : q.status,
+      ...(q.available
+        ? {
+            gpsDeviceId: { not: null },
+            agreements: { none: { state: { in: [...ASSIGNED_STATES] } } },
+          }
+        : {}),
       OR: search
         ? [{ serial: { contains: search } }, { gpsDeviceId: { contains: search } }]
         : undefined,
@@ -126,7 +148,7 @@ export class BatteriesService implements OnModuleInit {
       this.prisma.battery.count({ where }),
       this.prisma.battery.findMany({
         where,
-        include: { batteryType: true },
+        include: { batteryType: true, agreements: ASSIGNED_INCLUDE },
         orderBy: [{ createdAt: 'desc' }, { serial: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -138,7 +160,7 @@ export class BatteriesService implements OnModuleInit {
   async get(id: string, showCosts: boolean) {
     const b = await this.prisma.battery.findUnique({
       where: { id },
-      include: { batteryType: true },
+      include: { batteryType: true, agreements: ASSIGNED_INCLUDE },
     });
     if (!b) throw new NotFoundException('Battery not found');
     const pendingRetire = await this.prisma.approvalRequest.findFirst({
@@ -465,6 +487,7 @@ export class BatteriesService implements OnModuleInit {
         where: { type: 'BATTERY_RETIRE', targetId: id, status: 'PENDING' },
       });
       if (pending) throw new ConflictException('This battery is waiting for a retirement decision');
+      await this.notAssigned(tx, id);
       if (dto.technicianId) {
         const tech = await tx.staffUser.findUnique({ where: { id: dto.technicianId } });
         if (!tech || tech.role !== 'TECHNICIAN' || tech.status !== 'ACTIVE') {
@@ -502,6 +525,19 @@ export class BatteriesService implements OnModuleInit {
     return this.get(id, true);
   }
 
+  /** A battery held for an agreement stays in stock until head office changes the agreement's battery. */
+  private async notAssigned(tx: Tx, batteryId: string) {
+    const held = await tx.agreement.findFirst({
+      where: { batteryId, state: { in: [...ASSIGNED_STATES] } },
+      select: { number: true },
+    });
+    if (held) {
+      throw new ConflictException(
+        `This battery is assigned to agreement ${held.number}. Change the agreement's battery first.`,
+      );
+    }
+  }
+
   async requestRetirement(
     id: string,
     dto: RetireBatteryDto,
@@ -516,6 +552,7 @@ export class BatteriesService implements OnModuleInit {
           'Only a battery in stock, under repair or recovered can be retired',
         );
       }
+      await this.notAssigned(tx, id);
       return this.approvals.create(
         tx,
         {

@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { shortDate } from '@/i18n';
 import { appendPhotos, type Photo } from '@/photos';
-import { BatteryPicker, type StockBattery } from '@/BatteryPicker';
+import { useGeotag } from '@/location';
+import { LocationNotice } from '@/onboarding';
 import { useSession } from '@/session';
 import {
+  Body,
   Button,
   Card,
   Check,
@@ -13,6 +15,7 @@ import {
   H2,
   Loading,
   Muted,
+  Notice,
   Photos,
   Screen,
   useLoad,
@@ -24,6 +27,9 @@ interface Agreement {
   driver: { name: string };
   vehicle: { registration: string | null };
   batteryType: { id: string; name: string };
+  /** Founder, 1 Nov 2026: assigned when the agreement is prepared; this one is installed. */
+  battery: { id: string; serial: string; gpsDeviceId: string | null } | null;
+  resignRequired: boolean;
   terms: { firstDueDate: string };
 }
 
@@ -31,7 +37,8 @@ export default function Install() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, api, staff } = useSession();
   const ag = useLoad(() => api.get<Agreement>(`/v1/agreements/${id}`), [api, id]);
-  const [battery, setBattery] = useState<StockBattery | null>(null);
+  const [serialChecked, setSerialChecked] = useState(false);
+  const geo = useGeotag();
   const [voltage, setVoltage] = useState('');
   const [location, setLocation] = useState('');
   const [condition, setCondition] = useState('');
@@ -48,8 +55,12 @@ export default function Install() {
       </Screen>
     );
   }
+  const battery = a.battery;
   const ready =
     !!battery &&
+    !a.resignRequired &&
+    serialChecked &&
+    !!geo.geo &&
     Number(voltage) > 0 &&
     location.trim().length >= 3 &&
     condition.trim().length >= 3 &&
@@ -68,9 +79,20 @@ export default function Install() {
           {t('firstDue', { date: shortDate(a.terms.firstDueDate) })}
         </Muted>
       </Card>
-      <Card>
-        <BatteryPicker typeId={a.batteryType.id} value={battery} onChange={setBattery} />
-      </Card>
+      {a.resignRequired && <Notice tone="warn">{t('resignNeeded')}</Notice>}
+      {battery && (
+        <Card>
+          <H2>{t('assignedBattery')}</H2>
+          <Body style={{ fontWeight: '700', fontSize: 18 }}>{battery.serial}</Body>
+          {battery.gpsDeviceId && <Muted>{t('imei', { imei: battery.gpsDeviceId })}</Muted>}
+          <Check
+            label={t('serialChecked', { serial: battery.serial })}
+            value={serialChecked}
+            onChange={setSerialChecked}
+          />
+        </Card>
+      )}
+      <LocationNotice state={geo.state} onRetry={() => void geo.retry()} />
       <Card>
         <Field
           testID="voltage"
@@ -110,6 +132,9 @@ export default function Install() {
               const form = new FormData();
               form.append('batteryId', battery!.id);
               form.append('technicianId', staff.id);
+              form.append('geoLat', String(geo.geo!.lat));
+              form.append('geoLng', String(geo.geo!.lng));
+              form.append('geoAccuracyM', String(geo.geo!.accuracyM));
               form.append('installedAt', new Date().toISOString());
               form.append('location', location.trim());
               form.append('voltageReading', voltage);

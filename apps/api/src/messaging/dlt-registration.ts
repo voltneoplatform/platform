@@ -27,6 +27,7 @@ export const DLT_REGISTRATION: {
     ticket_resolved: { EN: null, BN: null, HI: null },
     payment_link: { EN: null, BN: null, HI: null },
     sign_in_code: { EN: null, BN: null, HI: null },
+    registration_code: { EN: null, BN: null, HI: null },
   },
 };
 

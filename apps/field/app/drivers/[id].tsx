@@ -5,11 +5,14 @@ import {
   KYC_DOC_INFO,
   KYC_DOC_TYPES,
   type AgreementState,
+  type DriverLanguage,
   type KycDocType,
+  type OnboardingStage,
   type ReadinessItem,
 } from '@voltneo/shared';
 import { rupees } from '@/i18n';
 import { appendPhotos, type Photo } from '@/photos';
+import { PhoneCheck, PlanPicker, StageBadge } from '@/onboarding';
 import { useSession } from '@/session';
 import {
   Badge,
@@ -47,6 +50,14 @@ interface DriverDetail {
     rejectionReason: string | null;
   }[];
   readiness: { ready: boolean; items: { item: ReadinessItem; done: boolean; applies: boolean }[] };
+  language: DriverLanguage;
+  onboarding: {
+    stage: OnboardingStage;
+    approval: 'AWAITING' | 'APPROVED' | 'REJECTED';
+    approvalReason: string | null;
+    plan: { id: string; names: { bn: string; hi: string; en: string } } | null;
+    phoneVerifiedAt: string | null;
+  };
 }
 
 interface AgreementRow {
@@ -87,6 +98,14 @@ export default function DriverPage() {
             {d.phone} · {[d.addressLine, d.area, d.district].filter(Boolean).join(', ')}
           </Muted>
           {message && <Notice tone="success">{message}</Notice>}
+
+          <OnboardingCard
+            d={d}
+            onSaved={(text) => {
+              setMessage(text);
+              void driver.reload();
+            }}
+          />
 
           <Card>
             <H2>{t('agreements')}</H2>
@@ -246,5 +265,104 @@ function AddDocument({
       />
       <Button title={t('cancel')} variant="secondary" onPress={onCancel} />
     </View>
+  );
+}
+
+/** Founder, 1 Nov 2026: code, plan and head office's final approval. */
+function OnboardingCard({ d, onSaved }: { d: DriverDetail; onSaved: (text: string) => void }) {
+  const { t, api, can, lang } = useSession();
+  const o = d.onboarding;
+  const [check, setCheck] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const manage = can('drivers.manage');
+  const editable = manage && o.approval !== 'APPROVED' && o.stage !== 'AGREEMENT';
+  const planName = o.plan
+    ? lang === 'BN'
+      ? o.plan.names.bn
+      : lang === 'HI'
+        ? o.plan.names.hi
+        : o.plan.names.en
+    : null;
+
+  async function run(fn: () => Promise<unknown>, done: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      onSaved(done);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <H2>{t('onboarding')}</H2>
+      {o.stage !== 'AGREEMENT' && (
+        <View>
+          <StageBadge
+            stage={o.stage}
+            done={d.readiness.items.filter((i) => i.done).length}
+            total={d.readiness.items.length}
+          />
+        </View>
+      )}
+      {o.approval === 'REJECTED' && o.approvalReason && (
+        <Notice tone="danger">{t('rejectedReason', { reason: o.approvalReason })}</Notice>
+      )}
+      <ErrorNotice error={error} />
+      {editable ? (
+        <PlanPicker
+          value={o.plan?.id ?? null}
+          onChange={(planId) =>
+            void run(() => api.patch(`/v1/drivers/${d.id}`, { planId }), t('planSaved'))
+          }
+        />
+      ) : (
+        planName && (
+          <Body>
+            {t('plan')}: {planName}
+          </Body>
+        )
+      )}
+      {!o.phoneVerifiedAt && manage && (
+        <>
+          <Badge tone="warn" text={t('phoneNotConfirmed')} />
+          <PhoneCheck
+            phone={d.phone}
+            language={d.language}
+            name={d.name}
+            checkId={null}
+            onConfirmed={(id) => setCheck(id)}
+          />
+          {check && (
+            <Button
+              title={t('confirmPhoneNow')}
+              busy={busy}
+              onPress={() =>
+                void run(
+                  () => api.post(`/v1/drivers/${d.id}/verify-phone`, { phoneCheckId: check }),
+                  t('phoneConfirmed'),
+                )
+              }
+            />
+          )}
+        </>
+      )}
+      {manage && o.approval === 'REJECTED' && o.stage !== 'AGREEMENT' && (
+        <Button
+          testID="send-again"
+          title={t('sendAgain')}
+          variant="secondary"
+          busy={busy}
+          onPress={() =>
+            void run(() => api.post(`/v1/drivers/${d.id}/resubmit`, {}), t('sentAgain'))
+          }
+        />
+      )}
+    </Card>
   );
 }

@@ -1,5 +1,9 @@
 import zlib from 'node:zlib';
 import { rupeesToPaise as r } from '@voltneo/shared';
+import {
+  DRIVER_CODE_SENDER,
+  type MemoryDriverCodeSender,
+} from '../src/driver-auth/driver-code-sender';
 import { bearer, type TestContext } from './helpers';
 
 export const PNG = Buffer.concat([
@@ -76,18 +80,74 @@ export async function makePlan(ctx: TestContext, token: string, en?: string) {
   };
 }
 
+/**
+ * The registration code check (founder, 1 Nov 2026): sends a code to the phone,
+ * reads it from the in-memory sender as the driver would read it out, and
+ * confirms it. Returns the check id to save the driver with.
+ */
+export async function confirmPhone(ctx: TestContext, token: string, phone: string) {
+  const sent = await ctx.http
+    .post('/v1/drivers/phone-codes')
+    .set(bearer(token))
+    .send({ phone, language: 'BN' })
+    .expect(201);
+  const sender = ctx.app.get<MemoryDriverCodeSender>(DRIVER_CODE_SENDER);
+  const code = sender.lastCodeFor(sent.body.phone);
+  if (!code) throw new Error(`no registration code for ${phone}`);
+  await ctx.http
+    .post('/v1/drivers/phone-codes/confirm')
+    .set(bearer(token))
+    .send({ checkId: sent.body.checkId, code })
+    .expect(200);
+  return sent.body.checkId as string;
+}
+
+/** An active plan with a published version, made directly (for readiness only, no prices). */
+export async function bareActivePlan(ctx: TestContext) {
+  n += 1;
+  const plan = await ctx.prisma.plan.create({
+    data: {
+      seq: 900000 + n,
+      code: `TP${n}`,
+      nameBn: `পরীক্ষা ${n}`,
+      nameHi: `परीक्षा ${n}`,
+      nameEn: `Test plan ${n}`,
+      status: 'ACTIVE',
+      versions: {
+        create: {
+          version: 1,
+          status: 'PUBLISHED',
+          termMonths: 18,
+          graceDays: 5,
+          lateFeePerDayPaise: 10000,
+          lateFeeCapDays: 30,
+          publishedAt: new Date(),
+        },
+      },
+    },
+  });
+  return plan.id;
+}
+
 export async function makeDriver(
   ctx: TestContext,
   token: string,
   overrides: Record<string, unknown> = {},
 ) {
   n += 1;
+  const phone =
+    (overrides.phone as string | undefined) ?? `98${String(30000000 + n).padStart(8, '0')}`;
+  const phoneCheckId =
+    'phoneCheckId' in overrides ? overrides.phoneCheckId : await confirmPhone(ctx, token, phone);
   const res = await ctx.http
     .post('/v1/drivers')
     .set(bearer(token))
     .send({
       name: `Driver ${n}`,
-      phone: `98${String(30000000 + n).padStart(8, '0')}`,
+      phone,
+      phoneCheckId,
+      // Where the Field App registered the driver (needed from field staff).
+      location: { lat: 22.5726, lng: 88.3639, accuracyM: 12 },
       language: 'BN',
       dateOfBirth: '1990-01-15',
       addressLine: '12 Station Road',
@@ -116,13 +176,18 @@ export function uploadKyc(
   return req.attach('file', file, filename);
 }
 
-/** A driver whose readiness checklist is complete (identity, PAN, address, photo verified). */
+/**
+ * A driver whose readiness checklist is complete: phone confirmed by code, a
+ * plan chosen (a bare test plan unless one is given), identity, PAN, address
+ * and photo verified.
+ */
 export async function readyDriver(
   ctx: TestContext,
   opsToken: string,
   overrides: Record<string, unknown> = {},
 ) {
-  const d = await makeDriver(ctx, opsToken, overrides);
+  const planId = (overrides.planId as string | undefined) ?? (await bareActivePlan(ctx));
+  const d = await makeDriver(ctx, opsToken, { ...overrides, planId });
   await uploadKyc(ctx, opsToken, d.id, {
     type: 'VOTER_ID',
     number: `ABC${String(1000000 + n++).slice(-7)}`,
@@ -142,6 +207,26 @@ export async function readyDriver(
   }
   if (!last?.readiness.ready) throw new Error('fixture driver is not ready');
   return d;
+}
+
+/** A ready driver with head office's final approval on the given plan (founder, 1 Nov 2026). */
+export async function approvedDriver(
+  ctx: TestContext,
+  opsToken: string,
+  planId: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const d = await readyDriver(ctx, opsToken, { ...overrides, planId });
+  await ctx.http.post(`/v1/drivers/${d.id}/approve`).set(bearer(opsToken)).send({}).expect(200);
+  return d;
+}
+
+/** The next 17th at least 7 days away (a valid first due date for drafts). */
+export function nextSeventeenth() {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const day = Number(today.slice(8, 10));
+  const [y, m] = today.split('-').map(Number) as [number, number];
+  return new Date(Date.UTC(y, m - 1 + (day <= 10 ? 0 : 1), 17)).toISOString().slice(0, 10);
 }
 
 /** A published plan with one price row: by default ₹20,000 + 18 × ₹3,000 = ₹74,000. */
@@ -213,23 +298,15 @@ export async function activeAgreement(
 ) {
   const typeId = opts.typeId ?? (await makeBatteryType(ctx, t.pm, { purchase: 50000 })).id;
   const versionId = opts.versionId ?? (await publishedPlan(ctx, t.pm, typeId)).versionId;
-  const driver = await readyDriver(ctx, t.ops);
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-  const day = Number(today.slice(8, 10));
-  const [y, m] = today.split('-').map(Number) as [number, number];
-  // The next 17th at least 7 days away.
-  const next = new Date(Date.UTC(y, m - 1 + (day <= 10 ? 0 : 1), 17));
-  const firstDueDate = next.toISOString().slice(0, 10);
+  const { planId } = await ctx.prisma.planVersion.findUniqueOrThrow({ where: { id: versionId } });
+  const driver = await approvedDriver(ctx, t.ops, planId);
+  const firstDueDate = nextSeventeenth();
+  // Head office assigns a battery; the agreement is prepared with it (founder, 1 Nov 2026).
+  const battery = await makeBattery(ctx, t.ops, typeId);
   const draft = await ctx.http
     .post('/v1/agreements')
     .set(bearer(t.ops))
-    .send({
-      driverId: driver.id,
-      planVersionId: versionId,
-      batteryTypeId: typeId,
-      dueDay: 17,
-      firstDueDate,
-    })
+    .send({ driverId: driver.id, batteryId: battery.id, dueDay: 17, firstDueDate })
     .expect(201);
   const id = draft.body.id as string;
   await ctx.http
@@ -247,7 +324,6 @@ export async function activeAgreement(
     .set(bearer(t.finance))
     .send({ agreementId: id, amountPaise: r(20000), method: 'CASH' })
     .expect(201);
-  const battery = await makeBattery(ctx, t.ops, typeId);
   const techId =
     opts.installAs?.staffId ??
     (
@@ -258,10 +334,12 @@ export async function activeAgreement(
   const res = await ctx.http
     .post(`/v1/agreements/${id}/installation`)
     .set(bearer(opts.installAs?.token ?? t.ops))
-    .field('batteryId', battery.id)
     .field('technicianId', techId)
     .field('installedAt', new Date().toISOString())
     .field('location', 'Baruipur')
+    .field('geoLat', '22.3591')
+    .field('geoLng', '88.4318')
+    .field('geoAccuracyM', '15')
     .field('voltageReading', '52.4')
     .field('conditionNote', 'Good')
     .field('driverConfirmed', 'true')

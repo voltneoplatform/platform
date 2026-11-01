@@ -135,6 +135,8 @@ export interface Texts {
   paymentLinkSms: (p: { amount: string; agreement: string; url: string; until: string }) => string;
   /** Sign-in code by SMS (staff now, drivers in M6). */
   signInCodeSms: (p: { code: string; minutes: string }) => string;
+  /** Founder, 1 Nov 2026: the driver gives this code to the agent registering them. */
+  registrationCodeSms: (p: { code: string; minutes: string }) => string;
 }
 
 /**
@@ -258,6 +260,8 @@ const EN: Texts = {
     `Volt Neo: Pay ${rs(p.amount)} for agreement ${p.agreement} by UPI: ${p.url} (open until ${p.until}). You get a receipt SMS once it is paid.`,
   signInCodeSms: (p) =>
     `Volt Neo: Your sign-in code is ${p.code}. It expires in ${p.minutes} minutes. Do not share it with anyone.`,
+  registrationCodeSms: (p) =>
+    `Volt Neo: Your registration code is ${p.code}. Give it only to the Volt Neo agent registering you, to agree to Volt Neo checking your documents. It expires in ${p.minutes} minutes.`,
 };
 
 const BN: Texts = {
@@ -369,6 +373,8 @@ const BN: Texts = {
     `Volt Neo: চুক্তি ${p.agreement}-এর ${p.amount} UPI-তে দিন: ${p.url} (${p.until} পর্যন্ত খোলা)। পেমেন্ট হলে রসিদের SMS পাবেন।`,
   signInCodeSms: (p) =>
     `Volt Neo: আপনার সাইন-ইন কোড ${p.code}। ${p.minutes} মিনিটে এর মেয়াদ শেষ হবে। কাউকে এই কোড জানাবেন না।`,
+  registrationCodeSms: (p) =>
+    `Volt Neo: আপনার নথিভুক্তির কোড ${p.code}। Volt Neo-র নথি যাচাইয়ে সম্মতি দিতে শুধু আপনাকে নথিভুক্ত করা Volt Neo এজেন্টকে এটি দিন। ${p.minutes} মিনিটে মেয়াদ শেষ হবে।`,
 };
 
 const HI: Texts = {
@@ -480,6 +486,8 @@ const HI: Texts = {
     `Volt Neo: अनुबंध ${p.agreement} के ${p.amount} UPI से चुकाएँ: ${p.url} (${p.until} तक खुला)। भुगतान होने पर रसीद का SMS मिलेगा।`,
   signInCodeSms: (p) =>
     `Volt Neo: आपका साइन-इन कोड ${p.code} है। यह ${p.minutes} मिनट में समाप्त हो जाएगा। यह कोड किसी को न बताएँ।`,
+  registrationCodeSms: (p) =>
+    `Volt Neo: आपका पंजीकरण कोड ${p.code} है। Volt Neo को दस्तावेज़ जाँचने की सहमति देने के लिए इसे केवल आपको पंजीकृत कर रहे Volt Neo एजेंट को दें। ${p.minutes} मिनट में समाप्त।`,
 };
 
 export const TEXTS: Record<Lang, Texts> = { BN, HI, EN };

@@ -353,6 +353,8 @@ model Battery {
   custody      BatteryCustody[]
   agreements    Agreement[]
   installations Installation[]
+  changedFrom   AgreementBatteryChange[] @relation("BatteryChangeFrom")
+  changedTo     AgreementBatteryChange[] @relation("BatteryChangeTo")
 
   @@index([batteryTypeId])
   @@index([status])
@@ -400,7 +402,9 @@ model Plan {
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  versions PlanVersion[]
+  versions  PlanVersion[]
+  drivers   Driver[]
+  decisions DriverApprovalDecision[]
 
   @@map("plans")
 }
@@ -539,10 +543,27 @@ model Driver {
   nomineeRelation String?        @map("nominee_relation")
   nomineePhone    String?        @map("nominee_phone")
   notes           String?
+  /// The driver gave the OTP sent to this phone number (founder, 1 Nov 2026)
+  phoneVerifiedAt   DateTime?      @map("phone_verified_at") @db.Timestamptz(3)
+  phoneVerifiedById String?        @map("phone_verified_by_id") @db.Uuid
+  consentVersion    String?        @map("consent_version")
+  consentAt         DateTime?      @map("consent_at") @db.Timestamptz(3)
+  /// Where the Field App registered the driver
+  registeredLat       Float?       @map("registered_lat")
+  registeredLng       Float?       @map("registered_lng")
+  registeredAccuracyM Float?       @map("registered_accuracy_m")
+  /// The plan chosen at registration; head office may change it at final approval
+  planId          String?        @map("plan_id") @db.Uuid
+  approval        DriverApproval @default(AWAITING)
+  approvalReason  String?        @map("approval_reason")
+  approvedById    String?        @map("approved_by_id") @db.Uuid
+  approvedAt      DateTime?      @map("approved_at") @db.Timestamptz(3)
   createdById     String?        @map("created_by_id") @db.Uuid
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  plan         Plan?          @relation(fields: [planId], references: [id], onDelete: Restrict)
+  decisions    DriverApprovalDecision[]
   kycDocuments KycDocument[]
   vehicles     Vehicle[]
   batteries    Battery[]
@@ -552,7 +573,53 @@ model Driver {
   autopay      AutopayMandate[]
 
   @@index([phone])
+  @@index([approval])
   @@map("drivers")
+}
+
+enum DriverApproval {
+  AWAITING
+  APPROVED
+  REJECTED
+}
+
+enum DriverDecision {
+  APPROVED
+  REJECTED
+}
+
+/// driver_approval_decisions: every final approval and rejection (append-only).
+model DriverApprovalDecision {
+  id          String         @id @default(uuid()) @db.Uuid
+  driverId    String         @map("driver_id") @db.Uuid
+  decision    DriverDecision
+  planId      String?        @map("plan_id") @db.Uuid
+  reason      String?
+  decidedById String         @map("decided_by_id") @db.Uuid
+  decidedAt   DateTime       @default(now()) @map("decided_at") @db.Timestamptz(3)
+
+  driver Driver @relation(fields: [driverId], references: [id])
+  plan   Plan?  @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([driverId, decidedAt])
+  @@map("driver_approval_decisions")
+}
+
+/// driver_phone_checks: the code staff ask the driver for at registration.
+model DriverPhoneCheck {
+  id              String    @id @default(uuid()) @db.Uuid
+  phone           String
+  codeHash        String    @map("code_hash")
+  attempts        Int       @default(0)
+  staffId         String    @map("staff_id") @db.Uuid
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  verifiedAt      DateTime? @map("verified_at") @db.Timestamptz(3)
+  usedAt          DateTime? @map("used_at") @db.Timestamptz(3)
+  usedForDriverId String?   @map("used_for_driver_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([phone, createdAt])
+  @@map("driver_phone_checks")
 }
 
 enum RelativeRelation {
@@ -713,10 +780,14 @@ model Agreement {
   writtenOffAmount    Int?            @map("written_off_amount")
   writtenOffLateFees  Int?            @map("written_off_late_fees")
   notes               String?
+  /// The battery changed after signing: the driver signs a corrected agreement before installation
+  resignRequired      Boolean         @default(false) @map("resign_required")
   createdById         String?         @map("created_by_id") @db.Uuid
   createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  batteryChanges  AgreementBatteryChange[]
+  resignings      AgreementResigning[]
   driver          Driver              @relation(fields: [driverId], references: [id])
   vehicle         Vehicle             @relation(fields: [vehicleId], references: [id])
   planVersion     PlanVersion         @relation(fields: [planVersionId], references: [id])
@@ -827,6 +898,10 @@ model Installation {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   /// Recorded by a field agent or technician: head office verifies it (founder, 31 Oct 2026).
   needsVerification Boolean @default(false) @map("needs_verification")
+  /// Where the Field App recorded it (founder, 1 Nov 2026)
+  geoLat          Float?   @map("geo_lat")
+  geoLng          Float?   @map("geo_lng")
+  geoAccuracyM    Float?   @map("geo_accuracy_m")
 
   agreement Agreement             @relation(fields: [agreementId], references: [id])
   battery   Battery               @relation(fields: [batteryId], references: [id])
@@ -1396,4 +1471,43 @@ model PaymentLink {
 
   @@index([agreementId, status])
   @@map("payment_links")
+}
+
+/// agreement_battery_changes: the battery assigned to an agreement changed before installation (append-only).
+model AgreementBatteryChange {
+  id            String   @id @default(uuid()) @db.Uuid
+  agreementId   String   @map("agreement_id") @db.Uuid
+  fromBatteryId String   @map("from_battery_id") @db.Uuid
+  toBatteryId   String   @map("to_battery_id") @db.Uuid
+  reason        String
+  afterSigning  Boolean  @map("after_signing")
+  changedById   String   @map("changed_by_id") @db.Uuid
+  changedAt     DateTime @default(now()) @map("changed_at") @db.Timestamptz(3)
+
+  agreement   Agreement           @relation(fields: [agreementId], references: [id])
+  fromBattery Battery             @relation("BatteryChangeFrom", fields: [fromBatteryId], references: [id])
+  toBattery   Battery             @relation("BatteryChangeTo", fields: [toBatteryId], references: [id])
+  resigning   AgreementResigning?
+
+  @@index([agreementId, changedAt])
+  @@map("agreement_battery_changes")
+}
+
+/// agreement_resignings: the corrected agreement signed after a battery change (append-only).
+model AgreementResigning {
+  id              String   @id @default(uuid()) @db.Uuid
+  agreementId     String   @map("agreement_id") @db.Uuid
+  batteryChangeId String   @unique @map("battery_change_id") @db.Uuid
+  fileKey         String   @map("file_key")
+  fileName        String   @map("file_name")
+  fileType        String   @map("file_type")
+  signedAt        DateTime @map("signed_at") @db.Timestamptz(3)
+  recordedById    String   @map("recorded_by_id") @db.Uuid
+  recordedAt      DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  agreement     Agreement              @relation(fields: [agreementId], references: [id])
+  batteryChange AgreementBatteryChange @relation(fields: [batteryChangeId], references: [id])
+
+  @@index([agreementId, recordedAt])
+  @@map("agreement_resignings")
 }
