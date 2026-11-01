@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Stack, router } from 'expo-router';
-import type { AgreementState } from '@voltneo/shared';
+import type { AgreementState, OnboardingStage } from '@voltneo/shared';
+import { StageBadge } from '@/onboarding';
 import { useSession } from '@/session';
 import { Badge, Body, Button, C, ErrorNotice, Field, Loading, Muted, Screen, useLoad } from '@/ui';
 
@@ -12,6 +13,7 @@ interface DriverRow {
   district: string;
   vehicle: { registration: string | null } | null;
   ready: boolean;
+  stage: OnboardingStage;
   /** The agreement still in progress, if any. */
   agreement: { id: string; number: string; state: AgreementState } | null;
   itemsDone: number;
@@ -80,12 +82,11 @@ export default function Drivers() {
                 />
                 <Muted>{d.agreement.number}</Muted>
               </>
-            ) : d.ready ? (
-              <Badge tone="success" text={t('readyToSign')} />
             ) : (
-              <Badge
-                tone="warn"
-                text={t('stepsDone', { done: d.itemsDone, total: d.itemsTotal })}
+              <StageBadge
+                stage={d.stage === 'AGREEMENT' ? 'APPROVED' : d.stage}
+                done={d.itemsDone}
+                total={d.itemsTotal}
               />
             )}
           </View>

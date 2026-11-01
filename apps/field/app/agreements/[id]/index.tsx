@@ -30,7 +30,8 @@ interface AgreementDetail {
   state: AgreementState;
   driver: { id: string; name: string; phone: string };
   vehicle: { registration: string | null };
-  battery: { id: string; serial: string } | null;
+  battery: { id: string; serial: string; gpsDeviceId: string | null } | null;
+  resignRequired: boolean;
   terms: { firstDueDate: string; totalPayable: number };
   money: {
     paid: number;
@@ -116,8 +117,10 @@ export default function AgreementPage() {
         {a.driver.name} · {a.driver.phone}
         {a.vehicle.registration ? ` · ${a.vehicle.registration}` : ''}
         {a.battery ? ` · ${a.battery.serial}` : ''}
+        {a.battery?.gpsDeviceId ? ` · ${t('imei', { imei: a.battery.gpsDeviceId })}` : ''}
       </Muted>
       {message && <Notice tone="success">{message}</Notice>}
+      {a.resignRequired && <Notice tone="warn">{t('resignNeeded')}</Notice>}
 
       <Card>
         {a.state === 'AWAITING_DOWN_PAYMENT' ? (

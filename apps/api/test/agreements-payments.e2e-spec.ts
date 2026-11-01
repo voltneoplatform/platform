@@ -17,7 +17,6 @@ import {
   approvedDriver,
   makeBattery,
   makeBatteryType,
-  makeDriver,
   publishedPlan,
   readyDriver,
 } from './fixtures';

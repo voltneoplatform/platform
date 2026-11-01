@@ -10,6 +10,8 @@ import {
 import { ApiError } from '@/api';
 import { dmyToIso, typeDate } from '@/dates';
 import { LANGS, LANG_NAMES } from '@/i18n';
+import { useGeotag } from '@/location';
+import { LocationNotice, PhoneCheck, PlanPicker } from '@/onboarding';
 import { useSession } from '@/session';
 import { Button, Card, Check, Choice, ErrorNotice, Field, H2, Muted, Notice, Screen } from '@/ui';
 
@@ -44,6 +46,11 @@ export default function NewDriver() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [dups, setDups] = useState<Duplicate[] | null>(null);
+  // Founder, 1 Nov 2026: the driver's code, a plan, and the phone's location.
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [check, setCheck] = useState<{ id: string; phone: string } | null>(null);
+  const location = useGeotag();
+  const phoneConfirmed = !!check && check.phone === f.phone;
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
 
   // Typed as DD-MM-YYYY; the API takes YYYY-MM-DD.
@@ -69,6 +76,9 @@ export default function NewDriver() {
         nomineeName: f.nomineeName || null,
         nomineeRelation: f.nomineeRelation || null,
         nomineePhone: f.nomineePhone || null,
+        planId,
+        phoneCheckId: check?.id,
+        location: location.geo,
         acknowledgeDuplicates,
         vehicle: {
           registration: f.registration || null,
@@ -189,6 +199,19 @@ export default function NewDriver() {
           </>
         )}
       </Card>
+      <Card>
+        <PlanPicker value={planId} onChange={setPlanId} />
+      </Card>
+      <Card>
+        <PhoneCheck
+          phone={f.phone}
+          language={language}
+          name={f.name}
+          checkId={phoneConfirmed ? check!.id : null}
+          onConfirmed={(id) => setCheck(id ? { id, phone: f.phone } : null)}
+        />
+      </Card>
+      <LocationNotice state={location.state} onRetry={() => void location.retry()} />
       <ErrorNotice error={error} />
       {dups ? (
         <Card>
@@ -211,7 +234,14 @@ export default function NewDriver() {
           title={t('saveDriver')}
           busy={busy}
           // Needed for the "son / daughter / wife of" line of the agreement.
-          disabled={!relation || f.relativeName.trim().length < 2 || dobInvalid}
+          disabled={
+            !relation ||
+            f.relativeName.trim().length < 2 ||
+            dobInvalid ||
+            !planId ||
+            !phoneConfirmed ||
+            !location.geo
+          }
           onPress={() => void save()}
         />
       )}
