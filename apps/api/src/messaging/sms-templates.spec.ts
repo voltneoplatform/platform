@@ -81,6 +81,8 @@ describe('DLT templates', () => {
         // English stays in the basic SMS alphabet (160 characters a part).
         if (lang === 'EN') expect(isUnicode(body)).toBe(false);
         expect(smsParts(body)).toBeLessThanOrEqual(lang === 'EN' ? 2 : 4);
+        // Codes must arrive in one SMS in English.
+        if (lang === 'EN' && key.endsWith('_code')) expect(smsParts(body)).toBe(1);
       });
     }
   }
