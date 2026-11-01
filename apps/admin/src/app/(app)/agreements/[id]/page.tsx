@@ -147,7 +147,9 @@ export default function AgreementPage() {
           )}
           {a.allowed.edit && manage && <button onClick={() => open('edit')}>Edit draft</button>}
           {a.allowed.changeBattery && manage && (
-            <button onClick={() => open('battery')}>Change battery</button>
+            <button onClick={() => open('battery')}>
+              {a.battery ? 'Change battery' : 'Assign battery'}
+            </button>
           )}
           {a.allowed.reschedule && manage && can('approvals.request') && !a.pendingVariation && (
             <button onClick={() => open('reschedule')}>Move first due date</button>
