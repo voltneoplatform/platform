@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import {
-  REFERRER_KINDS,
   REGISTRATION_CONSENT,
   type DriverLanguage,
   type OnboardingStage,
@@ -219,122 +218,54 @@ export function StageBadge({
   }
 }
 
-/** Founder, 7 Nov 2026: who referred a driver (another driver or an outside person). */
+/** Founder, 7 Nov 2026: the outside referrer who referred a driver. */
 export interface ReferredBy {
-  type: 'DRIVER' | 'REFERRER';
   id: string;
   code: string;
   name: string;
   phone: string;
-  kind: string | null;
-}
-
-interface ReferralOption {
-  type: 'DRIVER' | 'REFERRER';
-  id: string;
-  code: string;
-  name: string;
-  phone: string;
-  detail: string;
+  kind: string;
 }
 
 export function referralPayload(r: ReferredBy | null) {
-  return {
-    referredByDriverId: r?.type === 'DRIVER' ? r.id : null,
-    referredByReferrerId: r?.type === 'REFERRER' ? r.id : null,
-  };
+  return { referredByReferrerId: r?.id ?? null };
 }
 
-/** Find the referrer by name, mobile or ID, or add an outside referrer. */
+/**
+ * Pick the referrer by name, mobile or ID. Referrers are added by head office;
+ * field staff only pick one when registering a driver.
+ */
 export function ReferralPicker({
   value,
   onChange,
-  excludeDriverId,
 }: {
   value: ReferredBy | null;
   onChange: (r: ReferredBy | null) => void;
-  excludeDriverId?: string;
 }) {
   const { t, api, labels } = useSession();
   const [search, setSearch] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [kind, setKind] = useState<ReferrerKind>('MECHANIC');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
   const q = search.trim();
   const results = useLoad(
     () =>
       q.length >= 2
-        ? api.get<{ items: ReferralOption[] }>(
-            `/v1/referrals/search?search=${encodeURIComponent(q)}`,
-          )
-        : Promise.resolve({ items: [] as ReferralOption[] }),
+        ? api.get<{ items: ReferredBy[] }>(`/v1/referrals/search?search=${encodeURIComponent(q)}`)
+        : Promise.resolve({ items: [] as ReferredBy[] }),
     [api, q],
   );
-  const who = (type: string, kindOrDetail: string | null) =>
-    type === 'DRIVER'
-      ? t('voltNeoDriver')
-      : (labels.referrerKind[kindOrDetail as ReferrerKind] ?? '');
+  const kind = (k: string) => labels.referrerKind[k as ReferrerKind] ?? '';
 
   if (value) {
     return (
       <View style={{ gap: 6 }}>
         <Muted>{t('referredBy')}</Muted>
         <Body>
-          {value.name} · {value.code} · {who(value.type, value.kind)}
+          {value.name} · {value.code} · {kind(value.kind)}
         </Body>
         <Button title={t('removeReferral')} variant="secondary" onPress={() => onChange(null)} />
       </View>
     );
   }
-  if (adding) {
-    return (
-      <View style={{ gap: 8 }}>
-        <H2>{t('addReferrer')}</H2>
-        <ErrorNotice error={error} />
-        <Field label={t('referrerName')} value={name} onChangeText={setName} />
-        <Field
-          label={t('phone')}
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-          maxLength={14}
-        />
-        <Choice
-          label={t('referrerKind')}
-          value={kind}
-          onChange={(v) => setKind(v as ReferrerKind)}
-          options={REFERRER_KINDS.map((k) => ({ value: k, label: labels.referrerKind[k] }))}
-        />
-        <Button
-          title={t('referrerSave')}
-          busy={busy}
-          disabled={name.trim().length < 2 || phone.replace(/\D/g, '').length < 10}
-          onPress={() =>
-            void (async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                const r = await api.post<ReferredBy>('/v1/referrers', { name, phone, kind });
-                onChange({ ...r, type: 'REFERRER' });
-                setAdding(false);
-              } catch (err) {
-                setError(err);
-              } finally {
-                setBusy(false);
-              }
-            })()
-          }
-        />
-        <Button title={t('cancel')} variant="secondary" onPress={() => setAdding(false)} />
-      </View>
-    );
-  }
-  const items = (results.data?.items ?? []).filter(
-    (o) => !(o.type === 'DRIVER' && o.id === excludeDriverId),
-  );
+  const items = results.data?.items ?? [];
   return (
     <View style={{ gap: 6 }}>
       <Field
@@ -351,23 +282,13 @@ export function ReferralPicker({
         ) : (
           items.map((o) => (
             <Button
-              key={`${o.type}-${o.id}`}
+              key={o.id}
               variant="secondary"
-              title={`${o.name} · ${o.code} · ${o.type === 'DRIVER' ? t('voltNeoDriver') : who(o.type, o.detail)}`}
-              onPress={() =>
-                onChange({
-                  type: o.type,
-                  id: o.id,
-                  code: o.code,
-                  name: o.name,
-                  phone: o.phone,
-                  kind: o.type === 'REFERRER' ? o.detail : null,
-                })
-              }
+              title={`${o.name} · ${o.code} · ${kind(o.kind)}`}
+              onPress={() => onChange(o)}
             />
           ))
         ))}
-      <Button title={`+ ${t('addReferrer')}`} variant="secondary" onPress={() => setAdding(true)} />
     </View>
   );
 }

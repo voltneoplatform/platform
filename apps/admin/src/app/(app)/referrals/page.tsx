@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { REFERRER_KIND_LABELS, type ReferrerKind } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
 import type { ReferralBoardRow, ReferralCounts } from '@/lib/types';
 import { Forbidden } from '@/components/AppShell';
-import { ErrorBox, Pager, useLoad } from '@/components/ui';
+import { ErrorBox, Modal, Pager, useLoad } from '@/components/ui';
+import { ReferrerForm } from '@/components/Referral';
 
 interface Board {
   total: number;
@@ -17,14 +19,15 @@ interface Board {
 }
 
 /**
- * Referrals (founder, 7 Nov 2026): everyone who has referred drivers, drivers
- * and outside referrers, with how many were approved and got a battery.
- * Tracking only; no rewards are calculated.
+ * Referrals (founder, 7 Nov 2026): outside referrers, with how many drivers
+ * they referred were approved and got a battery. Tracking only; no rewards.
  */
 export default function ReferralsPage() {
   const { api, can } = useSession();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [adding, setAdding] = useState(false);
+  const router = useRouter();
   const board = useLoad(() => {
     const q = new URLSearchParams({ page: String(page), limit: '50' });
     if (search.trim()) q.set('search', search.trim());
@@ -39,11 +42,26 @@ export default function ReferralsPage() {
         <div>
           <h1>Referrals</h1>
           <p className="muted">
-            Who referred which drivers. A referrer is a Volt Neo driver or an outside person. Pick
-            the referrer when registering a driver, or later on the driver&apos;s page.
+            Outside people who refer drivers (mechanics, shopkeepers, agents…). Field agents pick
+            the referrer when registering a driver; head office keeps this list and can correct a
+            driver&apos;s referrer later.
           </p>
         </div>
+        {can('referrals.manage') && (
+          <button className="primary" onClick={() => setAdding(true)}>
+            Add referrer
+          </button>
+        )}
       </div>
+      <Modal open={adding} onClose={() => setAdding(false)} title="Add referrer">
+        <ReferrerForm
+          submitLabel="Add referrer"
+          onSaved={(r) => {
+            setAdding(false);
+            router.push(`/referrers/${r.id}`);
+          }}
+        />
+      </Modal>
       {t && (
         <div className="stats">
           <div className="stat">
@@ -93,9 +111,9 @@ export default function ReferralsPage() {
               </tr>
             )}
             {board.data?.items.map((r) => (
-              <tr key={`${r.type}-${r.id}`}>
+              <tr key={r.id}>
                 <td>
-                  <Link href={r.type === 'DRIVER' ? `/drivers/${r.id}` : `/referrers/${r.id}`}>
+                  <Link href={`/referrers/${r.id}`}>
                     <strong>{r.name}</strong>
                   </Link>
                   <div className="mono muted" style={{ fontSize: 13 }}>
@@ -103,9 +121,7 @@ export default function ReferralsPage() {
                   </div>
                 </td>
                 <td>
-                  {r.type === 'DRIVER'
-                    ? 'Volt Neo driver'
-                    : REFERRER_KIND_LABELS[r.kind as ReferrerKind]}
+                  {REFERRER_KIND_LABELS[r.kind as ReferrerKind]}
                   {!r.active && <span className="badge"> Inactive</span>}
                 </td>
                 <td className="mono">{r.phone}</td>

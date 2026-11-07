@@ -212,47 +212,12 @@ export default function DriverPage() {
         </div>
         {can('agreements.read') && <DriverAgreements driverId={d.id} />}
         <div className="card">
-          <h2>Referrals</h2>
-          <dl className="kv">
-            <dt>Referred by</dt>
-            <dd>
-              {d.referredBy ? (
-                <Link
-                  href={
-                    d.referredBy.type === 'DRIVER'
-                      ? `/drivers/${d.referredBy.id}`
-                      : `/referrers/${d.referredBy.id}`
-                  }
-                >
-                  <ReferredByText r={d.referredBy} />
-                </Link>
-              ) : (
-                <ReferredByText r={null} />
-              )}
-            </dd>
-            <dt>Drivers referred</dt>
-            <dd>
-              {d.referrals.referred} · {d.referrals.approved} approved · {d.referrals.installed}{' '}
-              with a battery
-            </dd>
-          </dl>
-          {d.referrals.drivers.length > 0 && (
-            <ul className="timeline">
-              {d.referrals.drivers.map((r) => (
-                <li key={r.id}>
-                  <Link href={`/drivers/${r.id}`}>{r.name}</Link>{' '}
-                  <span className="mono muted">{r.code}</span>{' '}
-                  <span className="muted" style={{ fontSize: 13 }}>
-                    {r.installed
-                      ? 'battery installed'
-                      : r.approval === 'APPROVED'
-                        ? 'approved'
-                        : 'registered'}{' '}
-                    {formatDate(r.registeredAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <h2>Referred by</h2>
+          <p>
+            <ReferredByText r={d.referredBy} link />
+          </p>
+          {manage && !can('referrals.manage') && (
+            <p className="hint">Only head office can change the referrer after registration.</p>
           )}
         </div>
         <div className="card">
@@ -549,7 +514,7 @@ export default function DriverPage() {
               () =>
                 api.patch<DriverDetail>(`/v1/drivers/${id}`, {
                   ...driverPayload(draft),
-                  ...referralPayload(editReferral),
+                  ...(can('referrals.manage') ? referralPayload(editReferral) : {}),
                   phoneCheckId: phoneChanged ? (editCheck ?? undefined) : undefined,
                 }),
               'Saved.',
@@ -558,14 +523,12 @@ export default function DriverPage() {
         >
           <ErrorBox error={actionError} />
           <DriverFields value={draft} onChange={setDraft} />
-          <div className="field">
-            <label>Referred by</label>
-            <ReferralPicker
-              value={editReferral}
-              onChange={setEditReferral}
-              excludeDriverId={d.id}
-            />
-          </div>
+          {can('referrals.manage') && (
+            <div className="field">
+              <label>Referred by</label>
+              <ReferralPicker value={editReferral} onChange={setEditReferral} />
+            </div>
+          )}
           {phoneChanged && (
             <PhoneCheck
               phone={draft.phone}
@@ -584,7 +547,7 @@ export default function DriverPage() {
                   () =>
                     api.patch<DriverDetail>(`/v1/drivers/${id}`, {
                       ...driverPayload(draft),
-                      ...referralPayload(editReferral),
+                      ...(can('referrals.manage') ? referralPayload(editReferral) : {}),
                       phoneCheckId: phoneChanged ? (editCheck ?? undefined) : undefined,
                       acknowledgeDuplicates: true,
                     }),

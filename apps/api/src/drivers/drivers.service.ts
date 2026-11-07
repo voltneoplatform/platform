@@ -74,12 +74,10 @@ function planView(p: { id: string; code: string; nameEn: string; nameBn: string;
   return { id: p.id, code: p.code, names: { en: p.nameEn, bn: p.nameBn, hi: p.nameHi } };
 }
 
-const REFERRER_DRIVER_SELECT = { id: true, code: true, name: true, phone: true } as const;
 const REFERRER_SELECT = { id: true, code: true, name: true, phone: true, kind: true } as const;
 
-/** Who referred a driver (founder, 7 Nov 2026): another driver or an outside referrer. */
+/** Who referred a driver (founder, 7 Nov 2026): an outside referrer, or no one. */
 export function referredByView(d: {
-  referredByDriver?: { id: string; code: string; name: string; phone: string } | null;
   referredByReferrer?: {
     id: string;
     code: string;
@@ -88,9 +86,7 @@ export function referredByView(d: {
     kind: string;
   } | null;
 }) {
-  if (d.referredByDriver) return { type: 'DRIVER' as const, ...d.referredByDriver, kind: null };
-  if (d.referredByReferrer) return { type: 'REFERRER' as const, ...d.referredByReferrer };
-  return null;
+  return d.referredByReferrer ?? null;
 }
 
 function phone(raw: string | null | undefined, label: string): string | null {
@@ -211,7 +207,6 @@ export class DriversService {
     return {
       id: d.id,
       code: d.code,
-      referredByDriverId: d.referredByDriverId,
       referredByReferrerId: d.referredByReferrerId,
       name: d.name,
       phone: d.phone,
@@ -266,7 +261,6 @@ export class DriversService {
       include: {
         ...this.fullInclude,
         plan: { select: PLAN_SELECT },
-        referredByDriver: { select: REFERRER_DRIVER_SELECT },
         referredByReferrer: { select: REFERRER_SELECT },
         // The agreement still in progress, if any, so the list shows where it stands.
         agreements: {
@@ -335,7 +329,6 @@ export class DriversService {
       include: {
         ...this.fullInclude,
         plan: { select: PLAN_SELECT },
-        referredByDriver: { select: REFERRER_DRIVER_SELECT },
         referredByReferrer: { select: REFERRER_SELECT },
         decisions: { orderBy: { decidedAt: 'desc' }, include: { plan: { select: PLAN_SELECT } } },
         agreements: {
@@ -371,7 +364,6 @@ export class DriversService {
       documents: d.kycDocuments.map((k) => this.docView(k, names)),
       readiness,
       referredBy: referredByView(d),
-      referrals: await this.referrals.forDriver(d.id),
       onboarding: {
         stage: onboardingStage({
           ready: readiness.ready,
@@ -535,12 +527,11 @@ export class DriversService {
       const newId = randomUUID();
       // The driver read out the code sent to this phone, after hearing the consent line.
       const consentAt = await this.phoneChecks.use(tx, dto.phoneCheckId, main, newId, actor);
-      const referral = await this.referrals.check(tx, dto, null);
+      const referral = await this.referrals.check(tx, dto, actor, true);
       const d = await tx.driver.create({
         data: {
           id: newId,
           code: driverCode(await nextCounter(tx, 'driver')),
-          referredByDriverId: referral?.referredByDriverId ?? null,
           referredByReferrerId: referral?.referredByReferrerId ?? null,
           phoneVerifiedAt: consentAt,
           phoneVerifiedById: actor.id,
@@ -627,7 +618,13 @@ export class DriversService {
         }
         await this.checkPlan(tx, dto.planId);
       }
-      const referral = await this.referrals.check(tx, dto, id);
+      const referral = await this.referrals.check(
+        tx,
+        dto,
+        actor,
+        false,
+        before.referredByReferrerId,
+      );
       const after = await tx.driver.update({
         where: { id },
         data: {

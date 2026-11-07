@@ -737,106 +737,113 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
   });
 
   describe('referrals (founder, 7 Nov 2026)', () => {
-    it('records who referred a driver, a driver or an outside person, and counts them', async () => {
+    it('lets head office keep outside referrers, and field agents pick one only at registration', async () => {
       const agent = await loginAs(ctx, 'FIELD_AGENT');
-      const ramesh = await makeDriver(ctx, ops.token, { name: 'Ramesh Referrer' });
-      expect(ramesh.code).toMatch(/^VND-\d{6}$/);
+      const pm = await loginAs(ctx, 'PLAN_MANAGER');
+      const add = (token: string, body: Record<string, unknown>) =>
+        ctx.http.post('/v1/referrers').set(bearer(token)).send(body);
 
-      // An outside referrer, added by the field agent; the same phone cannot be added twice.
+      // Only super admin, operations manager and plan manager add or edit referrers.
+      await add(agent.token, { name: 'Bapi Garage', phone: '9830044444', kind: 'MECHANIC' }).expect(
+        403,
+      );
       const mechanic = (
-        await ctx.http
-          .post('/v1/referrers')
-          .set(bearer(agent.token))
-          .send({ name: 'Bapi Garage', phone: '98300 44444', kind: 'MECHANIC' })
-          .expect(201)
+        await add(pm.token, { name: 'Bapi Garage', phone: '98300 44444', kind: 'MECHANIC' }).expect(
+          201,
+        )
       ).body;
       expect(mechanic).toMatchObject({ code: 'REF-000001', phone: '+919830044444', referred: 0 });
       expect(
         (
-          await ctx.http
-            .post('/v1/referrers')
-            .set(bearer(agent.token))
-            .send({ name: 'Bapi Again', phone: '9830044444', kind: 'OTHER' })
-            .expect(409)
+          await add(ops.token, { name: 'Bapi Again', phone: '9830044444', kind: 'OTHER' }).expect(
+            409,
+          )
         ).body.code,
       ).toBe('REFERRER_EXISTS');
-
-      // Found by name, phone or ID while registering.
-      const found = await ctx.http
-        .get(`/v1/referrals/search?search=${ramesh.code}`)
+      const shop = (
+        await add(ops.token, {
+          name: 'Maa Tara Stores',
+          phone: '9830055556',
+          kind: 'SHOPKEEPER',
+        }).expect(201)
+      ).body;
+      await ctx.http
+        .patch(`/v1/referrers/${shop.id}`)
         .set(bearer(agent.token))
-        .expect(200);
-      expect(found.body.items).toEqual([
-        expect.objectContaining({ type: 'DRIVER', id: ramesh.id }),
+        .send({ notes: 'x' })
+        .expect(403);
+
+      // Field agents find referrers by name, mobile or ID; drivers are not referrers.
+      const ramesh = await makeDriver(ctx, ops.token, { name: 'Ramesh Driver' });
+      expect(ramesh.code).toMatch(/^VND-\d{6}$/);
+      const search = (q: string) =>
+        ctx.http
+          .get(`/v1/referrals/search?search=${encodeURIComponent(q)}`)
+          .set(bearer(agent.token));
+      expect((await search('REF-000001').expect(200)).body.items).toEqual([
+        expect.objectContaining({ id: mechanic.id, kind: 'MECHANIC' }),
       ]);
-      const byPhone = await ctx.http
-        .get('/v1/referrals/search?search=44444')
-        .set(bearer(agent.token))
-        .expect(200);
-      expect(byPhone.body.items.map((x: { id: string }) => x.id)).toContain(mechanic.id);
+      expect(
+        (await search('44444').expect(200)).body.items.map((x: { id: string }) => x.id),
+      ).toEqual([mechanic.id]);
+      expect((await search('Ramesh').expect(200)).body.items).toEqual([]);
 
-      // Both at once is refused; a driver cannot refer themselves.
-      const a = await makeDriver(ctx, agent.token, { referredByDriverId: ramesh.id });
-      const b = await makeDriver(ctx, agent.token, { referredByDriverId: ramesh.id });
-      const c = await makeDriver(ctx, agent.token, { referredByReferrerId: mechanic.id });
+      // Picked at registration by the field agent.
+      const a = await makeDriver(ctx, agent.token, { referredByReferrerId: mechanic.id });
+      const b = await makeDriver(ctx, agent.token, { referredByReferrerId: mechanic.id });
       const shown = await ctx.http.get(`/v1/drivers/${a.id}`).set(bearer(agent.token)).expect(200);
-      expect(shown.body.referredBy).toMatchObject({
-        type: 'DRIVER',
-        code: ramesh.code,
-        name: 'Ramesh Referrer',
-      });
-      await ctx.http
-        .patch(`/v1/drivers/${a.id}`)
-        .set(bearer(agent.token))
-        .send({ referredByDriverId: a.id })
-        .expect(400);
-      await ctx.http
-        .patch(`/v1/drivers/${a.id}`)
-        .set(bearer(agent.token))
-        .send({ referredByDriverId: ramesh.id, referredByReferrerId: mechanic.id })
-        .expect(400);
+      expect(shown.body.referredBy).toMatchObject({ code: 'REF-000001', name: 'Bapi Garage' });
 
-      // Corrected by anyone who can edit drivers (founder): b was really the mechanic's.
-      const moved = await ctx.http
+      // Afterwards the field agent cannot change it (saving the same value is fine); head office can.
+      await ctx.http
         .patch(`/v1/drivers/${b.id}`)
         .set(bearer(agent.token))
-        .send({ referredByReferrerId: mechanic.id })
+        .send({ referredByReferrerId: shop.id })
+        .expect(403);
+      await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(agent.token))
+        .send({ referredByReferrerId: mechanic.id, notes: 'Lives near the stand' })
         .expect(200);
-      expect(moved.body.referredBy).toMatchObject({ type: 'REFERRER', code: 'REF-000001' });
+      const moved = await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(ops.token))
+        .send({ referredByReferrerId: shop.id })
+        .expect(200);
+      expect(moved.body.referredBy).toMatchObject({ id: shop.id });
       const audit = await ctx.prisma.auditLog.findFirst({
         where: { recordId: b.id, action: 'driver.update' },
         orderBy: { at: 'desc' },
       });
-      expect(JSON.stringify(audit?.after)).toContain(mechanic.id);
-
-      const page = await ctx.http
-        .get(`/v1/drivers/${ramesh.id}`)
-        .set(bearer(ops.token))
-        .expect(200);
-      expect(page.body.referrals).toMatchObject({ referred: 1, approved: 0, installed: 0 });
-      expect(page.body.referrals.drivers.map((x: { id: string }) => x.id)).toEqual([a.id]);
+      expect(JSON.stringify(audit?.after)).toContain(shop.id);
 
       const board = await ctx.http.get('/v1/referrals').set(bearer(ops.token)).expect(200);
-      expect(board.body.items.slice(0, 2)).toEqual([
-        expect.objectContaining({ type: 'REFERRER', id: mechanic.id, referred: 2 }),
-        expect.objectContaining({ type: 'DRIVER', id: ramesh.id, referred: 1 }),
+      expect(board.body.items).toEqual([
+        expect.objectContaining({ id: mechanic.id, referred: 1, approved: 0, installed: 0 }),
+        expect.objectContaining({ id: shop.id, referred: 1 }),
       ]);
-      expect(board.body.totals.referred).toBe(3);
+      expect(board.body.totals.referred).toBe(2);
       const r = await ctx.http
         .get(`/v1/referrers/${mechanic.id}`)
         .set(bearer(ops.token))
         .expect(200);
-      expect(r.body.drivers.map((x: { id: string }) => x.id).sort()).toEqual([b.id, c.id].sort());
+      expect(r.body.drivers.map((x: { id: string }) => x.id)).toEqual([a.id]);
 
-      // An inactive referrer cannot be chosen for new drivers.
+      // An inactive referrer cannot be picked.
       await ctx.http
         .patch(`/v1/referrers/${mechanic.id}`)
-        .set(bearer(agent.token))
+        .set(bearer(pm.token))
         .send({ active: false })
         .expect(200);
+      expect((await search('Bapi').expect(200)).body.items).toEqual([]);
       await ctx.http
         .patch(`/v1/drivers/${a.id}`)
-        .set(bearer(agent.token))
+        .set(bearer(ops.token))
+        .send({ referredByReferrerId: mechanic.id })
+        .expect(200); // unchanged
+      await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(ops.token))
         .send({ referredByReferrerId: mechanic.id })
         .expect(422);
     });

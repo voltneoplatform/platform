@@ -10,21 +10,21 @@ import {
 import { ReferralSearchQuery, ReferrerDto, UpdateReferrerDto } from './dto';
 import { ReferralsService } from './referrals.service';
 
-/** Referrals (founder, 7 Nov 2026): who referred whom, and outside referrers. */
+/** Referrals (founder, 7 Nov 2026): outside referrers, kept by head office. */
 @ApiTags('referrals')
 @ApiBearerAuth()
 @Controller()
 export class ReferralsController {
   constructor(private readonly referrals: ReferralsService) {}
 
-  /** Everyone who referred drivers, with counts (most first). */
+  /** Every referrer with counts (most referrals first). */
   @Get('referrals')
   @RequirePermissions('drivers.read')
   board(@Query() q: ReferralSearchQuery) {
     return this.referrals.board(q);
   }
 
-  /** Drivers and outside referrers matching a name, phone or ID, to pick while registering. */
+  /** Active referrers matching a name, mobile or ID, to pick while registering. */
   @Get('referrals/search')
   @RequirePermissions('drivers.read')
   search(@Query() q: ReferralSearchQuery) {
@@ -38,7 +38,7 @@ export class ReferralsController {
   }
 
   @Post('referrers')
-  @RequirePermissions('drivers.manage')
+  @RequirePermissions('referrals.manage')
   create(
     @Body() dto: ReferrerDto,
     @CurrentStaff() staff: AuthenticatedStaff,
@@ -48,7 +48,7 @@ export class ReferralsController {
   }
 
   @Patch('referrers/:id')
-  @RequirePermissions('drivers.manage')
+  @RequirePermissions('referrals.manage')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReferrerDto,

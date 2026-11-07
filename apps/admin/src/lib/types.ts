@@ -222,7 +222,6 @@ export interface DriverDetail {
   onboarding: Onboarding;
   code: string;
   referredBy: ReferredBy | null;
-  referrals: ReferralCounts & { drivers: ReferredDriver[] };
 }
 
 export interface PlanRef {
@@ -787,14 +786,13 @@ export interface DashboardSummary {
   pendingApprovals: number;
 }
 
-/** Founder, 7 Nov 2026: who referred a driver. */
+/** Founder, 7 Nov 2026: the outside referrer who referred a driver. */
 export interface ReferredBy {
-  type: 'DRIVER' | 'REFERRER';
   id: string;
   code: string;
   name: string;
   phone: string;
-  kind: string | null;
+  kind: string;
 }
 
 export interface ReferredDriver {
@@ -814,12 +812,11 @@ export interface ReferralCounts {
 }
 
 export interface ReferralBoardRow extends ReferralCounts {
-  type: 'DRIVER' | 'REFERRER';
   id: string;
   code: string;
   name: string;
   phone: string;
-  kind: string | null;
+  kind: string;
   active: boolean;
 }
 
@@ -833,13 +830,4 @@ export interface ReferrerDetail extends ReferralCounts {
   active: boolean;
   createdAt: string;
   drivers: ReferredDriver[];
-}
-
-export interface ReferralOption {
-  type: 'DRIVER' | 'REFERRER';
-  id: string;
-  code: string;
-  name: string;
-  phone: string;
-  detail: string;
 }

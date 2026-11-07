@@ -1,6 +1,6 @@
--- Founder, 7 Nov 2026: track who referred each driver. A referrer is an
--- existing driver or an outside person. Every driver gets a Driver ID
--- (VND-000001…), usable as a referral ID.
+-- Founder, 7 Nov 2026: track who referred each driver. Referrers are outside
+-- people only (not drivers), kept by head office. Every driver also gets a
+-- Driver ID (VND-000001…).
 ALTER TABLE "drivers" ADD COLUMN "code" TEXT;
 WITH n AS (
     SELECT "id", row_number() OVER (ORDER BY "created_at", "id") AS seq FROM "drivers"
@@ -33,16 +33,7 @@ CREATE TABLE "referrers" (
 CREATE UNIQUE INDEX "referrers_code_key" ON "referrers"("code");
 CREATE UNIQUE INDEX "referrers_phone_key" ON "referrers"("phone");
 
-ALTER TABLE "drivers"
-    ADD COLUMN "referred_by_driver_id" UUID,
-    ADD COLUMN "referred_by_referrer_id" UUID,
-    ADD CONSTRAINT "drivers_one_referrer" CHECK (
-        "referred_by_driver_id" IS NULL OR "referred_by_referrer_id" IS NULL
-    ),
-    ADD CONSTRAINT "drivers_not_self_referred" CHECK ("referred_by_driver_id" <> "id");
-ALTER TABLE "drivers" ADD CONSTRAINT "drivers_referred_by_driver_id_fkey"
-    FOREIGN KEY ("referred_by_driver_id") REFERENCES "drivers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "drivers" ADD COLUMN "referred_by_referrer_id" UUID;
 ALTER TABLE "drivers" ADD CONSTRAINT "drivers_referred_by_referrer_id_fkey"
     FOREIGN KEY ("referred_by_referrer_id") REFERENCES "referrers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-CREATE INDEX "drivers_referred_by_driver_id_idx" ON "drivers"("referred_by_driver_id");
 CREATE INDEX "drivers_referred_by_referrer_id_idx" ON "drivers"("referred_by_referrer_id");

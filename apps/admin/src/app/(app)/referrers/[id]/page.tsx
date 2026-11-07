@@ -25,7 +25,7 @@ export default function ReferrerPage() {
   if (!can('drivers.read')) return <Forbidden />;
   const d = r.data;
   if (!d) return <ErrorBox error={r.error} />;
-  const manage = can('drivers.manage');
+  const manage = can('referrals.manage');
 
   async function save(body: Record<string, unknown>) {
     setBusy(true);

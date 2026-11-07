@@ -67,6 +67,11 @@ export const PERMISSIONS = [
   'kyc.verify',
   /** Final approval of a driver's onboarding, and the plan (founder, 1 Nov 2026). */
   'drivers.approve',
+  /**
+   * Add and edit outside referrers, and change a driver's referrer after
+   * registration (founder, 7 Nov 2026). Field staff only pick one when registering.
+   */
+  'referrals.manage',
   // Modules 6-7: agreements and installation
   'agreements.read',
   'agreements.manage',
@@ -131,6 +136,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'plans.manage',
     'drivers.manage',
     'drivers.approve',
+    'referrals.manage',
     'agreements.manage',
     'installations.record',
     'installations.verify',
@@ -147,6 +153,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'batteries.manage',
     'drivers.manage',
     'drivers.approve',
+    'referrals.manage',
     'kyc.view_full',
     'kyc.verify',
     'agreements.manage',

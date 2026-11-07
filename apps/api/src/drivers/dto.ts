@@ -158,15 +158,8 @@ export class CreateDriverDto extends DriverFields {
   planId?: string;
 
   @ApiPropertyOptional({
-    description: 'Referred by this driver (founder, 7 Nov 2026); null clears it',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsUUID()
-  referredByDriverId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Referred by this outside referrer; null clears it',
+    description:
+      'The outside referrer (founder, 7 Nov 2026). Field staff set it at registration; after that only head office (referrals.manage) changes it. null clears it.',
     nullable: true,
   })
   @IsOptional()
@@ -225,15 +218,8 @@ export class UpdateDriverDto {
   planId?: string;
 
   @ApiPropertyOptional({
-    description: 'Referred by this driver (founder, 7 Nov 2026); null clears it',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsUUID()
-  referredByDriverId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Referred by this outside referrer; null clears it',
+    description:
+      'The outside referrer (founder, 7 Nov 2026). Field staff set it at registration; after that only head office (referrals.manage) changes it. null clears it.',
     nullable: true,
   })
   @IsOptional()

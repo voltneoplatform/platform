@@ -523,7 +523,7 @@ enum DriverStatus {
 /// drivers: the customer. Phone numbers may repeat (shared phones) but are flagged.
 model Driver {
   id              String         @id @default(uuid()) @db.Uuid
-  /// Driver ID, e.g. VND-000012; also used as a referral ID (founder, 7 Nov 2026)
+  /// Driver ID, e.g. VND-000012 (founder, 7 Nov 2026)
   code            String         @unique
   name            String
   phone           String
@@ -566,12 +566,9 @@ model Driver {
 
   plan         Plan?          @relation(fields: [planId], references: [id], onDelete: Restrict)
   decisions    DriverApprovalDecision[]
-  /// Who referred this driver: another driver or an outside referrer (at most one)
-  referredByDriverId   String?   @map("referred_by_driver_id") @db.Uuid
+  /// The outside referrer who referred this driver (founder, 7 Nov 2026)
   referredByReferrerId String?   @map("referred_by_referrer_id") @db.Uuid
-  referredByDriver     Driver?   @relation("DriverReferrals", fields: [referredByDriverId], references: [id], onDelete: Restrict)
   referredByReferrer   Referrer? @relation(fields: [referredByReferrerId], references: [id], onDelete: Restrict)
-  referredDrivers      Driver[]  @relation("DriverReferrals")
   kycDocuments KycDocument[]
   vehicles     Vehicle[]
   batteries    Battery[]
@@ -582,7 +579,6 @@ model Driver {
 
   @@index([phone])
   @@index([approval])
-  @@index([referredByDriverId])
   @@index([referredByReferrerId])
   @@map("drivers")
 }
