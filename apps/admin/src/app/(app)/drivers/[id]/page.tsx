@@ -15,9 +15,10 @@ import {
   RELATIVE_RELATION_LABELS,
 } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
-import type { AgreementListRow, DriverDetail, KycDoc, Paged } from '@/lib/types';
+import type { AgreementListRow, DriverDetail, KycDoc, Paged, ReferredBy } from '@/lib/types';
 import { AgreementStateBadge } from '@/components/AgreementBits';
 import { OnboardingCard, PhoneCheck } from '@/components/Onboarding';
+import { ReferralPicker, ReferredByText, referralPayload } from '@/components/Referral';
 import {
   DriverFields,
   VehicleFields,
@@ -75,6 +76,7 @@ export default function DriverPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editCheck, setEditCheck] = useState<string | null>(null);
+  const [editReferral, setEditReferral] = useState<ReferredBy | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const consentRef = useRef<HTMLInputElement>(null);
 
@@ -139,8 +141,8 @@ export default function DriverPage() {
             {d.name} {d.status !== 'ACTIVE' && <StatusBadge status={d.status} />}
           </h1>
           <p className="muted">
-            <span className="mono">{d.phone}</span> · {DRIVER_LANGUAGE_LABELS[d.language]} ·
-            registered {formatDate(d.createdAt)}
+            <span className="mono">{d.code}</span> · <span className="mono">{d.phone}</span> ·{' '}
+            {DRIVER_LANGUAGE_LABELS[d.language]} · registered {formatDate(d.createdAt)}
           </p>
         </div>
         {manage && (
@@ -149,6 +151,7 @@ export default function DriverPage() {
               onClick={() => {
                 setDraft(driverDraft(d));
                 setEditCheck(null);
+                setEditReferral(d.referredBy);
                 open('edit');
               }}
             >
@@ -208,6 +211,50 @@ export default function DriverPage() {
           </ul>
         </div>
         {can('agreements.read') && <DriverAgreements driverId={d.id} />}
+        <div className="card">
+          <h2>Referrals</h2>
+          <dl className="kv">
+            <dt>Referred by</dt>
+            <dd>
+              {d.referredBy ? (
+                <Link
+                  href={
+                    d.referredBy.type === 'DRIVER'
+                      ? `/drivers/${d.referredBy.id}`
+                      : `/referrers/${d.referredBy.id}`
+                  }
+                >
+                  <ReferredByText r={d.referredBy} />
+                </Link>
+              ) : (
+                <ReferredByText r={null} />
+              )}
+            </dd>
+            <dt>Drivers referred</dt>
+            <dd>
+              {d.referrals.referred} · {d.referrals.approved} approved · {d.referrals.installed}{' '}
+              with a battery
+            </dd>
+          </dl>
+          {d.referrals.drivers.length > 0 && (
+            <ul className="timeline">
+              {d.referrals.drivers.map((r) => (
+                <li key={r.id}>
+                  <Link href={`/drivers/${r.id}`}>{r.name}</Link>{' '}
+                  <span className="mono muted">{r.code}</span>{' '}
+                  <span className="muted" style={{ fontSize: 13 }}>
+                    {r.installed
+                      ? 'battery installed'
+                      : r.approval === 'APPROVED'
+                        ? 'approved'
+                        : 'registered'}{' '}
+                    {formatDate(r.registeredAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <div className="card">
           <h2>Details</h2>
           <dl className="kv">
@@ -502,6 +549,7 @@ export default function DriverPage() {
               () =>
                 api.patch<DriverDetail>(`/v1/drivers/${id}`, {
                   ...driverPayload(draft),
+                  ...referralPayload(editReferral),
                   phoneCheckId: phoneChanged ? (editCheck ?? undefined) : undefined,
                 }),
               'Saved.',
@@ -510,6 +558,14 @@ export default function DriverPage() {
         >
           <ErrorBox error={actionError} />
           <DriverFields value={draft} onChange={setDraft} />
+          <div className="field">
+            <label>Referred by</label>
+            <ReferralPicker
+              value={editReferral}
+              onChange={setEditReferral}
+              excludeDriverId={d.id}
+            />
+          </div>
           {phoneChanged && (
             <PhoneCheck
               phone={draft.phone}
@@ -528,6 +584,7 @@ export default function DriverPage() {
                   () =>
                     api.patch<DriverDetail>(`/v1/drivers/${id}`, {
                       ...driverPayload(draft),
+                      ...referralPayload(editReferral),
                       phoneCheckId: phoneChanged ? (editCheck ?? undefined) : undefined,
                       acknowledgeDuplicates: true,
                     }),

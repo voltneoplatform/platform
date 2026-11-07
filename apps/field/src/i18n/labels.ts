@@ -8,6 +8,7 @@ import type {
   TicketStatus,
   TicketTiming,
   RelativeRelation,
+  ReferrerKind,
   VehicleType,
 } from '@voltneo/shared';
 import type { Lang } from './index';
@@ -24,6 +25,7 @@ export interface Labels {
   ticketOutcome: Record<TicketOutcome, string>;
   linkStatus: Record<'ACTIVE' | 'PAID' | 'EXPIRED' | 'CANCELLED', string>;
   role: Record<Role, string>;
+  referrerKind: Record<ReferrerKind, string>;
 }
 
 /** Names of states and types in each language (REQUIRES VALIDATION, native speakers). */
@@ -106,6 +108,13 @@ export const LABELS: Record<Lang, Labels> = {
       TECHNICIAN: 'Technician',
       RECOVERY: 'Recovery staff',
     },
+    referrerKind: {
+      MECHANIC: 'Mechanic or garage',
+      SHOPKEEPER: 'Shopkeeper',
+      DEALER: 'Vehicle dealer',
+      AGENT: 'Agent',
+      OTHER: 'Other',
+    },
   },
   BN: {
     state: {
@@ -185,6 +194,13 @@ export const LABELS: Record<Lang, Labels> = {
       TECHNICIAN: 'টেকনিশিয়ান',
       RECOVERY: 'রিকভারি কর্মী',
     },
+    referrerKind: {
+      MECHANIC: 'মিস্ত্রি বা গ্যারেজ',
+      SHOPKEEPER: 'দোকানদার',
+      DEALER: 'গাড়ির ডিলার',
+      AGENT: 'এজেন্ট',
+      OTHER: 'অন্য',
+    },
   },
   HI: {
     state: {
@@ -263,6 +279,13 @@ export const LABELS: Record<Lang, Labels> = {
       FIELD_AGENT: 'फ़ील्ड एजेंट',
       TECHNICIAN: 'तकनीशियन',
       RECOVERY: 'रिकवरी कर्मचारी',
+    },
+    referrerKind: {
+      MECHANIC: 'मिस्त्री या गैरेज',
+      SHOPKEEPER: 'दुकानदार',
+      DEALER: 'वाहन डीलर',
+      AGENT: 'एजेंट',
+      OTHER: 'अन्य',
     },
   },
 };

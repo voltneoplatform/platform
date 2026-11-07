@@ -229,6 +229,20 @@ export const en = {
   closeSent: 'Sent to head office. The ticket closes once they approve it.',
   closeWaiting: 'You closed this ticket. Waiting for head office to approve.',
   closeSentBack: 'Head office sent the close back: {reason}',
+  referredBy: 'Referred by (optional)',
+  referralSearch: 'Name, mobile or ID (VND-… or REF-…)',
+  referralNone: 'No match.',
+  addReferrer: 'Add an outside referrer',
+  referrerName: 'Name',
+  referrerKind: 'Who they are',
+  referrerSave: 'Add referrer',
+  removeReferral: 'Remove',
+  voltNeoDriver: 'Volt Neo driver',
+  referredByLabel: 'Referred by: {name} ({code})',
+  referralsCount: 'Drivers referred: {referred} · approved {approved} · battery {installed}',
+  changeReferral: 'Change referrer',
+  referralSaved: 'Referrer saved.',
+  driverId: 'Driver ID {code}',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -735,4 +735,110 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
       ).rejects.toThrow();
     });
   });
+
+  describe('referrals (founder, 7 Nov 2026)', () => {
+    it('records who referred a driver, a driver or an outside person, and counts them', async () => {
+      const agent = await loginAs(ctx, 'FIELD_AGENT');
+      const ramesh = await makeDriver(ctx, ops.token, { name: 'Ramesh Referrer' });
+      expect(ramesh.code).toMatch(/^VND-\d{6}$/);
+
+      // An outside referrer, added by the field agent; the same phone cannot be added twice.
+      const mechanic = (
+        await ctx.http
+          .post('/v1/referrers')
+          .set(bearer(agent.token))
+          .send({ name: 'Bapi Garage', phone: '98300 44444', kind: 'MECHANIC' })
+          .expect(201)
+      ).body;
+      expect(mechanic).toMatchObject({ code: 'REF-000001', phone: '+919830044444', referred: 0 });
+      expect(
+        (
+          await ctx.http
+            .post('/v1/referrers')
+            .set(bearer(agent.token))
+            .send({ name: 'Bapi Again', phone: '9830044444', kind: 'OTHER' })
+            .expect(409)
+        ).body.code,
+      ).toBe('REFERRER_EXISTS');
+
+      // Found by name, phone or ID while registering.
+      const found = await ctx.http
+        .get(`/v1/referrals/search?search=${ramesh.code}`)
+        .set(bearer(agent.token))
+        .expect(200);
+      expect(found.body.items).toEqual([
+        expect.objectContaining({ type: 'DRIVER', id: ramesh.id }),
+      ]);
+      const byPhone = await ctx.http
+        .get('/v1/referrals/search?search=44444')
+        .set(bearer(agent.token))
+        .expect(200);
+      expect(byPhone.body.items.map((x: { id: string }) => x.id)).toContain(mechanic.id);
+
+      // Both at once is refused; a driver cannot refer themselves.
+      const a = await makeDriver(ctx, agent.token, { referredByDriverId: ramesh.id });
+      const b = await makeDriver(ctx, agent.token, { referredByDriverId: ramesh.id });
+      const c = await makeDriver(ctx, agent.token, { referredByReferrerId: mechanic.id });
+      const shown = await ctx.http.get(`/v1/drivers/${a.id}`).set(bearer(agent.token)).expect(200);
+      expect(shown.body.referredBy).toMatchObject({
+        type: 'DRIVER',
+        code: ramesh.code,
+        name: 'Ramesh Referrer',
+      });
+      await ctx.http
+        .patch(`/v1/drivers/${a.id}`)
+        .set(bearer(agent.token))
+        .send({ referredByDriverId: a.id })
+        .expect(400);
+      await ctx.http
+        .patch(`/v1/drivers/${a.id}`)
+        .set(bearer(agent.token))
+        .send({ referredByDriverId: ramesh.id, referredByReferrerId: mechanic.id })
+        .expect(400);
+
+      // Corrected by anyone who can edit drivers (founder): b was really the mechanic's.
+      const moved = await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(agent.token))
+        .send({ referredByReferrerId: mechanic.id })
+        .expect(200);
+      expect(moved.body.referredBy).toMatchObject({ type: 'REFERRER', code: 'REF-000001' });
+      const audit = await ctx.prisma.auditLog.findFirst({
+        where: { recordId: b.id, action: 'driver.update' },
+        orderBy: { at: 'desc' },
+      });
+      expect(JSON.stringify(audit?.after)).toContain(mechanic.id);
+
+      const page = await ctx.http
+        .get(`/v1/drivers/${ramesh.id}`)
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(page.body.referrals).toMatchObject({ referred: 1, approved: 0, installed: 0 });
+      expect(page.body.referrals.drivers.map((x: { id: string }) => x.id)).toEqual([a.id]);
+
+      const board = await ctx.http.get('/v1/referrals').set(bearer(ops.token)).expect(200);
+      expect(board.body.items.slice(0, 2)).toEqual([
+        expect.objectContaining({ type: 'REFERRER', id: mechanic.id, referred: 2 }),
+        expect.objectContaining({ type: 'DRIVER', id: ramesh.id, referred: 1 }),
+      ]);
+      expect(board.body.totals.referred).toBe(3);
+      const r = await ctx.http
+        .get(`/v1/referrers/${mechanic.id}`)
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(r.body.drivers.map((x: { id: string }) => x.id).sort()).toEqual([b.id, c.id].sort());
+
+      // An inactive referrer cannot be chosen for new drivers.
+      await ctx.http
+        .patch(`/v1/referrers/${mechanic.id}`)
+        .set(bearer(agent.token))
+        .send({ active: false })
+        .expect(200);
+      await ctx.http
+        .patch(`/v1/drivers/${a.id}`)
+        .set(bearer(agent.token))
+        .send({ referredByReferrerId: mechanic.id })
+        .expect(422);
+    });
+  });
 });

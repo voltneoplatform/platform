@@ -11,7 +11,14 @@ import { ApiError } from '@/api';
 import { dmyToIso, typeDate } from '@/dates';
 import { LANGS, LANG_NAMES } from '@/i18n';
 import { useGeotag } from '@/location';
-import { LocationNotice, PhoneCheck, PlanPicker } from '@/onboarding';
+import {
+  LocationNotice,
+  PhoneCheck,
+  PlanPicker,
+  ReferralPicker,
+  referralPayload,
+  type ReferredBy,
+} from '@/onboarding';
 import { useSession } from '@/session';
 import { Button, Card, Check, Choice, ErrorNotice, Field, H2, Muted, Notice, Screen } from '@/ui';
 
@@ -48,6 +55,7 @@ export default function NewDriver() {
   const [dups, setDups] = useState<Duplicate[] | null>(null);
   // Founder, 1 Nov 2026: the driver's code, a plan, and the phone's location.
   const [planId, setPlanId] = useState<string | null>(null);
+  const [referredBy, setReferredBy] = useState<ReferredBy | null>(null);
   const [check, setCheck] = useState<{ id: string; phone: string } | null>(null);
   const location = useGeotag();
   const phoneConfirmed = !!check && check.phone === f.phone;
@@ -77,6 +85,7 @@ export default function NewDriver() {
         nomineeRelation: f.nomineeRelation || null,
         nomineePhone: f.nomineePhone || null,
         planId,
+        ...referralPayload(referredBy),
         phoneCheckId: check?.id,
         location: location.geo,
         acknowledgeDuplicates,
@@ -201,6 +210,9 @@ export default function NewDriver() {
       </Card>
       <Card>
         <PlanPicker value={planId} onChange={setPlanId} />
+      </Card>
+      <Card>
+        <ReferralPicker value={referredBy} onChange={setReferredBy} />
       </Card>
       <Card>
         <PhoneCheck

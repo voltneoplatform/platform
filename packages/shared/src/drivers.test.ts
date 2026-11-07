@@ -10,6 +10,7 @@ import {
   readiness,
   type ReadinessInput,
 } from './drivers';
+import { driverCode, referrerCode } from './referrals';
 import { canMoveBattery } from './batteries';
 
 describe('KYC document numbers', () => {
@@ -146,5 +147,12 @@ describe('onboarding', () => {
     expect(mapLink({ lat: 22.5726, lng: 88.3639 })).toBe(
       'https://www.google.com/maps?q=22.572600,88.363900',
     );
+  });
+});
+
+describe('referral codes', () => {
+  it('formats driver and referrer IDs', () => {
+    expect(driverCode(12)).toBe('VND-000012');
+    expect(referrerCode(3)).toBe('REF-000003');
   });
 });

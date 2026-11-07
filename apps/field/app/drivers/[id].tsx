@@ -12,7 +12,14 @@ import {
 } from '@voltneo/shared';
 import { rupees } from '@/i18n';
 import { appendPhotos, type Photo } from '@/photos';
-import { PhoneCheck, PlanPicker, StageBadge } from '@/onboarding';
+import {
+  PhoneCheck,
+  PlanPicker,
+  ReferralPicker,
+  StageBadge,
+  referralPayload,
+  type ReferredBy,
+} from '@/onboarding';
 import { useSession } from '@/session';
 import {
   Badge,
@@ -51,6 +58,9 @@ interface DriverDetail {
   }[];
   readiness: { ready: boolean; items: { item: ReadinessItem; done: boolean; applies: boolean }[] };
   language: DriverLanguage;
+  code: string;
+  referredBy: ReferredBy | null;
+  referrals: { referred: number; approved: number; installed: number };
   onboarding: {
     stage: OnboardingStage;
     approval: 'AWAITING' | 'APPROVED' | 'REJECTED';
@@ -99,6 +109,13 @@ export default function DriverPage() {
           </Muted>
           {message && <Notice tone="success">{message}</Notice>}
 
+          <ReferralCard
+            d={d}
+            onSaved={(text) => {
+              setMessage(text);
+              void driver.reload();
+            }}
+          />
           <OnboardingCard
             d={d}
             onSaved={(text) => {
@@ -362,6 +379,66 @@ function OnboardingCard({ d, onSaved }: { d: DriverDetail; onSaved: (text: strin
             void run(() => api.post(`/v1/drivers/${d.id}/resubmit`, {}), t('sentAgain'))
           }
         />
+      )}
+    </Card>
+  );
+}
+
+/** Founder, 7 Nov 2026: who referred this driver, and how many they referred. */
+function ReferralCard({ d, onSaved }: { d: DriverDetail; onSaved: (text: string) => void }) {
+  const { t, api, can, labels } = useSession();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<ReferredBy | null>(d.referredBy);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const r = d.referredBy;
+  return (
+    <Card>
+      <Muted>{t('driverId', { code: d.code })}</Muted>
+      {r ? (
+        <Body>
+          {t('referredByLabel', { name: r.name, code: r.code })} ·{' '}
+          {r.type === 'DRIVER'
+            ? t('voltNeoDriver')
+            : labels.referrerKind[r.kind as keyof typeof labels.referrerKind]}
+        </Body>
+      ) : null}
+      {d.referrals.referred > 0 && <Body>{t('referralsCount', d.referrals)}</Body>}
+      <ErrorNotice error={error} />
+      {editing ? (
+        <>
+          <ReferralPicker value={value} onChange={setValue} excludeDriverId={d.id} />
+          <Button
+            title={t('save')}
+            busy={busy}
+            onPress={() =>
+              void (async () => {
+                setBusy(true);
+                setError(null);
+                try {
+                  await api.patch(`/v1/drivers/${d.id}`, referralPayload(value));
+                  setEditing(false);
+                  onSaved(t('referralSaved'));
+                } catch (err) {
+                  setError(err);
+                } finally {
+                  setBusy(false);
+                }
+              })()
+            }
+          />
+        </>
+      ) : (
+        can('drivers.manage') && (
+          <Button
+            title={t('changeReferral')}
+            variant="secondary"
+            onPress={() => {
+              setValue(d.referredBy);
+              setEditing(true);
+            }}
+          />
+        )
       )}
     </Card>
   );

@@ -160,7 +160,7 @@ export async function makeDriver(
       ...overrides,
     })
     .expect(201);
-  return res.body as { id: string; phone: string; readiness: { ready: boolean } };
+  return res.body as { id: string; code: string; phone: string; readiness: { ready: boolean } };
 }
 
 export function uploadKyc(
