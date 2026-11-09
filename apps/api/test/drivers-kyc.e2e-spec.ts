@@ -735,4 +735,117 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
       ).rejects.toThrow();
     });
   });
+
+  describe('referrals (founder, 7 Nov 2026)', () => {
+    it('lets head office keep outside referrers, and field agents pick one only at registration', async () => {
+      const agent = await loginAs(ctx, 'FIELD_AGENT');
+      const pm = await loginAs(ctx, 'PLAN_MANAGER');
+      const add = (token: string, body: Record<string, unknown>) =>
+        ctx.http.post('/v1/referrers').set(bearer(token)).send(body);
+
+      // Only super admin, operations manager and plan manager add or edit referrers.
+      await add(agent.token, { name: 'Bapi Garage', phone: '9830044444', kind: 'MECHANIC' }).expect(
+        403,
+      );
+      const mechanic = (
+        await add(pm.token, { name: 'Bapi Garage', phone: '98300 44444', kind: 'MECHANIC' }).expect(
+          201,
+        )
+      ).body;
+      expect(mechanic).toMatchObject({ code: 'REF-000001', phone: '+919830044444', referred: 0 });
+      expect(
+        (
+          await add(ops.token, { name: 'Bapi Again', phone: '9830044444', kind: 'OTHER' }).expect(
+            409,
+          )
+        ).body.code,
+      ).toBe('REFERRER_EXISTS');
+      const shop = (
+        await add(ops.token, {
+          name: 'Maa Tara Stores',
+          phone: '9830055556',
+          kind: 'SHOPKEEPER',
+        }).expect(201)
+      ).body;
+      await ctx.http
+        .patch(`/v1/referrers/${shop.id}`)
+        .set(bearer(agent.token))
+        .send({ notes: 'x' })
+        .expect(403);
+
+      // Field agents find referrers by name, mobile or ID; drivers are not referrers.
+      const ramesh = await makeDriver(ctx, ops.token, { name: 'Ramesh Driver' });
+      expect(ramesh.code).toMatch(/^VND-\d{6}$/);
+      const search = (q: string) =>
+        ctx.http
+          .get(`/v1/referrals/search?search=${encodeURIComponent(q)}`)
+          .set(bearer(agent.token));
+      expect((await search('REF-000001').expect(200)).body.items).toEqual([
+        expect.objectContaining({ id: mechanic.id, kind: 'MECHANIC' }),
+      ]);
+      expect(
+        (await search('44444').expect(200)).body.items.map((x: { id: string }) => x.id),
+      ).toEqual([mechanic.id]);
+      expect((await search('Ramesh').expect(200)).body.items).toEqual([]);
+
+      // Picked at registration by the field agent.
+      const a = await makeDriver(ctx, agent.token, { referredByReferrerId: mechanic.id });
+      const b = await makeDriver(ctx, agent.token, { referredByReferrerId: mechanic.id });
+      const shown = await ctx.http.get(`/v1/drivers/${a.id}`).set(bearer(agent.token)).expect(200);
+      expect(shown.body.referredBy).toMatchObject({ code: 'REF-000001', name: 'Bapi Garage' });
+
+      // Afterwards the field agent cannot change it (saving the same value is fine); head office can.
+      await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(agent.token))
+        .send({ referredByReferrerId: shop.id })
+        .expect(403);
+      await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(agent.token))
+        .send({ referredByReferrerId: mechanic.id, notes: 'Lives near the stand' })
+        .expect(200);
+      const moved = await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(ops.token))
+        .send({ referredByReferrerId: shop.id })
+        .expect(200);
+      expect(moved.body.referredBy).toMatchObject({ id: shop.id });
+      const audit = await ctx.prisma.auditLog.findFirst({
+        where: { recordId: b.id, action: 'driver.update' },
+        orderBy: { at: 'desc' },
+      });
+      expect(JSON.stringify(audit?.after)).toContain(shop.id);
+
+      const board = await ctx.http.get('/v1/referrals').set(bearer(ops.token)).expect(200);
+      expect(board.body.items).toEqual([
+        expect.objectContaining({ id: mechanic.id, referred: 1, approved: 0, installed: 0 }),
+        expect.objectContaining({ id: shop.id, referred: 1 }),
+      ]);
+      expect(board.body.totals.referred).toBe(2);
+      const r = await ctx.http
+        .get(`/v1/referrers/${mechanic.id}`)
+        .set(bearer(ops.token))
+        .expect(200);
+      expect(r.body.drivers.map((x: { id: string }) => x.id)).toEqual([a.id]);
+
+      // An inactive referrer cannot be picked.
+      await ctx.http
+        .patch(`/v1/referrers/${mechanic.id}`)
+        .set(bearer(pm.token))
+        .send({ active: false })
+        .expect(200);
+      expect((await search('Bapi').expect(200)).body.items).toEqual([]);
+      await ctx.http
+        .patch(`/v1/drivers/${a.id}`)
+        .set(bearer(ops.token))
+        .send({ referredByReferrerId: mechanic.id })
+        .expect(200); // unchanged
+      await ctx.http
+        .patch(`/v1/drivers/${b.id}`)
+        .set(bearer(ops.token))
+        .send({ referredByReferrerId: mechanic.id })
+        .expect(422);
+    });
+  });
 });

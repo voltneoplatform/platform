@@ -216,4 +216,10 @@ export const bn: Messages = {
   closeSent: 'হেড অফিসে পাঠানো হয়েছে। তারা অনুমোদন দিলে টিকিট বন্ধ হবে।',
   closeWaiting: 'আপনি টিকিট বন্ধ করেছেন। হেড অফিসের অনুমোদনের অপেক্ষায়।',
   closeSentBack: 'হেড অফিস ফেরত পাঠিয়েছে: {reason}',
+  referredBy: 'কে পাঠিয়েছেন (ঐচ্ছিক)',
+  referralSearch: 'পাঠানো ব্যক্তির নাম, মোবাইল বা আইডি (REF-…)',
+  referralNone: 'মিল নেই।',
+  removeReferral: 'সরান',
+  referredByLabel: 'পাঠিয়েছেন: {name} ({code})',
+  driverId: 'চালক আইডি {code}',
 };

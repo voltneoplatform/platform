@@ -523,6 +523,8 @@ enum DriverStatus {
 /// drivers: the customer. Phone numbers may repeat (shared phones) but are flagged.
 model Driver {
   id              String         @id @default(uuid()) @db.Uuid
+  /// Driver ID, e.g. VND-000012 (founder, 7 Nov 2026)
+  code            String         @unique
   name            String
   phone           String
   altPhone        String?        @map("alt_phone")
@@ -564,6 +566,9 @@ model Driver {
 
   plan         Plan?          @relation(fields: [planId], references: [id], onDelete: Restrict)
   decisions    DriverApprovalDecision[]
+  /// The outside referrer who referred this driver (founder, 7 Nov 2026)
+  referredByReferrerId String?   @map("referred_by_referrer_id") @db.Uuid
+  referredByReferrer   Referrer? @relation(fields: [referredByReferrerId], references: [id], onDelete: Restrict)
   kycDocuments KycDocument[]
   vehicles     Vehicle[]
   batteries    Battery[]
@@ -574,7 +579,34 @@ model Driver {
 
   @@index([phone])
   @@index([approval])
+  @@index([referredByReferrerId])
   @@map("drivers")
+}
+
+enum ReferrerKind {
+  MECHANIC
+  SHOPKEEPER
+  DEALER
+  AGENT
+  OTHER
+}
+
+/// referrers: outside people who refer drivers (founder, 7 Nov 2026).
+model Referrer {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  name        String
+  phone       String       @unique
+  kind        ReferrerKind
+  notes       String?
+  active      Boolean      @default(true)
+  createdById String?      @map("created_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  drivers Driver[]
+
+  @@map("referrers")
 }
 
 enum DriverApproval {

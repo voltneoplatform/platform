@@ -229,6 +229,12 @@ export const en = {
   closeSent: 'Sent to head office. The ticket closes once they approve it.',
   closeWaiting: 'You closed this ticket. Waiting for head office to approve.',
   closeSentBack: 'Head office sent the close back: {reason}',
+  referredBy: 'Referred by (optional)',
+  referralSearch: 'Referrer name, mobile or ID (REF-…)',
+  referralNone: 'No match.',
+  removeReferral: 'Remove',
+  referredByLabel: 'Referred by: {name} ({code})',
+  driverId: 'Driver ID {code}',
 } as const;
 
 export type MessageKey = keyof typeof en;

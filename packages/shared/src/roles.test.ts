@@ -59,6 +59,15 @@ describe('role permissions (spec section 2)', () => {
     }
   });
 
+  it('leaves referrers to head office; field staff only pick one at registration', () => {
+    for (const r of ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'PLAN_MANAGER'] as const) {
+      expect(hasPermission(r, 'referrals.manage')).toBe(true);
+    }
+    for (const r of ['FIELD_AGENT', 'TECHNICIAN', 'SUPPORT', 'FINANCE'] as const) {
+      expect(hasPermission(r, 'referrals.manage')).toBe(false);
+    }
+  });
+
   it('has field staff close tickets subject to head office approval', () => {
     for (const r of ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'PLAN_MANAGER'] as const) {
       expect(hasPermission(r, 'tickets.close')).toBe(true);

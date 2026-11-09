@@ -12,7 +12,7 @@ import {
 } from '@voltneo/shared';
 import { rupees } from '@/i18n';
 import { appendPhotos, type Photo } from '@/photos';
-import { PhoneCheck, PlanPicker, StageBadge } from '@/onboarding';
+import { PhoneCheck, PlanPicker, StageBadge, type ReferredBy } from '@/onboarding';
 import { useSession } from '@/session';
 import {
   Badge,
@@ -51,6 +51,8 @@ interface DriverDetail {
   }[];
   readiness: { ready: boolean; items: { item: ReadinessItem; done: boolean; applies: boolean }[] };
   language: DriverLanguage;
+  code: string;
+  referredBy: ReferredBy | null;
   onboarding: {
     stage: OnboardingStage;
     approval: 'AWAITING' | 'APPROVED' | 'REJECTED';
@@ -99,6 +101,7 @@ export default function DriverPage() {
           </Muted>
           {message && <Notice tone="success">{message}</Notice>}
 
+          <ReferralCard d={d} />
           <OnboardingCard
             d={d}
             onSaved={(text) => {
@@ -362,6 +365,23 @@ function OnboardingCard({ d, onSaved }: { d: DriverDetail; onSaved: (text: strin
             void run(() => api.post(`/v1/drivers/${d.id}/resubmit`, {}), t('sentAgain'))
           }
         />
+      )}
+    </Card>
+  );
+}
+
+/** Founder, 7 Nov 2026: the Driver ID and who referred the driver (changed by head office only). */
+function ReferralCard({ d }: { d: DriverDetail }) {
+  const { t, labels } = useSession();
+  const r = d.referredBy;
+  return (
+    <Card>
+      <Muted>{t('driverId', { code: d.code })}</Muted>
+      {r && (
+        <Body>
+          {t('referredByLabel', { name: r.name, code: r.code })} ·{' '}
+          {labels.referrerKind[r.kind as keyof typeof labels.referrerKind]}
+        </Body>
       )}
     </Card>
   );

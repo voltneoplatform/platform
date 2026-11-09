@@ -9,6 +9,7 @@ import { Badge, Body, Button, C, ErrorNotice, Field, Loading, Muted, Screen, use
 interface DriverRow {
   id: string;
   name: string;
+  code: string;
   phone: string;
   district: string;
   vehicle: { registration: string | null } | null;
@@ -66,7 +67,7 @@ export default function Drivers() {
         >
           <Body style={{ fontWeight: '700' }}>{d.name}</Body>
           <Muted>
-            {d.phone}
+            {d.code} · {d.phone}
             {d.vehicle?.registration ? ` · ${d.vehicle.registration}` : ''} · {d.district}
           </Muted>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

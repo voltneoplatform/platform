@@ -10,9 +10,10 @@ import {
   type VehicleType,
 } from '@voltneo/shared';
 import { useSession } from '@/lib/session';
-import type { DriverDetail, DriverListRow, Paged } from '@/lib/types';
+import type { DriverDetail, DriverListRow, Paged, ReferredBy } from '@/lib/types';
 import { Forbidden } from '@/components/AppShell';
 import { DriverStageBadge, PhoneCheck, PlanSelect } from '@/components/Onboarding';
+import { ReferralPicker, referralPayload } from '@/components/Referral';
 import {
   DriverFields,
   VehicleFields,
@@ -54,6 +55,7 @@ export default function DriversPage() {
   const [saving, setSaving] = useState(false);
   const [planId, setPlanId] = useState('');
   const [phoneCheckId, setPhoneCheckId] = useState<string | null>(null);
+  const [referredBy, setReferredBy] = useState<ReferredBy | null>(null);
   const [checkedPhone, setCheckedPhone] = useState('');
 
   if (!can('drivers.read')) return <Forbidden />;
@@ -68,6 +70,7 @@ export default function DriversPage() {
         ...driverPayload(draft),
         planId: planId || undefined,
         phoneCheckId: phoneCheckId ?? undefined,
+        ...referralPayload(referredBy),
         vehicle: withVehicle ? vehiclePayload(vehicle) : undefined,
         acknowledgeDuplicates: acknowledge || undefined,
       });
@@ -93,6 +96,7 @@ export default function DriversPage() {
             onClick={() => {
               setPlanId('');
               setPhoneCheckId(null);
+              setReferredBy(null);
               setDraft(driverDraft());
               setVehicle(vehicleDraft());
               setSaveError(null);
@@ -157,7 +161,9 @@ export default function DriversPage() {
                     <strong>{d.name}</strong>
                   </Link>
                   <div className="muted" style={{ fontSize: 13 }}>
+                    <span className="mono">{d.code}</span> ·{' '}
                     {DRIVER_LANGUAGE_LABELS[d.language as DriverLanguage]}
+                    {d.referredBy && <> · referred by {d.referredBy.name}</>}
                     {d.status !== 'ACTIVE' && (
                       <>
                         {' '}
@@ -217,6 +223,10 @@ export default function DriversPage() {
             <label htmlFor="reg-plan">Plan</label>
             <PlanSelect id="reg-plan" value={planId} onChange={setPlanId} required />
             <p className="hint">Head office can change it at final approval.</p>
+          </div>
+          <div className="field">
+            <label>Referred by (optional)</label>
+            <ReferralPicker value={referredBy} onChange={setReferredBy} />
           </div>
           <PhoneCheck
             phone={draft.phone}

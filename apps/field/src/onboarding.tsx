@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { View } from 'react-native';
-import { REGISTRATION_CONSENT, type DriverLanguage, type OnboardingStage } from '@voltneo/shared';
+import {
+  REGISTRATION_CONSENT,
+  type DriverLanguage,
+  type OnboardingStage,
+  type ReferrerKind,
+} from '@voltneo/shared';
 import type { GeoState } from '@/location';
 import { useSession } from '@/session';
 import {
@@ -211,4 +216,79 @@ export function StageBadge({
     case 'APPROVED':
       return <Badge tone="success" text={t('stageApproved')} />;
   }
+}
+
+/** Founder, 7 Nov 2026: the outside referrer who referred a driver. */
+export interface ReferredBy {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  kind: string;
+}
+
+export function referralPayload(r: ReferredBy | null) {
+  return { referredByReferrerId: r?.id ?? null };
+}
+
+/**
+ * Pick the referrer by name, mobile or ID. Referrers are added by head office;
+ * field staff only pick one when registering a driver.
+ */
+export function ReferralPicker({
+  value,
+  onChange,
+}: {
+  value: ReferredBy | null;
+  onChange: (r: ReferredBy | null) => void;
+}) {
+  const { t, api, labels } = useSession();
+  const [search, setSearch] = useState('');
+  const q = search.trim();
+  const results = useLoad(
+    () =>
+      q.length >= 2
+        ? api.get<{ items: ReferredBy[] }>(`/v1/referrals/search?search=${encodeURIComponent(q)}`)
+        : Promise.resolve({ items: [] as ReferredBy[] }),
+    [api, q],
+  );
+  const kind = (k: string) => labels.referrerKind[k as ReferrerKind] ?? '';
+
+  if (value) {
+    return (
+      <View style={{ gap: 6 }}>
+        <Muted>{t('referredBy')}</Muted>
+        <Body>
+          {value.name} · {value.code} · {kind(value.kind)}
+        </Body>
+        <Button title={t('removeReferral')} variant="secondary" onPress={() => onChange(null)} />
+      </View>
+    );
+  }
+  const items = results.data?.items ?? [];
+  return (
+    <View style={{ gap: 6 }}>
+      <Field
+        testID="referral-search"
+        label={t('referredBy')}
+        placeholder={t('referralSearch')}
+        value={search}
+        onChangeText={setSearch}
+      />
+      <ErrorNotice error={results.error} />
+      {q.length >= 2 &&
+        (items.length === 0 && !results.loading ? (
+          <Muted>{t('referralNone')}</Muted>
+        ) : (
+          items.map((o) => (
+            <Button
+              key={o.id}
+              variant="secondary"
+              title={`${o.name} · ${o.code} · ${kind(o.kind)}`}
+              onPress={() => onChange(o)}
+            />
+          ))
+        ))}
+    </View>
+  );
 }

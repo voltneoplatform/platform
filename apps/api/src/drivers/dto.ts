@@ -8,6 +8,8 @@ import {
   type DriverLanguage,
   type KycDocType,
   type OnboardingStage,
+  REFERRER_KINDS,
+  type ReferrerKind,
   type VehicleType,
 } from '@voltneo/shared';
 import { Transform, Type } from 'class-transformer';
@@ -155,6 +157,15 @@ export class CreateDriverDto extends DriverFields {
   @IsUUID()
   planId?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'The outside referrer (founder, 7 Nov 2026). Field staff set it at registration; after that only head office (referrals.manage) changes it. null clears it.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  referredByReferrerId?: string | null;
+
   @ApiPropertyOptional({ type: VehicleDto })
   @IsOptional()
   @ValidateNested()
@@ -205,6 +216,15 @@ export class UpdateDriverDto {
   @IsOptional()
   @IsUUID()
   planId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'The outside referrer (founder, 7 Nov 2026). Field staff set it at registration; after that only head office (referrals.manage) changes it. null clears it.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  referredByReferrerId?: string | null;
 }
 
 export class SendPhoneCodeDto {
@@ -265,4 +285,25 @@ export class UploadKycDto {
 
 export class RejectKycDto {
   @ApiProperty() @Transform(trim) @IsString() @Length(3, 300) reason: string;
+}
+
+export class ReferrerDto {
+  @ApiProperty() @Transform(trim) @IsString() @Length(2, 100) name: string;
+  @ApiProperty({ example: '9830012345' }) @Transform(trim) @IsString() @MaxLength(20) phone: string;
+  @ApiProperty({ enum: REFERRER_KINDS }) @IsIn(REFERRER_KINDS) kind: ReferrerKind;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(300) notes?: string;
+}
+
+export class UpdateReferrerDto {
+  @IsOptional() @Transform(trim) @IsString() @Length(2, 100) name?: string;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(20) phone?: string;
+  @IsOptional() @IsIn(REFERRER_KINDS) kind?: ReferrerKind;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(300) notes?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+}
+
+export class ReferralSearchQuery {
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(60) search?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
 }

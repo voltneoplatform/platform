@@ -11,6 +11,7 @@ import {
   HEAD_OFFICE_ROLES,
   KYC_DOC_INFO,
   REGISTRATION_CONSENT_VERSION,
+  driverCode,
   geotagProblem,
   onboardingStage,
   type DriverApproval,
@@ -50,6 +51,8 @@ import type {
   VehicleDto,
 } from './dto';
 import { PhoneChecksService } from './phone-checks.service';
+import { ReferralsService } from './referrals.service';
+import { nextCounter } from '../common/counters';
 
 export interface UploadedFile {
   buffer: Buffer;
@@ -69,6 +72,21 @@ type DriverFull = Driver & { kycDocuments: KycDocument[]; vehicles: Vehicle[] };
 const PLAN_SELECT = { id: true, code: true, nameEn: true, nameBn: true, nameHi: true } as const;
 function planView(p: { id: string; code: string; nameEn: string; nameBn: string; nameHi: string }) {
   return { id: p.id, code: p.code, names: { en: p.nameEn, bn: p.nameBn, hi: p.nameHi } };
+}
+
+const REFERRER_SELECT = { id: true, code: true, name: true, phone: true, kind: true } as const;
+
+/** Who referred a driver (founder, 7 Nov 2026): an outside referrer, or no one. */
+export function referredByView(d: {
+  referredByReferrer?: {
+    id: string;
+    code: string;
+    name: string;
+    phone: string;
+    kind: string;
+  } | null;
+}) {
+  return d.referredByReferrer ?? null;
 }
 
 function phone(raw: string | null | undefined, label: string): string | null {
@@ -114,6 +132,7 @@ export class DriversService {
     private readonly links: FileLinks,
     @Inject(FILE_STORAGE) private readonly storage: FileStorage,
     private readonly phoneChecks: PhoneChecksService,
+    private readonly referrals: ReferralsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -187,6 +206,8 @@ export class DriversService {
   private driverFields(d: Driver) {
     return {
       id: d.id,
+      code: d.code,
+      referredByReferrerId: d.referredByReferrerId,
       name: d.name,
       phone: d.phone,
       altPhone: d.altPhone,
@@ -228,6 +249,7 @@ export class DriversService {
       OR: s
         ? [
             { name: { contains: s, mode: 'insensitive' } },
+            { code: { contains: s.toUpperCase() } },
             ...(digits && digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
             { vehicles: { some: { registration: { contains: normaliseRegistration(s) } } } },
           ]
@@ -239,6 +261,7 @@ export class DriversService {
       include: {
         ...this.fullInclude,
         plan: { select: PLAN_SELECT },
+        referredByReferrer: { select: REFERRER_SELECT },
         // The agreement still in progress, if any, so the list shows where it stands.
         agreements: {
           where: { state: { in: [...OPEN_AGREEMENT_STATES] } },
@@ -257,11 +280,13 @@ export class DriversService {
       const vehicle = d.vehicles.find((v) => v.isCurrent);
       return {
         id: d.id,
+        code: d.code,
         name: d.name,
         phone: d.phone,
         language: d.language,
         district: d.district,
         status: d.status,
+        referredBy: referredByView(d),
         vehicle: vehicle
           ? {
               registration: vehicle.registration,
@@ -304,6 +329,7 @@ export class DriversService {
       include: {
         ...this.fullInclude,
         plan: { select: PLAN_SELECT },
+        referredByReferrer: { select: REFERRER_SELECT },
         decisions: { orderBy: { decidedAt: 'desc' }, include: { plan: { select: PLAN_SELECT } } },
         agreements: {
           where: { state: { in: [...OPEN_AGREEMENT_STATES] } },
@@ -337,6 +363,7 @@ export class DriversService {
       previousVehicles: d.vehicles.filter((v) => !v.isCurrent).map((v) => this.vehicleView(v)),
       documents: d.kycDocuments.map((k) => this.docView(k, names)),
       readiness,
+      referredBy: referredByView(d),
       onboarding: {
         stage: onboardingStage({
           ready: readiness.ready,
@@ -500,9 +527,12 @@ export class DriversService {
       const newId = randomUUID();
       // The driver read out the code sent to this phone, after hearing the consent line.
       const consentAt = await this.phoneChecks.use(tx, dto.phoneCheckId, main, newId, actor);
+      const referral = await this.referrals.check(tx, dto, actor, true);
       const d = await tx.driver.create({
         data: {
           id: newId,
+          code: driverCode(await nextCounter(tx, 'driver')),
+          referredByReferrerId: referral?.referredByReferrerId ?? null,
           phoneVerifiedAt: consentAt,
           phoneVerifiedById: actor.id,
           consentVersion: REGISTRATION_CONSENT_VERSION,
@@ -588,9 +618,17 @@ export class DriversService {
         }
         await this.checkPlan(tx, dto.planId);
       }
+      const referral = await this.referrals.check(
+        tx,
+        dto,
+        actor,
+        false,
+        before.referredByReferrerId,
+      );
       const after = await tx.driver.update({
         where: { id },
         data: {
+          ...(referral ?? {}),
           planId: dto.planId,
           ...(verifiedAt
             ? {

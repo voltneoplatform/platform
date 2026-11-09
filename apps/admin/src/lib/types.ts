@@ -220,6 +220,8 @@ export interface DriverDetail {
   readiness: { ready: boolean; items: { item: string; done: boolean; applies: boolean }[] };
   duplicates: { kind: string; driverId: string; driverName: string; detail: string }[];
   onboarding: Onboarding;
+  code: string;
+  referredBy: ReferredBy | null;
 }
 
 export interface PlanRef {
@@ -260,6 +262,8 @@ export interface DriverListRow {
   status: string;
   vehicle: { registration: string | null; type: string; ownedByDriver: boolean } | null;
   ready: boolean;
+  code: string;
+  referredBy: ReferredBy | null;
   /** The agreement still in progress, if any. */
   agreement: { id: string; number: string; state: string } | null;
   approval: 'AWAITING' | 'APPROVED' | 'REJECTED';
@@ -780,4 +784,50 @@ export interface DashboardSummary {
   };
   cash: { withAgents: number; inTransit: number; driverCredit: number };
   pendingApprovals: number;
+}
+
+/** Founder, 7 Nov 2026: the outside referrer who referred a driver. */
+export interface ReferredBy {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  kind: string;
+}
+
+export interface ReferredDriver {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  approval: 'AWAITING' | 'APPROVED' | 'REJECTED';
+  installed: boolean;
+  registeredAt: string;
+}
+
+export interface ReferralCounts {
+  referred: number;
+  approved: number;
+  installed: number;
+}
+
+export interface ReferralBoardRow extends ReferralCounts {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  kind: string;
+  active: boolean;
+}
+
+export interface ReferrerDetail extends ReferralCounts {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  kind: string;
+  notes: string | null;
+  active: boolean;
+  createdAt: string;
+  drivers: ReferredDriver[];
 }

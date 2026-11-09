@@ -217,4 +217,10 @@ export const hi: Messages = {
   closeSent: 'हेड ऑफिस को भेजा गया। उनकी मंज़ूरी के बाद टिकट बंद होगा।',
   closeWaiting: 'आपने यह टिकट बंद किया। हेड ऑफिस की मंज़ूरी का इंतज़ार।',
   closeSentBack: 'हेड ऑफिस ने वापस भेजा: {reason}',
+  referredBy: 'किसने भेजा (वैकल्पिक)',
+  referralSearch: 'भेजने वाले का नाम, मोबाइल या आईडी (REF-…)',
+  referralNone: 'कोई मेल नहीं।',
+  removeReferral: 'हटाएँ',
+  referredByLabel: 'भेजा: {name} ({code})',
+  driverId: 'चालक आईडी {code}',
 };
