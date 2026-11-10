@@ -287,16 +287,15 @@ export class CashfreeGateway implements PaymentGateway {
           plan_max_amount: paiseToRupeeNumber(input.maxAmountPaise),
           plan_note: `Monthly instalments, agreement ${input.agreementNumber}`,
         },
-        // UPI: a ₹1 approval payment, refunded. e-NACH: no approval amount (Cashfree docs);
-        // the driver approves with net banking, debit card or Aadhaar.
-        authorization_details:
-          input.method === 'ENACH'
-            ? { authorization_amount: 0, payment_methods: ['enach'] }
-            : {
-                authorization_amount: 1,
-                authorization_amount_refund: true,
-                payment_methods: ['upi'],
-              },
+        // A ₹1 approval amount, refunded. For e-NACH Cashfree takes no approval payment
+        // (the driver approves with net banking, debit card or Aadhaar), but its API
+        // refuses an amount of 0 ("Authorization amount is invalid for action", test
+        // site 10 Nov 2026), so the same ₹1 is sent and Cashfree applies 0 itself.
+        authorization_details: {
+          authorization_amount: 1,
+          authorization_amount_refund: true,
+          payment_methods: [input.method === 'ENACH' ? 'enach' : 'upi'],
+        },
         subscription_meta: { return_url: input.returnUrl },
         subscription_expiry_time: istIso(input.expiresAt),
         subscription_tags: { agreement: input.agreementNumber },

@@ -146,6 +146,14 @@ export class PaymentsController {
 export class WebhooksController {
   constructor(private readonly webhooks: WebhooksService) {}
 
+  /** The provider's dashboard may check the address with a GET first; nothing is done. */
+  @Get(':provider')
+  @Public()
+  @ApiExcludeEndpoint()
+  ping() {
+    return { ok: true };
+  }
+
   @Post(':provider')
   @Public()
   @HttpCode(200)

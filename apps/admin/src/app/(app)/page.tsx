@@ -16,6 +16,8 @@ interface PendingInstallation {
   installedAt: string;
   location: string;
   recordedByName: string | null;
+  photosToCheck: number;
+  readyForApproval: boolean;
 }
 
 const CARDS: { href: string; title: string; text: string; permission: Permission }[] = [
@@ -74,7 +76,7 @@ export default function HomePage() {
   );
   const installs = useLoad(
     () =>
-      can('installations.verify')
+      can('installations.verify') || can('installations.approve')
         ? api.get<PendingInstallation[]>('/v1/installations/pending')
         : Promise.resolve([] as PendingInstallation[]),
     [api],
@@ -177,10 +179,10 @@ export default function HomePage() {
 
       {(installs.data?.length ?? 0) > 0 && (
         <div className="card">
-          <h2>Installations to verify ({installs.data!.length})</h2>
+          <h2>Installations to check ({installs.data!.length})</h2>
           <p className="muted" style={{ marginTop: 0 }}>
-            Recorded in the Field App by a field agent or technician. Check the photos and readings,
-            then verify or reject. The agreement starts only once verified.
+            Check each photo (battery, GPS device, vehicle, voltage, handover), then give the final
+            approval. The agreement starts only once approved.
           </p>
           <ul className="timeline">
             {installs.data!.map((i) => (
@@ -192,7 +194,16 @@ export default function HomePage() {
                   battery <span className="mono">{i.batterySerial}</span> · installed{' '}
                   {formatDate(i.installedAt, true)} at {i.location} · recorded by{' '}
                   {i.recordedByName ?? '—'}
-                </span>
+                </span>{' '}
+                {i.readyForApproval ? (
+                  <span className="badge active">Ready for approval</span>
+                ) : i.photosToCheck > 0 ? (
+                  <span className="badge warn">
+                    {i.photosToCheck} photo{i.photosToCheck === 1 ? '' : 's'} to check
+                  </span>
+                ) : (
+                  <span className="badge">Waiting for new photos</span>
+                )}
               </li>
             ))}
           </ul>

@@ -76,8 +76,13 @@ export const PERMISSIONS = [
   'agreements.read',
   'agreements.manage',
   'installations.record',
-  /** Confirm an installation recorded by a field agent or technician (founder, 31 Oct 2026). */
+  /**
+   * Check each installation photo (battery, GPS device, vehicle, voltage,
+   * handover), like KYC documents (founder, 10 Nov 2026).
+   */
   'installations.verify',
+  /** Final approval of an installation once its photos are checked; the agreement starts. */
+  'installations.approve',
   // Module 8: payments
   'payments.read',
   'payments.record',
@@ -139,7 +144,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'referrals.manage',
     'agreements.manage',
     'installations.record',
-    'installations.verify',
+    // Founder, 10 Nov 2026: final approval only; the photos are checked like KYC.
+    'installations.approve',
     'tickets.close',
     'approvals.request',
     'approvals.decide',
@@ -159,6 +165,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agreements.manage',
     'installations.record',
     'installations.verify',
+    'installations.approve',
     'recovery.record',
     'tickets.manage',
     'tickets.resolve',

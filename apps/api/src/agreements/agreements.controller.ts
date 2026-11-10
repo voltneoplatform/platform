@@ -13,12 +13,14 @@ import {
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { INSTALLATION_ITEMS, maxInstallationPhotos } from '@voltneo/shared';
 import { ApiBearerAuth, ApiConsumes, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import {
   CurrentStaff,
   ReqMeta,
+  RequireAnyPermission,
   RequirePermissions,
   type AuthenticatedStaff,
   type RequestMeta,
@@ -31,7 +33,9 @@ import {
   ChangeBatteryDto,
   CreateAgreementDto,
   DocumentQuery,
+  CheckInstallationPhotoDto,
   InstallationDto,
+  InstallationItemDto,
   ListAgreementsQuery,
   RejectInstallationDto,
   RescheduleDto,
@@ -39,7 +43,7 @@ import {
   SignAgreementDto,
   UpdateAgreementDto,
 } from './dto';
-import { AgreementsService } from './agreements.service';
+import { AgreementsService, type InstallationPhotoFiles } from './agreements.service';
 import { MAX_SIGNED_PDF_BYTES, MAX_SIGNED_PHOTOS } from './signed-copy';
 
 export function sendPdf(res: Response, pdf: Buffer, fileName: string) {
@@ -210,45 +214,98 @@ export class AgreementsController {
     sendPdf(res, pdf, fileName);
   }
 
+  /**
+   * Photos come in one multipart field per item: BATTERY, GPS, VEHICLE,
+   * VOLTAGE, HANDOVER (required) and OTHER (founder, 10 Nov 2026).
+   */
   @Post('agreements/:id/installation')
   @HttpCode(200)
   @RequirePermissions('installations.record')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FilesInterceptor('photos', 6, { limits: { fileSize: MAX_UPLOAD_BYTES, files: 6, fields: 20 } }),
+    FileFieldsInterceptor(
+      INSTALLATION_ITEMS.map((name) => ({ name, maxCount: maxInstallationPhotos(name) })),
+      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 20, fields: 20 } },
+    ),
   )
   install(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: InstallationDto,
-    @UploadedFiles() files: File[] | undefined,
+    @UploadedFiles() files: InstallationPhotoFiles | undefined,
     @CurrentStaff() staff: AuthenticatedStaff,
     @ReqMeta() meta: RequestMeta,
   ) {
-    return this.agreements.recordInstallation(id, dto, files, staff, meta);
+    return this.agreements.recordInstallation(id, dto, files ?? {}, staff, meta);
   }
 
-  /** Field installations waiting for head office (founder, 31 Oct 2026). */
+  /** Installations waiting for photo checks or the final approval (founder, 10 Nov 2026). */
   @Get('installations/pending')
-  @RequirePermissions('installations.verify')
+  @RequireAnyPermission('installations.verify', 'installations.approve')
   pendingInstallations() {
     return this.agreements.pendingInstallations();
   }
 
-  @Post('agreements/:id/installation/:installationId/verify')
+  /** A new photo of one item, in place of a rejected or missing one. */
+  @Post('agreements/:id/installation/:installationId/photos')
+  @HttpCode(200)
+  @RequirePermissions('installations.record')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FilesInterceptor('photos', 4, { limits: { fileSize: MAX_UPLOAD_BYTES, files: 4, fields: 5 } }),
+  )
+  addInstallationPhotos(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('installationId', ParseUUIDPipe) installationId: string,
+    @Body() dto: InstallationItemDto,
+    @UploadedFiles() files: File[] | undefined,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.agreements.addInstallationPhotos(id, installationId, dto.item, files, staff, meta);
+  }
+
+  @Post('agreements/:id/installation/photos/:photoId/verify')
   @HttpCode(200)
   @RequirePermissions('installations.verify')
-  verifyInstallation(
+  verifyInstallationPhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('photoId', ParseUUIDPipe) photoId: string,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.agreements.checkInstallationPhoto(id, photoId, 'VERIFIED', null, staff, meta);
+  }
+
+  @Post('agreements/:id/installation/photos/:photoId/reject')
+  @HttpCode(200)
+  @RequirePermissions('installations.verify')
+  rejectInstallationPhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('photoId', ParseUUIDPipe) photoId: string,
+    @Body() dto: CheckInstallationPhotoDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.agreements.checkInstallationPhoto(id, photoId, 'REJECTED', dto.reason, staff, meta);
+  }
+
+  /** Final approval once every photo is checked: the agreement starts. */
+  @Post('agreements/:id/installation/:installationId/approve')
+  @HttpCode(200)
+  @RequirePermissions('installations.approve')
+  approveInstallation(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('installationId', ParseUUIDPipe) installationId: string,
     @CurrentStaff() staff: AuthenticatedStaff,
     @ReqMeta() meta: RequestMeta,
   ) {
-    return this.agreements.verifyInstallation(id, installationId, staff, meta);
+    return this.agreements.approveInstallation(id, installationId, staff, meta);
   }
 
+  /** Sends the whole installation back to be recorded again. */
   @Post('agreements/:id/installation/:installationId/reject')
   @HttpCode(200)
-  @RequirePermissions('installations.verify')
+  @RequirePermissions('installations.approve')
   rejectInstallation(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('installationId', ParseUUIDPipe) installationId: string,

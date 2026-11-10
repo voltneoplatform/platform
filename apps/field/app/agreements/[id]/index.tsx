@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { randomUUID } from 'expo-crypto';
-import type { AgreementState } from '@voltneo/shared';
+import type { AgreementState, InstallationItem, InstallationItemStatus } from '@voltneo/shared';
+import { appendPhotos, type Photo } from '@/photos';
 import { rupees, shortDate } from '@/i18n';
 import { parseRupees } from '@/money';
 import { useSession } from '@/session';
@@ -20,6 +21,7 @@ import {
   Loading,
   Muted,
   Notice,
+  Photos,
   Screen,
   useLoad,
 } from '@/ui';
@@ -42,8 +44,11 @@ interface AgreementDetail {
   schedule: { sequence: number; amount: number; amountPaid: number }[];
   allowed: { pay: boolean; install: boolean };
   installation: {
+    id: string;
     status: 'VERIFIED' | 'PENDING_VERIFICATION' | 'REJECTED';
     rejectedReason: string | null;
+    items: { item: InstallationItem; required: boolean; status: InstallationItemStatus }[];
+    photos: { id: string; item: InstallationItem; status: string; reason: string | null }[];
   } | null;
 }
 
@@ -142,7 +147,14 @@ export default function AgreementPage() {
       </Card>
 
       {a.installation?.status === 'PENDING_VERIFICATION' && (
-        <Notice tone="warn">{t('installWaiting')}</Notice>
+        <InstallationPhotos
+          agreementId={a.id}
+          installation={a.installation}
+          onSent={() => {
+            setMessage(t('newPhotosSent'));
+            void ag.reload();
+          }}
+        />
       )}
       {a.installation?.status === 'REJECTED' && a.state === 'AWAITING_INSTALLATION' && (
         <Notice tone="danger">
@@ -390,6 +402,105 @@ function LinkForm({
         }
       />
       <Button title={t('cancel')} variant="secondary" onPress={onCancel} />
+    </Card>
+  );
+}
+
+const ITEM_TONE: Record<InstallationItemStatus, 'success' | 'warn' | 'danger' | 'info'> = {
+  VERIFIED: 'success',
+  PENDING: 'info',
+  REJECTED: 'danger',
+  MISSING: 'warn',
+};
+
+/**
+ * Founder, 10 Nov 2026: head office checks each installation photo. Shows where
+ * each item stands, and lets the installer send a new photo of a rejected item.
+ */
+function InstallationPhotos({
+  agreementId,
+  installation,
+  onSent,
+}: {
+  agreementId: string;
+  installation: NonNullable<AgreementDetail['installation']>;
+  onSent: () => void;
+}) {
+  const { t, api, labels, can } = useSession();
+  const [photos, setPhotos] = useState<Partial<Record<InstallationItem, Photo[]>>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const needed = installation.items.filter(
+    (i) => i.required && (i.status === 'REJECTED' || i.status === 'MISSING'),
+  );
+  const chosen = needed.filter((i) => (photos[i.item]?.length ?? 0) > 0);
+  const statusText = (i: { item: InstallationItem; status: InstallationItemStatus }) => {
+    if (i.status === 'VERIFIED') return t('photoVerified');
+    if (i.status === 'PENDING') return t('photoToCheck');
+    if (i.status === 'MISSING') return t('photoMissing');
+    const last = installation.photos.filter((p) => p.item === i.item).at(-1);
+    return t('photoRejected', { reason: last?.reason ?? '' });
+  };
+  return (
+    <Card>
+      <Notice tone="warn">{t('installWaiting')}</Notice>
+      {installation.items
+        .filter((i) => i.required || i.status !== 'MISSING')
+        .map((i) => (
+          <View key={i.item} style={{ gap: 4 }}>
+            <Body style={{ fontWeight: '600' }}>{labels.installItem[i.item]}</Body>
+            <Badge tone={ITEM_TONE[i.status]} text={statusText(i)} />
+          </View>
+        ))}
+      {needed.length > 0 && can('installations.record') && (
+        <>
+          <Notice tone="danger">
+            {t('newPhotoNeeded', {
+              items: needed.map((i) => labels.installItem[i.item]).join(', '),
+            })}
+          </Notice>
+          {needed.map((i) => (
+            <Photos
+              key={i.item}
+              label={labels.installItem[i.item]}
+              hint={labels.installHint[i.item]}
+              max={3}
+              photos={photos[i.item] ?? []}
+              onChange={(p) => setPhotos((x) => ({ ...x, [i.item]: p }))}
+            />
+          ))}
+          <ErrorNotice error={error} />
+          <Button
+            testID="send-new-photos"
+            title={t('sendNewPhotos')}
+            busy={busy}
+            disabled={chosen.length === 0}
+            onPress={() =>
+              void (async () => {
+                setBusy(true);
+                setError(null);
+                try {
+                  for (const i of chosen) {
+                    const form = new FormData();
+                    form.append('item', i.item);
+                    await appendPhotos(form, 'photos', photos[i.item] ?? []);
+                    await api.upload(
+                      `/v1/agreements/${agreementId}/installation/${installation.id}/photos`,
+                      form,
+                    );
+                  }
+                  setPhotos({});
+                  onSent();
+                } catch (err) {
+                  setError(err);
+                } finally {
+                  setBusy(false);
+                }
+              })()
+            }
+          />
+        </>
+      )}
     </Card>
   );
 }

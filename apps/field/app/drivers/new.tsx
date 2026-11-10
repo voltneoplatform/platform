@@ -143,6 +143,8 @@ export default function NewDriver() {
         {dobInvalid && f.dateOfBirth.length === 10 && (
           <Notice tone="danger">{t('dobInvalid')}</Notice>
         )}
+        {/* Founder, 10 Nov 2026: date of birth is compulsory when registering. */}
+        {!f.dateOfBirth && <Muted>{t('dobRequired')}</Muted>}
         <Choice
           label={t('relativeRelation')}
           value={relation}
@@ -249,7 +251,7 @@ export default function NewDriver() {
           disabled={
             !relation ||
             f.relativeName.trim().length < 2 ||
-            dobInvalid ||
+            !dob ||
             !planId ||
             !phoneConfirmed ||
             !location.geo

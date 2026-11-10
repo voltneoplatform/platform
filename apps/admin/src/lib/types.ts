@@ -1,5 +1,8 @@
 import type {
   CollectionStage,
+  InstallationItem,
+  InstallationItemStatus,
+  InstallationPhotoStatus,
   OnboardingStage,
   Role,
   TicketCategory,
@@ -430,7 +433,15 @@ export interface AgreementDetail {
     driverConfirmed: boolean;
     technicianName: string | null;
     recordedByName: string | null;
-    photos: { id: string; fileName: string }[];
+    /** Founder, 10 Nov 2026: each photo is checked like a KYC document. */
+    photos: InstallationPhotoRow[];
+    items: {
+      item: InstallationItem;
+      label: string;
+      required: boolean;
+      status: InstallationItemStatus;
+    }[];
+    readyForApproval: boolean;
     status: 'VERIFIED' | 'PENDING_VERIFICATION' | 'REJECTED';
     decidedByName: string | null;
     decidedAt: string | null;
@@ -830,4 +841,15 @@ export interface ReferrerDetail extends ReferralCounts {
   active: boolean;
   createdAt: string;
   drivers: ReferredDriver[];
+}
+
+export interface InstallationPhotoRow {
+  id: string;
+  item: InstallationItem;
+  fileName: string;
+  status: InstallationPhotoStatus;
+  reason: string | null;
+  checkedByName: string | null;
+  checkedAt: string | null;
+  uploadedAt: string;
 }

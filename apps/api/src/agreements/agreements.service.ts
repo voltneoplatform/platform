@@ -10,7 +10,10 @@ import {
 import {
   AGREEMENT_DOCUMENT_VERSION,
   HEAD_OFFICE_ROLES,
+  INSTALLATION_ITEMS,
+  INSTALLATION_ITEM_LABELS,
   OPEN_AGREEMENT_STATES,
+  REQUIRED_INSTALLATION_ITEMS,
   PAYABLE_STATES,
   geotagProblem,
   addMonths,
@@ -20,7 +23,12 @@ import {
   firstDueDateProblem,
   hasPermission,
   installationDateProblem,
+  installationItemStatus,
+  installationReadyForApproval,
   isDueDay,
+  maxInstallationPhotos,
+  type InstallationItem,
+  type InstallationPhotoStatus,
   type AgreementState,
   type DueDay,
   RELATIVE_RELATION_LABELS,
@@ -66,7 +74,12 @@ import type {
   UpdateAgreementDto,
 } from './dto';
 
-const MAX_PHOTOS = 6;
+/** Installation photos of one item, by the multipart field they came in (founder, 10 Nov 2026). */
+export type InstallationPhotoFiles = Partial<Record<InstallationItem, UploadedFile[]>>;
+
+function photoStatus(p: { check: { decision: string } | null }): InstallationPhotoStatus {
+  return (p.check?.decision as InstallationPhotoStatus | undefined) ?? 'PENDING';
+}
 /** Times typed into forms are to the minute, so ordering checks allow one minute. */
 const MINUTE = 60_000;
 
@@ -111,7 +124,13 @@ const fullInclude = {
   instalments: { orderBy: { sequence: 'asc' } },
   lateFees: { orderBy: { accrualDate: 'asc' } },
   events: { orderBy: { at: 'asc' } },
-  installations: { include: { photos: true, decision: true }, orderBy: { createdAt: 'desc' } },
+  installations: {
+    include: {
+      photos: { include: { check: true }, orderBy: { createdAt: 'asc' } },
+      decision: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  },
   batteryChanges: { include: { resigning: true }, orderBy: { changedAt: 'desc' } },
 } satisfies Prisma.AgreementInclude;
 
@@ -231,6 +250,7 @@ export class AgreementsService implements OnModuleInit {
       cancel: a.state === 'DRAFT' || (a.state === 'AWAITING_DOWN_PAYMENT' && !hasPayments),
       reschedule: a.state === 'AWAITING_DOWN_PAYMENT' || a.state === 'AWAITING_INSTALLATION',
       install: a.state === 'AWAITING_INSTALLATION' && !installWaiting && !a.resignRequired,
+      /** Check photos, add photos, approve or reject the installation waiting for head office. */
       verifyInstallation: a.state === 'AWAITING_INSTALLATION' && installWaiting,
       pay: (PAYABLE_STATES as readonly string[]).includes(a.state),
     };
@@ -321,6 +341,7 @@ export class AgreementsService implements OnModuleInit {
         installation?.technicianId,
         installation?.recordedById,
         installation?.decision?.decidedById,
+        ...(installation?.photos ?? []).map((p) => p.check?.decidedById),
         ...a.batteryChanges.flatMap((c) => [c.changedById, c.resigning?.recordedById]),
       ]),
       this.prisma.payment.count({ where: { agreementId: id } }),
@@ -469,7 +490,28 @@ export class AgreementsService implements OnModuleInit {
                     accuracyM: installation.geoAccuracyM,
                   }
                 : null,
-            photos: installation.photos.map((p) => ({ id: p.id, fileName: p.fileName })),
+            photos: installation.photos.map((p) => ({
+              id: p.id,
+              item: p.item,
+              fileName: p.fileName,
+              status: photoStatus(p),
+              reason: p.check?.reason ?? null,
+              checkedByName: p.check ? (names.get(p.check.decidedById) ?? null) : null,
+              checkedAt: p.check?.decidedAt ?? null,
+              uploadedAt: p.createdAt,
+            })),
+            /** Founder, 10 Nov 2026: each item is checked like a KYC document. */
+            items: INSTALLATION_ITEMS.map((item) => ({
+              item,
+              label: INSTALLATION_ITEM_LABELS[item],
+              required: REQUIRED_INSTALLATION_ITEMS.includes(item),
+              status: installationItemStatus(
+                installation.photos.filter((p) => p.item === item).map(photoStatus),
+              ),
+            })),
+            readyForApproval: installationReadyForApproval(
+              installation.photos.map((p) => ({ item: p.item, status: photoStatus(p) })),
+            ),
           }
         : null,
       readiness: driverFull ? this.drivers.readinessOf(driverFull) : null,
@@ -1556,31 +1598,31 @@ export class AgreementsService implements OnModuleInit {
   }
 
   /**
-   * Records an installation (Schedule 3). Head office (super admin, operations
-   * manager, plan manager) records it in force at once. A field agent's or
-   * technician's record waits for head office to verify it; the agreement stays
-   * "awaiting installation" until then (founder, 31 Oct 2026).
+   * Records an installation (Schedule 3) with a photo of each item. Every
+   * installation, also one recorded by head office, waits for its photos to be
+   * checked and for the final approval (founder, 10 Nov 2026); the agreement
+   * stays "awaiting installation" until then.
    */
   async recordInstallation(
     id: string,
     dto: InstallationDto,
-    files: UploadedFile[] | undefined,
+    files: InstallationPhotoFiles,
     actor: AuthenticatedStaff,
     meta: RequestMeta,
   ) {
-    const photos = (files ?? []).map((f) => ({ file: f, upload: checkUpload(f) }));
-    if (!photos.length) throw new BadRequestException('Attach at least one installation photo');
-    if (photos.length > MAX_PHOTOS) {
-      throw new BadRequestException(`Attach at most ${MAX_PHOTOS} photos`);
-    }
-    if (photos.some((p) => p.upload.ext === 'pdf')) {
-      throw new BadRequestException('Installation photos must be JPEG, PNG or WebP images');
+    const photos = this.installationPhotos(files);
+    const missing = REQUIRED_INSTALLATION_ITEMS.filter(
+      (item) => !photos.some((p) => p.item === item),
+    );
+    if (missing.length) {
+      throw new BadRequestException(
+        `Add a photo of: ${missing.map((i) => INSTALLATION_ITEM_LABELS[i].toLowerCase()).join(', ')}`,
+      );
     }
     const installedAt = new Date(dto.installedAt);
     if (installedAt.getTime() > Date.now() + 60_000) {
       throw new BadRequestException('The installation time cannot be in the future');
     }
-    const verifiedNow = hasPermission(actor.role, 'installations.verify');
     // Founder, 1 Nov 2026: the Field App records an installation only with the phone's location.
     const geo =
       dto.geoLat !== undefined || dto.geoLng !== undefined || dto.geoAccuracyM !== undefined
@@ -1604,12 +1646,12 @@ export class AgreementsService implements OnModuleInit {
       });
       if (await this.pendingInstallation(tx, { agreementId: id })) {
         throw new ConflictException(
-          'An installation for this agreement is already waiting for head office to verify',
+          'An installation for this agreement is already waiting for head office to check it',
         );
       }
       if (await this.pendingInstallation(tx, { batteryId: battery.id })) {
         throw new ConflictException(
-          `Battery ${battery.serial} is in another installation waiting for verification`,
+          `Battery ${battery.serial} is in another installation waiting for head office`,
         );
       }
 
@@ -1633,34 +1675,22 @@ export class AgreementsService implements OnModuleInit {
           conditionNote: dto.conditionNote,
           driverConfirmed: true,
           recordedById: actor.id,
-          needsVerification: !verifiedNow,
+          needsVerification: true,
           geoLat: geo?.lat ?? null,
           geoLng: geo?.lng ?? null,
           geoAccuracyM: geo?.accuracyM ?? null,
           photos: {
             create: photos.map((p, i) => ({
+              item: p.item,
               fileKey: keys[i]!,
               fileName: p.upload.originalName,
               fileType: p.upload.mime,
               fileSize: p.upload.size,
+              uploadedById: actor.id,
             })),
           },
         },
       });
-
-      if (verifiedNow) {
-        await this.activate(
-          tx,
-          before,
-          installation,
-          battery,
-          vehicle,
-          actor.id,
-          meta,
-          'agreement.install',
-        );
-        return;
-      }
       await this.audit.record(
         {
           actorType: 'STAFF',
@@ -1668,7 +1698,12 @@ export class AgreementsService implements OnModuleInit {
           action: 'agreement.install.recorded',
           tableName: 'installations',
           recordId: installation.id,
-          after: { agreementId: id, batteryId: battery.id, awaiting: 'head office verification' },
+          after: {
+            agreementId: id,
+            batteryId: battery.id,
+            photos: photos.map((p) => p.item),
+            awaiting: 'photo checks and final approval',
+          },
           ip: meta.ip,
           requestId: meta.requestId,
         },
@@ -1678,21 +1713,190 @@ export class AgreementsService implements OnModuleInit {
     return this.get(id);
   }
 
-  /** Head office confirms a field installation: the agreement becomes active from its installation time. */
-  async verifyInstallation(
+  /** Checks the uploaded photos and labels each with its item. */
+  private installationPhotos(files: InstallationPhotoFiles) {
+    const photos: {
+      item: InstallationItem;
+      file: UploadedFile;
+      upload: ReturnType<typeof checkUpload>;
+    }[] = [];
+    for (const item of INSTALLATION_ITEMS) {
+      const list = files[item] ?? [];
+      if (list.length > maxInstallationPhotos(item)) {
+        throw new BadRequestException(
+          `At most ${maxInstallationPhotos(item)} photos of ${INSTALLATION_ITEM_LABELS[item].toLowerCase()}`,
+        );
+      }
+      for (const file of list) {
+        const upload = checkUpload(file);
+        if (upload.ext === 'pdf') {
+          throw new BadRequestException('Installation photos must be JPEG, PNG or WebP images');
+        }
+        photos.push({ item, file, upload });
+      }
+    }
+    return photos;
+  }
+
+  /** The installation waiting for head office on this agreement, or 404/409. */
+  private async waitingInstallation(tx: Tx, agreementId: string, installationId: string) {
+    const inst = await tx.installation.findUnique({
+      where: { id: installationId },
+      include: { decision: true, photos: { include: { check: true } } },
+    });
+    if (!inst || inst.agreementId !== agreementId) {
+      throw new NotFoundException('Installation not found');
+    }
+    if (!inst.needsVerification || inst.decision) {
+      throw new ConflictException('This installation is not waiting for head office');
+    }
+    return inst;
+  }
+
+  /**
+   * Adds photos of one item to an installation waiting for head office: in
+   * place of a rejected photo, or one that was missing (founder, 10 Nov 2026).
+   */
+  async addInstallationPhotos(
+    id: string,
+    installationId: string,
+    item: InstallationItem,
+    files: UploadedFile[] | undefined,
+    actor: AuthenticatedStaff,
+    meta: RequestMeta,
+  ) {
+    const photos = this.installationPhotos({ [item]: files ?? [] });
+    if (!photos.length) throw new BadRequestException('Attach at least one photo');
+    const keys = photos.map((p) => newFileKey('installations', id, p.upload.ext));
+    let stored = false;
+    await serializable(this.prisma, async (tx) => {
+      const inst = await this.waitingInstallation(tx, id, installationId);
+      const current = inst.photos.filter((p) => p.item === item);
+      if (current.some((p) => photoStatus(p) === 'VERIFIED')) {
+        throw new ConflictException(
+          `The ${INSTALLATION_ITEM_LABELS[item].toLowerCase()} photo is already verified`,
+        );
+      }
+      if (current.some((p) => photoStatus(p) === 'PENDING') && item !== 'OTHER') {
+        throw new ConflictException(
+          `A ${INSTALLATION_ITEM_LABELS[item].toLowerCase()} photo is already waiting to be checked`,
+        );
+      }
+      if (!stored) {
+        for (let i = 0; i < photos.length; i++) {
+          await this.storage.put(keys[i]!, photos[i]!.file.buffer, photos[i]!.upload.mime);
+        }
+        stored = true;
+      }
+      const created = [];
+      for (let i = 0; i < photos.length; i++) {
+        created.push(
+          await tx.installationPhoto.create({
+            data: {
+              installationId: inst.id,
+              item,
+              fileKey: keys[i]!,
+              fileName: photos[i]!.upload.originalName,
+              fileType: photos[i]!.upload.mime,
+              fileSize: photos[i]!.upload.size,
+              uploadedById: actor.id,
+            },
+          }),
+        );
+      }
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action: 'agreement.install.photos_added',
+          tableName: 'installations',
+          recordId: inst.id,
+          after: { agreementId: id, item, photoIds: created.map((c) => c.id) },
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  /** Head office verifies or rejects one installation photo, like a KYC document. */
+  async checkInstallationPhoto(
+    id: string,
+    photoId: string,
+    decision: 'VERIFIED' | 'REJECTED',
+    reason: string | null,
+    actor: AuthenticatedStaff,
+    meta: RequestMeta,
+  ) {
+    if (decision === 'REJECTED' && !reason?.trim()) {
+      throw new BadRequestException('Say what is wrong with the photo');
+    }
+    await serializable(this.prisma, async (tx) => {
+      const photo = await tx.installationPhoto.findUnique({
+        where: { id: photoId },
+        include: { check: true },
+      });
+      if (!photo) throw new NotFoundException('Photo not found');
+      await this.waitingInstallation(tx, id, photo.installationId);
+      if (photo.check) throw new ConflictException('This photo has already been checked');
+      await tx.installationPhotoCheck.create({
+        data: {
+          photoId: photo.id,
+          decision,
+          reason: decision === 'REJECTED' ? reason!.trim() : null,
+          decidedById: actor.id,
+        },
+      });
+      await this.audit.record(
+        {
+          actorType: 'STAFF',
+          actorId: actor.id,
+          action:
+            decision === 'VERIFIED'
+              ? 'agreement.install.photo_verified'
+              : 'agreement.install.photo_rejected',
+          tableName: 'installation_photos',
+          recordId: photo.id,
+          after: {
+            agreementId: id,
+            item: photo.item,
+            reason: decision === 'REJECTED' ? reason : null,
+          },
+          ip: meta.ip,
+          requestId: meta.requestId,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  /**
+   * Final approval (founder, 10 Nov 2026): once every required photo is
+   * verified and none waits, the agreement becomes active from the installation time.
+   */
+  async approveInstallation(
     id: string,
     installationId: string,
     actor: AuthenticatedStaff,
     meta: RequestMeta,
   ) {
     await serializable(this.prisma, async (tx) => {
-      const inst = await tx.installation.findUnique({
-        where: { id: installationId },
-        include: { decision: true },
-      });
-      if (!inst || inst.agreementId !== id) throw new NotFoundException('Installation not found');
-      if (!inst.needsVerification || inst.decision) {
-        throw new ConflictException('This installation is not waiting for verification');
+      const inst = await this.waitingInstallation(tx, id, installationId);
+      const photos = inst.photos.map((p) => ({ item: p.item, status: photoStatus(p) }));
+      if (!installationReadyForApproval(photos)) {
+        const open = REQUIRED_INSTALLATION_ITEMS.filter(
+          (item) =>
+            installationItemStatus(photos.filter((p) => p.item === item).map((p) => p.status)) !==
+            'VERIFIED',
+        );
+        throw new ConflictException(
+          open.length
+            ? `Check these photos first: ${open.map((i) => INSTALLATION_ITEM_LABELS[i].toLowerCase()).join(', ')}`
+            : 'Check every photo first',
+        );
       }
       const before = await tx.agreement.findUniqueOrThrow({ where: { id } });
       const { vehicle, battery } = await this.installChecks(tx, before, {
@@ -1711,13 +1915,13 @@ export class AgreementsService implements OnModuleInit {
         vehicle,
         actor.id,
         meta,
-        'agreement.install.verify',
+        'agreement.install.approve',
       );
     });
     return this.get(id);
   }
 
-  /** Head office sends a field installation back; it can be recorded again. */
+  /** Head office sends the whole installation back; it is recorded again. */
   async rejectInstallation(
     id: string,
     installationId: string,
@@ -1726,14 +1930,7 @@ export class AgreementsService implements OnModuleInit {
     meta: RequestMeta,
   ) {
     await serializable(this.prisma, async (tx) => {
-      const inst = await tx.installation.findUnique({
-        where: { id: installationId },
-        include: { decision: true },
-      });
-      if (!inst || inst.agreementId !== id) throw new NotFoundException('Installation not found');
-      if (!inst.needsVerification || inst.decision) {
-        throw new ConflictException('This installation is not waiting for verification');
-      }
+      const inst = await this.waitingInstallation(tx, id, installationId);
       await tx.installationDecision.create({
         data: { installationId: inst.id, decision: 'REJECTED', reason, decidedById: actor.id },
       });
@@ -1761,6 +1958,7 @@ export class AgreementsService implements OnModuleInit {
       include: {
         agreement: { select: { id: true, number: true, driver: { select: { name: true } } } },
         battery: { select: { serial: true } },
+        photos: { select: { item: true, check: { select: { decision: true } } } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -1776,6 +1974,11 @@ export class AgreementsService implements OnModuleInit {
       recordedAt: r.createdAt,
       recordedByName: names.get(r.recordedById) ?? null,
       technicianName: names.get(r.technicianId) ?? null,
+      /** Photos still to be checked, and whether the final approval can be given. */
+      photosToCheck: r.photos.filter((p) => !p.check).length,
+      readyForApproval: installationReadyForApproval(
+        r.photos.map((p) => ({ item: p.item, status: photoStatus(p) })),
+      ),
     }));
   }
 

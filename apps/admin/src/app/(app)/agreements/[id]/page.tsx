@@ -5,6 +5,12 @@ import { useParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 import {
   DRIVER_LANGUAGE_LABELS,
+  INSTALLATION_ITEMS,
+  INSTALLATION_ITEM_HINTS,
+  INSTALLATION_ITEM_LABELS,
+  REQUIRED_INSTALLATION_ITEMS,
+  maxInstallationPhotos,
+  type InstallationItem,
   PAYMENT_METHOD_LABELS,
   READINESS_LABELS,
   mapLink,
@@ -41,6 +47,7 @@ import { CollectionsPanel } from '@/components/CollectionsPanel';
 import { OwnershipPanel } from '@/components/OwnershipPanel';
 import { PaymentLinksCard } from '@/components/PaymentLinksCard';
 import { AutopayCard } from '@/components/AutopayCard';
+import { InstallationChecks } from '@/components/InstallationChecks';
 import { AgreementTickets } from '@/components/TicketBits';
 import { ErrorBox, Modal, Money, formatDate, useLoad } from '@/components/ui';
 
@@ -429,50 +436,6 @@ export default function AgreementPage() {
       {a.installation && (
         <div className="card">
           <h2>Installation (Schedule 3)</h2>
-          {a.installation.status === 'PENDING_VERIFICATION' && (
-            <div className="alert warn">
-              Recorded by {a.installation.recordedByName ?? 'field staff'}. Waiting for head office
-              to verify it: check the photos and readings. The agreement starts only once it is
-              verified.
-              {a.allowed.verifyInstallation && can('installations.verify') && (
-                <div className="row" style={{ marginTop: 10 }}>
-                  <button
-                    className="primary"
-                    onClick={() =>
-                      void act(
-                        () =>
-                          api.post<AgreementDetail>(
-                            `/v1/agreements/${a.id}/installation/${a.installation!.id}/verify`,
-                          ),
-                        'Installation verified. The agreement is active.',
-                      )
-                    }
-                  >
-                    Verify installation
-                  </button>
-                  <button
-                    className="danger"
-                    onClick={() => {
-                      const reason = window.prompt(
-                        'What is wrong? The installer will see this and record it again.',
-                      );
-                      if (!reason || reason.trim().length < 5) return;
-                      void act(
-                        () =>
-                          api.post<AgreementDetail>(
-                            `/v1/agreements/${a.id}/installation/${a.installation!.id}/reject`,
-                            { reason: reason.trim() },
-                          ),
-                        'Installation sent back to be recorded again.',
-                      );
-                    }}
-                  >
-                    Reject
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
           {a.installation.status === 'REJECTED' && (
             <div className="alert danger">
               Rejected by {a.installation.decidedByName ?? 'head office'}
@@ -508,7 +471,7 @@ export default function AgreementPage() {
               a.installation.decidedByName &&
               a.installation.decidedByName !== a.installation.recordedByName && (
                 <>
-                  <dt>Verified by</dt>
+                  <dt>Approved by</dt>
                   <dd>
                     {a.installation.decidedByName}
                     {a.installation.decidedAt && `, ${formatDate(a.installation.decidedAt, true)}`}
@@ -527,27 +490,15 @@ export default function AgreementPage() {
             <dd>{a.installation.conditionNote}</dd>
             <dt>Driver confirmed</dt>
             <dd>{a.installation.driverConfirmed ? 'Yes' : 'No'}</dd>
-            <dt>Photos</dt>
-            <dd>
-              {a.installation.photos.map((p, i) => (
-                <span key={p.id}>
-                  {i > 0 && ' · '}
-                  <button
-                    className="link"
-                    onClick={() =>
-                      void openLink(() =>
-                        api.post<{ url: string }>(
-                          `/v1/agreements/${a.id}/installation/photos/${p.id}/link`,
-                        ),
-                      ).catch(setActionError)
-                    }
-                  >
-                    {p.fileName}
-                  </button>
-                </span>
-              ))}
-            </dd>
           </dl>
+          <h3>Photos</h3>
+          <InstallationChecks
+            a={a}
+            onChange={(next, done) => {
+              setData(next);
+              setMessage(done);
+            }}
+          />
         </div>
       )}
 
@@ -744,7 +695,7 @@ export default function AgreementPage() {
           onSubmit={(form) =>
             act(
               () => api.upload<AgreementDetail>(`/v1/agreements/${a.id}/installation`, form),
-              'Installed. The agreement is active.',
+              'Installation recorded. Check each photo, then approve it to start the agreement.',
             )
           }
         />
@@ -1010,7 +961,8 @@ function InstallForm({
   onSubmit: (form: FormData) => void;
 }) {
   const technicians = staff.filter((s) => hasPermission(s.role, 'installations.record'));
-  const photos = useRef<HTMLInputElement>(null);
+  const [photos, setPhotos] = useState<Partial<Record<InstallationItem, File[]>>>({});
+  const missing = REQUIRED_INSTALLATION_ITEMS.filter((i) => !photos[i]?.length);
   const [technicianId, setTechnicianId] = useState('');
   const [installedAt, setInstalledAt] = useState(nowLocal());
   const [location, setLocation] = useState('');
@@ -1022,8 +974,7 @@ function InstallForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        const files = photos.current?.files;
-        if (!files?.length) return;
+        if (missing.length) return;
         const form = new FormData();
         form.set('technicianId', technicianId);
         form.set('installedAt', localToIso(installedAt));
@@ -1032,7 +983,10 @@ function InstallForm({
         if (readings) form.set('readingsNote', readings);
         form.set('conditionNote', condition);
         form.set('driverConfirmed', String(confirmed));
-        for (const f of Array.from(files).slice(0, 6)) form.append('photos', f);
+        // Founder, 10 Nov 2026: one field per item; head office checks each photo.
+        for (const item of INSTALLATION_ITEMS) {
+          for (const f of photos[item] ?? []) form.append(item, f);
+        }
         onSubmit(form);
       }}
     >
@@ -1105,9 +1059,34 @@ function InstallForm({
           onChange={(e) => setCondition(e.target.value)}
         />
       </div>
-      <div className="field">
-        <label htmlFor="inst-p">Photos (1 to 6)</label>
-        <input id="inst-p" ref={photos} type="file" accept="image/*" multiple required />
+      <h3>Photos</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        A photo of each item. Head office checks each one, then approves the installation.
+      </p>
+      <div className="form-grid">
+        {INSTALLATION_ITEMS.map((item) => (
+          <div className="field" key={item}>
+            <label htmlFor={`inst-p-${item}`}>
+              {INSTALLATION_ITEM_LABELS[item]}
+              {item === 'OTHER' ? ' (optional)' : ''}
+            </label>
+            <input
+              id={`inst-p-${item}`}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) =>
+                setPhotos({
+                  ...photos,
+                  [item]: Array.from(e.target.files ?? []).slice(0, maxInstallationPhotos(item)),
+                })
+              }
+            />
+            <span className="muted" style={{ fontSize: 13 }}>
+              {INSTALLATION_ITEM_HINTS[item]}
+            </span>
+          </div>
+        ))}
       </div>
       <label className="check">
         <input
@@ -1119,7 +1098,11 @@ function InstallForm({
       </label>
       <ErrorBox error={error} />
       <div className="row" style={{ justifyContent: 'flex-end' }}>
-        <button type="submit" className="primary" disabled={busy || !confirmed}>
+        <button
+          type="submit"
+          className="primary"
+          disabled={busy || !confirmed || missing.length > 0}
+        >
           {busy ? 'Saving…' : 'Record installation'}
         </button>
       </div>

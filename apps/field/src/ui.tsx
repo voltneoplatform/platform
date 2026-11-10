@@ -443,10 +443,15 @@ export function Photos({
   photos,
   onChange,
   max = 6,
+  label,
+  hint,
 }: {
   photos: Photo[];
   onChange: (p: Photo[]) => void;
   max?: number;
+  /** Instead of "Photos", e.g. one installation item (founder, 10 Nov 2026). */
+  label?: string;
+  hint?: string;
 }) {
   const { t } = useSession();
   const [error, setError] = useState<string | null>(null);
@@ -459,8 +464,9 @@ export function Photos({
   return (
     <View style={{ gap: 8 }}>
       <Text style={s.label}>
-        {t('photos')} ({photos.length}/{max})
+        {label ?? t('photos')} ({photos.length}/{max})
       </Text>
+      {hint && <Text style={{ color: C.muted, fontSize: 13 }}>{hint}</Text>}
       {photos.length > 0 && (
         <View style={s.row}>
           {photos.map((p, i) => (
