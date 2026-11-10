@@ -123,16 +123,16 @@ describe('Field App support (M5)', () => {
     const approve = (who: string) =>
       ctx.http.post(`/v1/agreements/${b.id}/installation/${instId}/approve`).set(bearer(who));
 
-    // Founder, 10 Nov 2026: photos are checked like KYC (super admin, operations manager);
-    // the plan manager gives the final approval only.
-    for (const who of [agent, tech, finance, pm]) {
+    // Founder, 10 Nov 2026: photos are checked like KYC, by head office (plan manager too).
+    for (const who of [agent, tech, finance]) {
       await check(who.token, 'BATTERY', 'verify').expect(403);
     }
     for (const who of [agent, tech, finance]) await approve(who.token).expect(403);
     // Not before every required photo is verified.
     expect((await approve(pm.token).expect(409)).body.message).toMatch(/battery fitted/);
 
-    for (const item of ['BATTERY', 'VEHICLE', 'VOLTAGE', 'HANDOVER']) {
+    await check(pm.token, 'BATTERY', 'verify').expect(200);
+    for (const item of ['VEHICLE', 'VOLTAGE', 'HANDOVER']) {
       await check(ops.token, item, 'verify').expect(200);
     }
     await check(ops.token, 'GPS', 'reject').expect(200);

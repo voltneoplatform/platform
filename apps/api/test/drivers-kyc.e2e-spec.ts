@@ -423,9 +423,10 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
         await ctx.http.post(`/v1/kyc-documents/${id}/link`).set(bearer(token)).expect(403);
         await ctx.http.post(`/v1/kyc-documents/${id}/verify`).set(bearer(token)).expect(403);
       }
+      // Founder, 10 Nov 2026: the plan manager checks KYC documents too.
       const pm = await loginAs(ctx, 'PLAN_MANAGER');
-      await ctx.http.post(`/v1/kyc-documents/${id}/verify`).set(bearer(pm.token)).expect(403);
-      await ctx.http.post(`/v1/kyc-documents/${id}/verify`).set(bearer(ops.token)).expect(200);
+      await ctx.http.post(`/v1/kyc-documents/${id}/link`).set(bearer(pm.token)).expect(200);
+      await ctx.http.post(`/v1/kyc-documents/${id}/verify`).set(bearer(pm.token)).expect(200);
     });
   });
 
