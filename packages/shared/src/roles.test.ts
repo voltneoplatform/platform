@@ -41,12 +41,18 @@ describe('role permissions (spec section 2)', () => {
     expect(hasPermission('FIELD_AGENT', 'batteries.manage')).toBe(false);
   });
 
-  it('has installations by field agents and technicians verified by head office', () => {
-    for (const r of ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'PLAN_MANAGER'] as const) {
+  it('checks installation photos like KYC, then head office gives the final approval', () => {
+    // Founder, 10 Nov 2026: the same people as for drivers.
+    for (const r of ['SUPER_ADMIN', 'OPERATIONS_MANAGER'] as const) {
       expect(hasPermission(r, 'installations.verify')).toBe(true);
     }
+    for (const r of ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'PLAN_MANAGER'] as const) {
+      expect(hasPermission(r, 'installations.approve')).toBe(true);
+    }
+    expect(hasPermission('PLAN_MANAGER', 'installations.verify')).toBe(false);
     for (const r of ['FIELD_AGENT', 'TECHNICIAN', 'FINANCE', 'SUPPORT'] as const) {
       expect(hasPermission(r, 'installations.verify')).toBe(false);
+      expect(hasPermission(r, 'installations.approve')).toBe(false);
     }
   });
 

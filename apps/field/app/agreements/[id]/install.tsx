@@ -1,5 +1,11 @@
 import { useState } from 'react';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import {
+  INSTALLATION_ITEMS,
+  REQUIRED_INSTALLATION_ITEMS,
+  maxInstallationPhotos,
+  type InstallationItem,
+} from '@voltneo/shared';
 import { shortDate } from '@/i18n';
 import { appendPhotos, type Photo } from '@/photos';
 import { useGeotag } from '@/location';
@@ -35,14 +41,15 @@ interface Agreement {
 
 export default function Install() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { t, api, staff } = useSession();
+  const { t, api, staff, labels } = useSession();
   const ag = useLoad(() => api.get<Agreement>(`/v1/agreements/${id}`), [api, id]);
   const [serialChecked, setSerialChecked] = useState(false);
   const geo = useGeotag();
   const [voltage, setVoltage] = useState('');
   const [location, setLocation] = useState('');
   const [condition, setCondition] = useState('');
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  // Founder, 10 Nov 2026: a photo of each item; head office checks each one.
+  const [photos, setPhotos] = useState<Partial<Record<InstallationItem, Photo[]>>>({});
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -64,7 +71,7 @@ export default function Install() {
     Number(voltage) > 0 &&
     location.trim().length >= 3 &&
     condition.trim().length >= 3 &&
-    photos.length > 0 &&
+    REQUIRED_INSTALLATION_ITEMS.every((i) => (photos[i]?.length ?? 0) > 0) &&
     confirmed;
   return (
     <Screen>
@@ -114,9 +121,21 @@ export default function Install() {
           onChangeText={setCondition}
           multiline
         />
-        <Photos photos={photos} onChange={setPhotos} />
-        {photos.length === 0 && <Muted>{t('photoNeeded')}</Muted>}
         <Check label={t('driverConfirmed')} value={confirmed} onChange={setConfirmed} />
+      </Card>
+      <Card>
+        <H2>{t('photos')}</H2>
+        <Muted>{t('photoNeeded')}</Muted>
+        {INSTALLATION_ITEMS.map((item) => (
+          <Photos
+            key={item}
+            label={labels.installItem[item]}
+            hint={labels.installHint[item]}
+            max={maxInstallationPhotos(item)}
+            photos={photos[item] ?? []}
+            onChange={(p) => setPhotos((x) => ({ ...x, [item]: p }))}
+          />
+        ))}
       </Card>
       <ErrorNotice error={error} />
       <Button
@@ -140,12 +159,14 @@ export default function Install() {
               form.append('voltageReading', voltage);
               form.append('conditionNote', condition.trim());
               form.append('driverConfirmed', 'true');
-              await appendPhotos(form, 'photos', photos);
+              for (const item of INSTALLATION_ITEMS) {
+                await appendPhotos(form, item, photos[item] ?? []);
+              }
               const res = await api.upload<{ state: string }>(
                 `/v1/agreements/${a.id}/installation`,
                 form,
               );
-              // Head office verifies installations recorded in the field (founder, 31 Oct 2026).
+              // Head office checks each photo and approves it (founder, 10 Nov 2026).
               router.replace(
                 `/agreements/${a.id}?done=${res.state === 'ACTIVE' ? 'installed' : 'installRecorded'}`,
               );

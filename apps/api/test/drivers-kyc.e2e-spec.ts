@@ -618,6 +618,22 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
             .expect(422)
         ).body.code,
       ).toBe('NO_LOCATION');
+      // Founder, 10 Nov 2026: the Field App needs the date of birth.
+      expect(
+        (
+          await ctx.http
+            .post('/v1/drivers')
+            .set(bearer(agent.token))
+            .send(
+              body('9830055555', {
+                location,
+                phoneCheckId: sent.body.checkId,
+                dateOfBirth: null,
+              }),
+            )
+            .expect(400)
+        ).body.message,
+      ).toMatch(/date of birth/);
       const d = (
         await ctx.http
           .post('/v1/drivers')
@@ -625,6 +641,11 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
           .send(body('9830055555', { location, phoneCheckId: sent.body.checkId }))
           .expect(201)
       ).body;
+      await ctx.http
+        .patch(`/v1/drivers/${d.id}`)
+        .set(bearer(agent.token))
+        .send({ dateOfBirth: null })
+        .expect(400);
       expect(d.onboarding).toMatchObject({
         registeredAt: location,
         consentVersion: 'reg-consent-v1',

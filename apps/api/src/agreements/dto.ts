@@ -6,6 +6,8 @@ import {
   type AgreementState,
   type DriverLanguage,
   type DueDay,
+  INSTALLATION_ITEMS,
+  type InstallationItem,
 } from '@voltneo/shared';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -109,6 +111,18 @@ export class DocumentQuery {
 }
 
 /** Multipart form fields sent with the installation photos (Schedule 3). */
+export class InstallationItemDto {
+  @ApiProperty({ enum: INSTALLATION_ITEMS }) @IsIn(INSTALLATION_ITEMS) item: InstallationItem;
+}
+
+export class CheckInstallationPhotoDto {
+  @ApiProperty({ description: 'What is wrong with the photo; the installer sees this' })
+  @Transform(trim)
+  @IsString()
+  @Length(3, 300)
+  reason: string;
+}
+
 export class RejectInstallationDto {
   @ApiProperty({ description: 'What is wrong, so the installer can record it again' })
   @Transform(trim)

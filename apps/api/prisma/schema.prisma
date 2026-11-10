@@ -967,19 +967,50 @@ model InstallationDecision {
   @@map("installation_decisions")
 }
 
-model InstallationPhoto {
-  id             String   @id @default(uuid()) @db.Uuid
-  installationId String   @map("installation_id") @db.Uuid
-  fileKey        String   @map("file_key")
-  fileName       String   @map("file_name")
-  fileType       String   @map("file_type")
-  fileSize       Int      @map("file_size")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+/// What an installation photo shows (founder, 10 Nov 2026).
+enum InstallationItem {
+  BATTERY
+  GPS
+  VEHICLE
+  VOLTAGE
+  HANDOVER
+  OTHER
+}
 
-  installation Installation @relation(fields: [installationId], references: [id])
+model InstallationPhoto {
+  id             String           @id @default(uuid()) @db.Uuid
+  installationId String           @map("installation_id") @db.Uuid
+  /// Photos from before 10 Nov 2026 are OTHER.
+  item           InstallationItem
+  fileKey        String           @map("file_key")
+  fileName       String           @map("file_name")
+  fileType       String           @map("file_type")
+  fileSize       Int              @map("file_size")
+  /// Who added it: at recording, or later in place of a rejected photo.
+  uploadedById   String?          @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  installation Installation             @relation(fields: [installationId], references: [id])
+  check        InstallationPhotoCheck?
 
   @@index([installationId])
   @@map("installation_photos")
+}
+
+/// installation_photo_checks: head office verifies or rejects each installation
+/// photo, like KYC documents (founder, 10 Nov 2026). One per photo; a rejected
+/// item gets a new photo. Append-only.
+model InstallationPhotoCheck {
+  id          String                   @id @default(uuid()) @db.Uuid
+  photoId     String                   @unique @map("photo_id") @db.Uuid
+  decision    InstallationDecisionKind
+  reason      String?
+  decidedById String                   @map("decided_by_id") @db.Uuid
+  decidedAt   DateTime                 @default(now()) @map("decided_at") @db.Timestamptz(3)
+
+  photo InstallationPhoto @relation(fields: [photoId], references: [id])
+
+  @@map("installation_photo_checks")
 }
 
 enum PaymentMethod {

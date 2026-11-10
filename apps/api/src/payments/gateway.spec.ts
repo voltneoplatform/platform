@@ -1,4 +1,10 @@
-import { istIso, localPhone, paiseToRupeeNumber, rupeesToPaiseExact } from './gateway';
+import {
+  CashfreeGateway,
+  istIso,
+  localPhone,
+  paiseToRupeeNumber,
+  rupeesToPaiseExact,
+} from './gateway';
 import { parseCashfreeEvent } from './webhooks.service';
 
 describe('payment gateway helpers', () => {
@@ -53,5 +59,36 @@ describe('payment gateway helpers', () => {
       }).kind,
     ).toBe('ignored');
     expect(() => parseCashfreeEvent({ data: {} })).toThrow();
+  });
+
+  it('asks Cashfree for a mandate with a ₹1 refunded approval for UPI and e-NACH', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const gw = new CashfreeGateway(
+      { env: 'sandbox', appId: 'TEST', secretKey: 'cfsk', apiVersion: '2026-01-01' },
+      'https://api.example.in/v1/webhooks/payments/cashfree',
+      async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({ subscription_session_id: 'sess', cf_subscription_id: 7 }),
+          { status: 200 },
+        );
+      },
+    );
+    for (const method of ['UPI', 'ENACH'] as const) {
+      await gw.createMandate({
+        subscriptionId: `VNM_${method}`,
+        customer: { phone: '+919876543210', name: 'Test Driver', email: 'd@example.in' },
+        maxAmountPaise: 300000,
+        method,
+        agreementNumber: 'NOA-000001',
+        expiresAt: new Date('2027-12-31T18:29:59Z'),
+        returnUrl: 'https://api.example.in/autopay/abc/done',
+      });
+    }
+    // Cashfree refuses an approval amount of 0, even for e-NACH (test site, 10 Nov 2026).
+    expect(bodies.map((b) => b.authorization_details)).toEqual([
+      { authorization_amount: 1, authorization_amount_refund: true, payment_methods: ['upi'] },
+      { authorization_amount: 1, authorization_amount_refund: true, payment_methods: ['enach'] },
+    ]);
   });
 });

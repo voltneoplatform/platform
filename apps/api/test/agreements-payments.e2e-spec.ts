@@ -1,5 +1,11 @@
 import { createHmac } from 'node:crypto';
-import { addMonths, financialYear, rupeesToPaise as r, suggestFirstDueDate } from '@voltneo/shared';
+import {
+  REQUIRED_INSTALLATION_ITEMS as REQUIRED,
+  addMonths,
+  financialYear,
+  rupeesToPaise as r,
+  suggestFirstDueDate,
+} from '@voltneo/shared';
 import { istDate } from '../src/common/util';
 import {
   bearer,
@@ -12,13 +18,14 @@ import {
 } from './helpers';
 import {
   PDF,
-  PNG,
   realPng,
   approvedDriver,
   makeBattery,
   makeBatteryType,
   publishedPlan,
   readyDriver,
+  approveInstallation,
+  attachInstallPhotos,
 } from './fixtures';
 
 const WEBHOOK_SECRET = 'test-webhook-secret-test-webhook-secret-01';
@@ -107,7 +114,7 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
     );
     const tech = await createStaff(ctx.prisma, 'TECHNICIAN');
     const battery = a.battery as { id: string; serial: string };
-    const res = await ctx.http
+    const res = ctx.http
       .post(`/v1/agreements/${a.id}/installation`)
       .set(bearer(ops.token))
       .field('technicianId', tech.id)
@@ -115,11 +122,10 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
       .field('location', 'Driver home, Baruipur')
       .field('voltageReading', '52.4')
       .field('conditionNote', 'New battery, wiring checked')
-      .field('driverConfirmed', 'true')
-      .attach('photos', PNG, 'front.png')
-      .attach('photos', PNG, 'wiring.png')
-      .expect(200);
-    return { agreement: res.body, battery, tech };
+      .field('driverConfirmed', 'true');
+    await attachInstallPhotos(res, [...REQUIRED, 'OTHER']).expect(200);
+    const agreement = await approveInstallation(ctx, a.id, ops.token);
+    return { agreement, battery, tech };
   }
 
   function signWebhook(body: string, secret = WEBHOOK_SECRET) {
@@ -304,9 +310,10 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
           .field('location', 'Baruipur')
           .field('voltageReading', '52.4')
           .field('conditionNote', 'Good')
-          .field('driverConfirmed', 'true')
-          .attach('photos', PNG, 'p.png');
-      expect((await install().expect(409)).body.message).toMatch(/corrected agreement/);
+          .field('driverConfirmed', 'true');
+      expect((await attachInstallPhotos(install()).expect(409)).body.message).toMatch(
+        /corrected agreement/,
+      );
 
       const resigned = await ctx.http
         .post(`/v1/agreements/${a.id}/resign`)
@@ -324,8 +331,11 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         .expect(200);
       expect(link.body.url).toBeTruthy();
 
-      const done = await install().expect(200);
-      expect(done.body).toMatchObject({ state: 'ACTIVE', battery: { id: replacement.id } });
+      await attachInstallPhotos(install()).expect(200);
+      // Waiting for head office: the battery cannot be changed now.
+      expect((await change(a.battery.id).expect(409)).body.message).toMatch(/waiting/);
+      const done = await approveInstallation(ctx, a.id, ops.token);
+      expect(done).toMatchObject({ state: 'ACTIVE', battery: { id: replacement.id } });
       expect((await change(a.battery.id).expect(409)).body.message).toMatch(
         /before it is installed/,
       );
@@ -661,8 +671,9 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
           ...fields,
         };
         for (const [k, v] of Object.entries(all)) req.field(k, v);
-        for (let i = 0; i < photos; i++) req.attach('photos', PNG, `p${i}.png`);
-        return req;
+        return photos
+          ? attachInstallPhotos(req, photos === 2 ? [...REQUIRED, 'OTHER'] : REQUIRED)
+          : req;
       };
       // Down payment first (clause C2).
       expect((await install({}).expect(409)).body.message).toMatch(/down payment/);
@@ -678,13 +689,15 @@ describe('Agreements, installation and payments (modules 6-8)', () => {
         new RegExp(`Fit battery ${battery.serial}`),
       );
 
-      const res = await install({}, 2).expect(200);
+      await install({}, 2).expect(200);
+      // Founder, 10 Nov 2026: in force only after the photo checks and the final approval.
+      const res = { body: await approveInstallation(ctx, a.id, ops.token) };
       expect(res.body).toMatchObject({
         state: 'ACTIVE',
         battery: { id: battery.id, serial: battery.serial },
         installation: { voltageReading: '52.4', driverConfirmed: true, location: 'Baruipur' },
       });
-      expect(res.body.installation.photos).toHaveLength(2);
+      expect(res.body.installation.photos).toHaveLength(6);
       expect(res.body.installation.technicianName).toBe(tech.name);
 
       const b = await ctx.http

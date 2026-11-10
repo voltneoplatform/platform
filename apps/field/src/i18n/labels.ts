@@ -1,5 +1,6 @@
 import type {
   AgreementState,
+  InstallationItem,
   Role,
   KycDocType,
   ReadinessItem,
@@ -26,6 +27,9 @@ export interface Labels {
   linkStatus: Record<'ACTIVE' | 'PAID' | 'EXPIRED' | 'CANCELLED', string>;
   role: Record<Role, string>;
   referrerKind: Record<ReferrerKind, string>;
+  /** Installation photos (founder, 10 Nov 2026): the item, and what the photo must show. */
+  installItem: Record<InstallationItem, string>;
+  installHint: Record<InstallationItem, string>;
 }
 
 /** Names of states and types in each language (REQUIRES VALIDATION, native speakers). */
@@ -115,6 +119,22 @@ export const LABELS: Record<Lang, Labels> = {
       AGENT: 'Agent',
       OTHER: 'Other',
     },
+    installItem: {
+      BATTERY: 'Battery fitted',
+      GPS: 'GPS device',
+      VEHICLE: 'Vehicle with number plate',
+      VOLTAGE: 'Voltage meter reading',
+      HANDOVER: 'Driver handover',
+      OTHER: 'Other photos (optional)',
+    },
+    installHint: {
+      BATTERY: 'The battery in the vehicle, with its serial number readable.',
+      GPS: 'The fitted GPS device, with its IMEI readable.',
+      VEHICLE: 'The e-rickshaw, with its number plate readable.',
+      VOLTAGE: "The meter showing the battery's voltage.",
+      HANDOVER: 'The driver with the vehicle.',
+      OTHER: 'Anything else worth keeping.',
+    },
   },
   BN: {
     state: {
@@ -201,6 +221,22 @@ export const LABELS: Record<Lang, Labels> = {
       AGENT: 'এজেন্ট',
       OTHER: 'অন্য',
     },
+    installItem: {
+      BATTERY: 'লাগানো ব্যাটারি',
+      GPS: 'জিপিএস যন্ত্র',
+      VEHICLE: 'নম্বর প্লেট সহ গাড়ি',
+      VOLTAGE: 'ভোল্টেজ মিটারের রিডিং',
+      HANDOVER: 'চালককে হস্তান্তর',
+      OTHER: 'অন্য ছবি (ইচ্ছা হলে)',
+    },
+    installHint: {
+      BATTERY: 'গাড়িতে লাগানো ব্যাটারি, সিরিয়াল নম্বর যেন পড়া যায়।',
+      GPS: 'লাগানো জিপিএস যন্ত্র, IMEI যেন পড়া যায়।',
+      VEHICLE: 'ই-রিকশা, নম্বর প্লেট যেন পড়া যায়।',
+      VOLTAGE: 'মিটারে ব্যাটারির ভোল্টেজ।',
+      HANDOVER: 'গাড়ির সঙ্গে চালক।',
+      OTHER: 'রাখার মতো অন্য কিছু।',
+    },
   },
   HI: {
     state: {
@@ -286,6 +322,22 @@ export const LABELS: Record<Lang, Labels> = {
       DEALER: 'वाहन डीलर',
       AGENT: 'एजेंट',
       OTHER: 'अन्य',
+    },
+    installItem: {
+      BATTERY: 'लगी हुई बैटरी',
+      GPS: 'जीपीएस डिवाइस',
+      VEHICLE: 'नंबर प्लेट के साथ वाहन',
+      VOLTAGE: 'वोल्टेज मीटर की रीडिंग',
+      HANDOVER: 'चालक को सौंपना',
+      OTHER: 'दूसरी फ़ोटो (चाहें तो)',
+    },
+    installHint: {
+      BATTERY: 'वाहन में लगी बैटरी, सीरियल नंबर पढ़ा जा सके।',
+      GPS: 'लगा हुआ जीपीएस डिवाइस, IMEI पढ़ा जा सके।',
+      VEHICLE: 'ई-रिक्शा, नंबर प्लेट पढ़ी जा सके।',
+      VOLTAGE: 'मीटर पर बैटरी का वोल्टेज।',
+      HANDOVER: 'वाहन के साथ चालक।',
+      OTHER: 'रखने लायक कुछ और।',
     },
   },
 };

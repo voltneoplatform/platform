@@ -1,9 +1,14 @@
 import zlib from 'node:zlib';
-import { rupeesToPaise as r } from '@voltneo/shared';
+import {
+  REQUIRED_INSTALLATION_ITEMS,
+  rupeesToPaise as r,
+  type InstallationItem,
+} from '@voltneo/shared';
 import {
   DRIVER_CODE_SENDER,
   type MemoryDriverCodeSender,
 } from '../src/driver-auth/driver-code-sender';
+import type request from 'supertest';
 import { bearer, type TestContext } from './helpers';
 
 export const PNG = Buffer.concat([
@@ -12,6 +17,32 @@ export const PNG = Buffer.concat([
 ]);
 export const PDF = Buffer.from('%PDF-1.4\n% test consent form\n');
 export const NOT_A_DOC = Buffer.from('MZ this is not an image');
+
+/** Attaches one photo of each required installation item (founder, 10 Nov 2026). */
+export function attachInstallPhotos(
+  req: request.Test,
+  items: readonly InstallationItem[] = REQUIRED_INSTALLATION_ITEMS,
+): request.Test {
+  for (const item of items) req.attach(item, PNG, `${item.toLowerCase()}.png`);
+  return req;
+}
+
+/** Head office verifies every photo waiting to be checked, then gives the final approval. */
+export async function approveInstallation(ctx: TestContext, agreementId: string, token: string) {
+  const view = (await ctx.http.get(`/v1/agreements/${agreementId}`).set(bearer(token)).expect(200))
+    .body as { installation: { id: string; photos: { id: string; status: string }[] } };
+  for (const p of view.installation.photos.filter((x) => x.status === 'PENDING')) {
+    await ctx.http
+      .post(`/v1/agreements/${agreementId}/installation/photos/${p.id}/verify`)
+      .set(bearer(token))
+      .expect(200);
+  }
+  const res = await ctx.http
+    .post(`/v1/agreements/${agreementId}/installation/${view.installation.id}/approve`)
+    .set(bearer(token))
+    .expect(200);
+  return res.body;
+}
 
 /** A real, decodable PNG (a white page of the given size), for code that reads images. */
 export function realPng(width = 40, height = 56): Buffer {
@@ -331,7 +362,7 @@ export async function activeAgreement(
         data: { name: `Tech ${n++}`, email: `tech.${n}@voltneo.test`, role: 'TECHNICIAN' },
       })
     ).id;
-  const res = await ctx.http
+  const res = ctx.http
     .post(`/v1/agreements/${id}/installation`)
     .set(bearer(opts.installAs?.token ?? t.ops))
     .field('technicianId', techId)
@@ -342,12 +373,13 @@ export async function activeAgreement(
     .field('geoAccuracyM', '15')
     .field('voltageReading', '52.4')
     .field('conditionNote', 'Good')
-    .field('driverConfirmed', 'true')
-    .attach('photos', PNG, 'p.png')
-    .expect(200);
+    .field('driverConfirmed', 'true');
+  await attachInstallPhotos(res).expect(200);
+  // Head office checks the photos and approves it, unless the test does that itself.
+  if (!opts.installAs) await approveInstallation(ctx, id, t.ops);
   return {
     id,
-    number: res.body.number as string,
+    number: draft.body.number as string,
     firstDueDate,
     battery,
     driverPhone: driver.phone,
