@@ -78,7 +78,8 @@ export const PERMISSIONS = [
   'installations.record',
   /**
    * Check each installation photo (battery, GPS device, vehicle, voltage,
-   * handover), like KYC documents (founder, 10 Nov 2026).
+   * handover), like KYC documents (founder, 10 Nov 2026: super admin,
+   * operations manager, plan manager).
    */
   'installations.verify',
   /** Final approval of an installation once its photos are checked; the agreement starts. */
@@ -140,11 +141,15 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'batteries.manage',
     'plans.manage',
     'drivers.manage',
+    // Founder, 10 Nov 2026: the plan manager also checks KYC documents (which needs
+    // the full document and number, every view logged) and installation photos.
+    'kyc.view_full',
+    'kyc.verify',
     'drivers.approve',
     'referrals.manage',
     'agreements.manage',
     'installations.record',
-    // Founder, 10 Nov 2026: final approval only; the photos are checked like KYC.
+    'installations.verify',
     'installations.approve',
     'tickets.close',
     'approvals.request',
