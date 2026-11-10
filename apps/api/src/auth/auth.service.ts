@@ -95,19 +95,33 @@ export class AuthService {
   async requestOtp(
     identifier: string,
     meta: RequestMeta,
-  ): Promise<{ sent: true; expiresInSeconds: number }> {
-    const answer = { sent: true as const, expiresInSeconds: this.config.otpTtlSeconds };
+  ): Promise<{ sent: true; expiresInSeconds: number; via: 'EMAIL' | 'SMS' }> {
     // Decided from the identifier alone, so the reply says nothing about whether the account exists.
     const kind = parseLoginIdentifier(identifier)?.kind;
-    if (kind === 'phone' && !this.sender.channels.has('SMS')) {
+    // Founder, 10 Nov 2026: until SMS is switched on (DLT), a code asked for by
+    // mobile number goes to the email address on that staff account.
+    const byEmailInstead = kind === 'phone' && !this.sender.channels.has('SMS');
+    if (byEmailInstead && !this.sender.channels.has('EMAIL')) {
       throw new HttpException(
         'Sign-in codes by SMS are not set up yet. Sign in with your email address.',
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
+    const answer = {
+      sent: true as const,
+      expiresInSeconds: this.config.otpTtlSeconds,
+      via: kind === 'phone' && !byEmailInstead ? ('SMS' as const) : ('EMAIL' as const),
+    };
     const found = await this.findStaff(identifier);
     if (!found?.staff || found.staff.status !== 'ACTIVE') return answer;
-    const { staff, channel, destination } = found;
+    const { staff } = found;
+    let { channel, destination } = found;
+    if (byEmailInstead) {
+      // No email on the account: nothing is sent, and the reply stays the same.
+      if (!staff.email) return answer;
+      channel = 'EMAIL';
+      destination = staff.email;
+    }
 
     const latest = await this.prisma.otpChallenge.findFirst({
       where: { staffId: staff.id },

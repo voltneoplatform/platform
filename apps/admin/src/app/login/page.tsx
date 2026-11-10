@@ -11,6 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { api, status, signIn, notice, clearNotice } = useSession();
   const [step, setStep] = useState<'identifier' | 'code'>('identifier');
+  const [byEmail, setByEmail] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,7 +34,11 @@ export default function LoginPage() {
     setError(null);
     clearNotice();
     try {
-      await api.publicPost('/v1/auth/otp/request', { identifier });
+      const sent = await api.publicPost<{ via?: 'EMAIL' | 'SMS' }>('/v1/auth/otp/request', {
+        identifier,
+      });
+      // Until SMS is on, a mobile number's code goes to the account's email (founder, 10 Nov 2026).
+      setByEmail(sent?.via === 'EMAIL' && !identifier.includes('@'));
       setStep('code');
       setCode('');
       setResendIn(RESEND_SECONDS);
@@ -110,7 +115,8 @@ export default function LoginPage() {
           <form onSubmit={verify}>
             <p>
               If <strong>{identifier}</strong> belongs to an active staff account, a 6-digit code is
-              on its way. It works for 5 minutes.
+              on its way{byEmail ? ' to the email address on that account' : ''}. It works for 5
+              minutes.
             </p>
             <div className="field">
               <label htmlFor="code">Login code</label>

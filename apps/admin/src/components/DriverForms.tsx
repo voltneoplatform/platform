@@ -123,7 +123,7 @@ export function DriverFields({
             ))}
           </select>
         </div>
-        {f('dateOfBirth', 'Date of birth', { type: 'date' })}
+        {f('dateOfBirth', 'Date of birth', { type: 'date', required: true })}
       </div>
       <div className="form-grid">
         <div className="field">

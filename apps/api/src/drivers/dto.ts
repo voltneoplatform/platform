@@ -93,7 +93,7 @@ class DriverFields {
   email?: string | null;
   @ApiProperty({ enum: DRIVER_LANGUAGES }) @IsIn(DRIVER_LANGUAGES) language: DriverLanguage;
 
-  @ApiPropertyOptional({ example: '1988-04-12' })
+  @ApiProperty({ example: '1988-04-12', description: 'Required (founder, 10 Nov 2026)' })
   @IsOptional()
   @Transform(emptyToNull)
   @Matches(DATE, { message: 'dateOfBirth must be YYYY-MM-DD' })

@@ -23,7 +23,7 @@ describe('Staff login with OTP (module 1)', () => {
         .post('/v1/auth/otp/request')
         .send({ identifier: 'Mitra@VoltNeo.test' })
         .expect(202);
-      expect(res.body).toEqual({ sent: true, expiresInSeconds: 300 });
+      expect(res.body).toEqual({ sent: true, expiresInSeconds: 300, via: 'EMAIL' });
       expect(ctx.otp.sent).toHaveLength(1);
       expect(ctx.otp.sent[0]).toMatchObject({
         channel: 'EMAIL',

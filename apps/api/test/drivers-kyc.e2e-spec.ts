@@ -128,6 +128,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
         phone: first.phone,
         phoneCheckId: await confirmPhone(ctx, ops.token, first.phone),
         language: 'HI',
+        dateOfBirth: '1987-07-07',
         addressLine: '1 Main Road',
         district: 'Kolkata',
         pinCode: '700001',
@@ -158,6 +159,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
           name: 'Night Shift',
           phone: '9000000001',
           language: 'BN',
+          dateOfBirth: '1989-09-09',
           addressLine: 'x road',
           district: 'Kolkata',
           pinCode: '700001',
@@ -178,6 +180,7 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
         name: 'Young',
         phone: '9000000003',
         language: 'BN',
+        dateOfBirth: '1990-01-01',
         addressLine: 'x road',
         district: 'Kolkata',
         pinCode: '700001',
@@ -641,11 +644,23 @@ describe('Drivers, vehicles and KYC (module 5)', () => {
           .send(body('9830055555', { location, phoneCheckId: sent.body.checkId }))
           .expect(201)
       ).body;
-      await ctx.http
-        .patch(`/v1/drivers/${d.id}`)
-        .set(bearer(agent.token))
-        .send({ dateOfBirth: null })
-        .expect(400);
+      // Head office too (admin panel), and no one can remove it.
+      for (const token of [agent.token, ops.token]) {
+        await ctx.http
+          .patch(`/v1/drivers/${d.id}`)
+          .set(bearer(token))
+          .send({ dateOfBirth: null })
+          .expect(400);
+      }
+      expect(
+        (
+          await ctx.http
+            .post('/v1/drivers')
+            .set(bearer(ops.token))
+            .send(body('9830077771', { dateOfBirth: null }))
+            .expect(400)
+        ).body.message,
+      ).toMatch(/date of birth/);
       expect(d.onboarding).toMatchObject({
         registeredAt: location,
         consentVersion: 'reg-consent-v1',
