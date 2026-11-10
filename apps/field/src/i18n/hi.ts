@@ -22,6 +22,7 @@ export const hi: Messages = {
   identifier: 'फ़ोन या ईमेल',
   sendCode: 'कोड भेजें',
   codeSentTo: '{to} पर भेजा गया 6 अंकों का कोड डालें।',
+  codeSentToEmail: '{to} मोबाइल नंबर वाले स्टाफ़ खाते के ईमेल पर भेजा गया 6 अंकों का कोड डालें।',
   code: 'कोड',
   signIn: 'साइन इन',
   useAnother: 'दूसरा नंबर इस्तेमाल करें',

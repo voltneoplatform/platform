@@ -11,6 +11,8 @@ export default function Login() {
   const [identifier, setIdentifier] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'identifier' | 'code'>('identifier');
+  // A mobile number's code goes to the account's email until SMS is on.
+  const [byEmail, setByEmail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -69,7 +71,8 @@ export default function Login() {
                 disabled={identifier.trim().length < 5}
                 onPress={() =>
                   void run(async () => {
-                    await api.requestCode(identifier.trim());
+                    const sent = await api.requestCode(identifier.trim());
+                    setByEmail(sent.via === 'EMAIL' && !identifier.includes('@'));
                     setStep('code');
                   })
                 }
@@ -77,7 +80,11 @@ export default function Login() {
             </>
           ) : (
             <>
-              <Muted>{t('codeSentTo', { to: identifier.trim() })}</Muted>
+              <Muted>
+                {byEmail
+                  ? t('codeSentToEmail', { to: identifier.trim() })
+                  : t('codeSentTo', { to: identifier.trim() })}
+              </Muted>
               <Field
                 testID="code"
                 label={t('code')}

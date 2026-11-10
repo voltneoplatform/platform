@@ -138,8 +138,9 @@ export class FieldApi {
     return session;
   }
 
-  async requestCode(identifier: string): Promise<void> {
-    await this.parse(
+  /** Where the code went: by email until SMS is switched on (founder, 10 Nov 2026). */
+  async requestCode(identifier: string): Promise<{ via?: 'EMAIL' | 'SMS' }> {
+    return this.parse<{ via?: 'EMAIL' | 'SMS' }>(
       await this.raw(
         '/v1/auth/otp/request',
         { method: 'POST', body: JSON.stringify({ identifier }) },

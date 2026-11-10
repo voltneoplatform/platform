@@ -22,6 +22,7 @@ export const bn: Messages = {
   identifier: 'ফোন বা ইমেল',
   sendCode: 'কোড পাঠান',
   codeSentTo: '{to}-এ পাঠানো ৬ সংখ্যার কোডটি লিখুন।',
+  codeSentToEmail: '{to} মোবাইল নম্বরের কর্মী অ্যাকাউন্টের ইমেলে পাঠানো ৬ সংখ্যার কোডটি লিখুন।',
   code: 'কোড',
   signIn: 'সাইন ইন',
   useAnother: 'অন্য নম্বর ব্যবহার করুন',

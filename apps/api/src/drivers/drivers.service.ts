@@ -510,10 +510,8 @@ export class DriversService {
       if (problem)
         throw new UnprocessableEntityException({ message: problem, code: 'NO_LOCATION' });
     }
-    // Founder, 10 Nov 2026: the Field App cannot register a driver without a date of birth.
-    if (!HEAD_OFFICE_ROLES.includes(actor.role) && !dto.dateOfBirth) {
-      throw new BadRequestException("Enter the driver's date of birth");
-    }
+    // Founder, 10 Nov 2026: a driver cannot be registered without a date of birth.
+    if (!dto.dateOfBirth) throw new BadRequestException("Enter the driver's date of birth");
     const alt = phone(dto.altPhone, 'Alternate phone');
     checkAge(dto.dateOfBirth);
     checkRelative(dto.relativeRelation ?? null, dto.relativeName ?? null);
@@ -594,7 +592,7 @@ export class DriversService {
     const nomineePhone =
       dto.nomineePhone !== undefined ? phone(dto.nomineePhone, "Nominee's phone") : undefined;
     if (dto.dateOfBirth) checkAge(dto.dateOfBirth);
-    if (dto.dateOfBirth === null && !HEAD_OFFICE_ROLES.includes(actor.role)) {
+    if (dto.dateOfBirth === null) {
       throw new BadRequestException("The driver's date of birth cannot be removed");
     }
 

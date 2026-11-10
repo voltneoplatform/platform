@@ -25,6 +25,8 @@ export const en = {
   identifier: 'Phone or email',
   sendCode: 'Send code',
   codeSentTo: 'Enter the 6-digit code sent to {to}.',
+  codeSentToEmail:
+    'Enter the 6-digit code sent to the email address of the staff account with mobile number {to}.',
   code: 'Code',
   signIn: 'Sign in',
   useAnother: 'Use a different number',
